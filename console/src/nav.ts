@@ -38,6 +38,7 @@ export const navGroups: NavGroup[] = [
     label: 'navGroupInsights',
     items: [
       { to: '/impact', label: 'navImpact', icon: 'M2 13.5h12M4 13.5V9M8 13.5V4M12 13.5V7' },
+      { to: '/quality', label: 'navQuality', icon: 'M2.5 8a5.5 5.5 0 1011 0 5.5 5.5 0 10-11 0M5.5 8l2 2 3.5-4' },
     ],
   },
   {

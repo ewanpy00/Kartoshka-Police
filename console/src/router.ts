@@ -8,6 +8,7 @@ import FeedView from './views/FeedView.vue'
 import ChainView from './views/ChainView.vue'
 import AuditView from './views/AuditView.vue'
 import ImpactView from './views/ImpactView.vue'
+import QualityView from './views/QualityView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -22,5 +23,6 @@ export const router = createRouter({
     { path: '/chain', component: ChainView },
     { path: '/audit', component: AuditView },
     { path: '/impact', component: ImpactView },
+    { path: '/quality', component: QualityView },
   ],
 })
