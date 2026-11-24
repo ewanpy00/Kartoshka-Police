@@ -52,6 +52,7 @@ def page(final_url: str, title: str, text: str, forms: list, links: list, screen
         "text": text,
         "forms": forms,
         "links": links,
+        "facts_available": True,
         "screenshot_path": str(screenshot) if screenshot else None,
         "navigation_blocked": False,
         "internal_requests_blocked": 2,
@@ -163,10 +164,44 @@ def test_unloaded_page_is_scored_from_the_domain_alone(session, captures, resolv
 
     assert (check.verdict, check.score, check.final_url, check.navigation_blocked) == ("warn", 40, None, blocked)
     payload = evidence_of(session, check).payload
+    assert [reason["code"] for reason in check.reasons] == ["BRAND_LOOKALIKE_DOMAIN"]
     assert payload["capture"]["screenshot"] is None
     assert (payload["capture"]["title"], payload["capture"]["text"], payload["capture"]["forms"]) == ("", "", [])
     assert payload["capture"]["navigation_blocked"] is blocked
     assert payload["scam"]["brand"] == "TAMM"
+
+
+def test_unreadable_facts_of_a_loaded_page_add_the_reason_and_are_recorded(session, captures, resolved, published):
+    check = start(session, "https://tamm-secure-pay.test/")
+    capture = {**page("https://tamm-secure-pay.test/", "", "", [], [], captures / "shot.png"), "facts_available": False}
+    jobs.run_deep_check(session, check.id, sandbox_client(capture), rdap_client(None))
+
+    assert (check.verdict, check.score) == ("block", 70)
+    assert [reason["code"] for reason in check.reasons] == ["BRAND_LOOKALIKE_DOMAIN", "PAGE_FACTS_UNAVAILABLE"]
+    assert evidence_of(session, check).payload["capture"]["facts_available"] is False
+
+
+@pytest.mark.parametrize(
+    "hostile_ip_record",
+    [{"name": 42, "country": 1.5, "entities": [{"roles": ["registrant"], "vcardArray": "x"}]}, {"entities": [{"roles": ["abuse"], "vcardArray": ["vcard", [["email", {}, "text", 2.5]]]}]}],
+)
+def test_hostile_rdap_records_still_end_with_a_verdict_and_evidence(session, captures, resolved, published, hostile_ip_record):
+    check = start(session, "https://tamm-secure-pay.test/")
+    document = domain_document(400)
+    document["events"][0]["eventDate"] = "not a date"
+    document["entities"][0]["vcardArray"] = ["vcard", "broken"]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=document if request.url.path.startswith("/domain/") else hostile_ip_record)
+
+    hostile = httpx.Client(transport=httpx.MockTransport(handler))
+    capture = page("https://tamm-secure-pay.test/", "TAMM", "", PASSWORD_FORM, [], captures / "shot.png")
+    jobs.run_deep_check(session, check.id, sandbox_client(capture), hostile)
+
+    assert (check.verdict, check.stage) == ("block", "deep")
+    infrastructure = evidence_of(session, check).payload["infrastructure"]
+    assert (infrastructure["registered_at"], infrastructure["registrar"], infrastructure["ip_network"]) == (None, None, None)
+    assert len(published) == 1
 
 
 def test_unreachable_sandbox_fails_the_job_and_leaves_the_check_pending(session, captures, resolved, published):

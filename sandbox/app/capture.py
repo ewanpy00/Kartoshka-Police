@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Collection
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from playwright.async_api import Browser, Error as PlaywrightError, Page
 from pydantic import BaseModel, BeforeValidator, Strict, ValidationError
@@ -27,26 +27,6 @@ MAX_INPUTS = 50
 MAX_LINKS = 100
 FACTS_TIMEOUT_S = 5
 LINK_PREFIXES = ("tel:", "https://wa.me/", "https://api.whatsapp.com/")
-
-# The page controls document.forms, form.action and form.elements, so the script only uses calls it cannot shadow.
-PAGE_FACTS_SCRIPT = """([limits, prefixes]) => {
-  const cut = (value, limit) => String(value ?? "").slice(0, limit);
-  const absolute = value => { try { return new URL(value, location.href).href; } catch { return ""; } };
-  const forms = [...document.querySelectorAll("form")].slice(0, limits.forms).map(form => ({
-    action: cut(absolute(form.getAttribute("action") || ""), limits.string),
-    inputs: [...form.querySelectorAll("input")].slice(0, limits.inputs).map(input => ({
-      type: cut(input.getAttribute("type") || "text", limits.string),
-      name: cut(input.getAttribute("name"), limits.string),
-    })),
-  }));
-  const links = [...document.querySelectorAll("a[href]")]
-    .map(a => absolute(a.getAttribute("href")))
-    .filter(href => prefixes.some(prefix => href.startsWith(prefix)))
-    .slice(0, limits.links)
-    .map(href => cut(href, limits.string));
-  return {text: cut(document.querySelector("body")?.innerText, limits.text), forms, links};
-}"""
-
 
 def cut_string(limit: int):
     return BeforeValidator(lambda value: value[:limit] if isinstance(value, str) else value)
@@ -73,17 +53,78 @@ class PageFacts(BaseModel):
     text: Annotated[str, Strict(), cut_string(TEXT_LIMIT)] = ""
     forms: Annotated[list[PageForm], cut_list(MAX_FORMS)] = []
     links: Annotated[list[Text], cut_list(MAX_LINKS)] = []
+    available: bool = False
+
+
+def keep_valid[T: BaseModel](model: type[T], items: list[dict], limit: int) -> list[T]:
+    """The first `limit` items that validate; a malformed item is dropped on its own."""
+    kept = []
+    for item in items:
+        try:
+            kept.append(model.model_validate(item))
+        except ValidationError:
+            continue
+    return kept[:limit]
+
+
+def attributes(node: dict) -> dict[str, str]:
+    flat = node.get("attributes", [])
+    return dict(zip(flat[::2], flat[1::2]))
+
+
+def parse_dom(root: dict) -> tuple[list[dict], list[str]]:
+    """Forms, with inputs outside any form gathered into one form without an action, and the contact links.
+
+    Reads the DOM the browser reports over CDP, so no script of the page runs and nothing the page defines can shadow it.
+    """
+    base = root.get("baseURL") or root.get("documentURL") or ""
+    loose = {"action": "", "inputs": []}
+    forms, links = [], []
+    stack = [(root, None)]
+    while stack:
+        node, form = stack.pop()
+        name, attrs = node.get("nodeName", ""), attributes(node)
+        if name == "FORM":
+            form = {"action": urljoin(base, attrs.get("action", "")) if attrs.get("action") else "", "inputs": []}
+            forms.append(form)
+        elif name == "INPUT":
+            (form or loose)["inputs"].append({"type": attrs.get("type", "text").lower(), "name": attrs.get("name", "")})
+        elif name == "A" and "href" in attrs:
+            link = urljoin(base, attrs["href"])
+            if link.startswith(LINK_PREFIXES):
+                links.append(link)
+        children = [*node.get("children", []), *node.get("shadowRoots", [])]
+        if "contentDocument" in node:
+            children.append(node["contentDocument"])
+        stack.extend((child, form) for child in reversed(children))
+    return ([loose] if loose["inputs"] else []) + forms, links
+
+
+async def fetch_facts(page: Page) -> PageFacts:
+    """Read text through Playwright's isolated world and the DOM over CDP; no page script is evaluated."""
+    session = await page.context.new_cdp_session(page)
+    text, document = await asyncio.gather(
+        page.locator("body").inner_text(timeout=FACTS_TIMEOUT_S * 1000),
+        session.send("DOM.getDocument", {"depth": -1, "pierce": True}),
+    )
+    forms, links = parse_dom(document["root"])
+    return PageFacts(
+        text=text,
+        forms=[
+            PageForm(action=form["action"], inputs=keep_valid(PageInput, form["inputs"], MAX_INPUTS))
+            for form in forms[:MAX_FORMS]
+        ],
+        links=sorted({link[:STRING_LIMIT] for link in links})[:MAX_LINKS],
+        available=True,
+    )
 
 
 async def read_page_facts(page: Page) -> PageFacts:
-    """What the page shows. A page that hangs, throws or returns malformed data yields empty facts."""
-    limits = {"text": TEXT_LIMIT, "string": STRING_LIMIT, "forms": MAX_FORMS, "inputs": MAX_INPUTS, "links": MAX_LINKS}
+    """What the page shows. When it cannot be read in time, `available` stays false so the caller can fail closed."""
     try:
-        raw = await asyncio.wait_for(page.evaluate(PAGE_FACTS_SCRIPT, [limits, list(LINK_PREFIXES)]), FACTS_TIMEOUT_S)
-        facts = PageFacts.model_validate(raw)
-    except (TimeoutError, PlaywrightError, ValidationError):
+        return await asyncio.wait_for(fetch_facts(page), FACTS_TIMEOUT_S)
+    except (TimeoutError, PlaywrightError, ValidationError, KeyError):
         return PageFacts()
-    return facts.model_copy(update={"links": sorted({link for link in facts.links if link.startswith(LINK_PREFIXES)})})
 
 
 class InvalidUrl(Exception):
@@ -104,6 +145,7 @@ class CaptureResponse(BaseModel):
     text: str
     forms: list[PageForm]
     links: list[str]
+    facts_available: bool
     screenshot_path: str | None
     navigation_blocked: bool
     internal_requests_blocked: int
@@ -154,11 +196,12 @@ async def capture(browser: Browser, url: str, allowed_origins: Collection[str] =
         await context.close()
 
     return CaptureResponse(
-        final_url=final_url,
-        title=title,
+        final_url=final_url[:STRING_LIMIT],
+        title=title[:STRING_LIMIT],
         text=facts.text,
         forms=facts.forms,
         links=facts.links,
+        facts_available=facts.available,
         screenshot_path=screenshot_path,
         navigation_blocked=blocked_url is not None,
         internal_requests_blocked=guard.blocked_count,

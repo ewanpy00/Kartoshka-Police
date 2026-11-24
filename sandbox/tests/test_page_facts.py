@@ -3,6 +3,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from playwright.async_api import Error as PlaywrightError
 from pydantic import ValidationError
 
 from app import capture as capture_module
@@ -53,6 +54,7 @@ async def test_capture_returns_text_forms_and_contact_links(browser, page_origin
     monkeypatch.setattr(capture_module, "CAPTURES_DIR", tmp_path)
     result = await capture(browser, page_origin + "/", allowed_origins=[page_origin])
     assert result.title == "Pay your fine"
+    assert result.facts_available
     assert result.text.startswith("Fine payment")
     assert len(result.text) == TEXT_LIMIT
     assert [form.model_dump() for form in result.forms] == [
@@ -116,11 +118,52 @@ async def test_clobbered_document_forms_are_still_found(browser, serve, tmp_path
     assert len(result.forms) == 1
 
 
-async def test_hanging_script_does_not_hang_the_capture(browser, serve, tmp_path, monkeypatch):
+async def test_page_that_replaces_dom_and_array_methods_still_yields_its_forms(browser, serve, tmp_path, monkeypatch):
+    body = """<title>t</title><form action="/pay"><input type="password" name="pw"></form>
+<a href="tel:+971501234567">x</a>
+<script>
+document.querySelectorAll = () => [];
+Element.prototype.getAttribute = () => null;
+HTMLElement.prototype.querySelectorAll = () => [];
+Object.defineProperty(HTMLElement.prototype, "innerText", {get() { return "hidden"; }});
+Array.prototype.map = () => [];
+Array.prototype.slice = () => [];
+</script>"""
+    result = await capture_html(browser, serve, tmp_path, monkeypatch, body)
+    assert result.facts_available
+    assert [(item.type, item.name) for item in result.forms[0].inputs] == [("password", "pw")]
+    assert result.forms[0].action.endswith("/pay")
+    assert result.links == ["tel:+971501234567"]
+
+
+async def test_input_outside_any_form_is_one_form_without_an_action(browser, serve, tmp_path, monkeypatch):
+    body = """<input type="password" name="pw"><form action="/x"><input name="a"></form>"""
+    result = await capture_html(browser, serve, tmp_path, monkeypatch, body)
+    assert result.forms[0].action == ""
+    assert [(item.type, item.name) for item in result.forms[0].inputs] == [("password", "pw")]
+    assert len(result.forms) == 2
+
+
+@pytest.mark.parametrize("failure", ["hang", "error"])
+async def test_unreadable_page_facts_fail_closed(browser, serve, tmp_path, monkeypatch, failure):
+    async def unreadable(page):
+        if failure == "hang":
+            await asyncio.sleep(60)
+        raise PlaywrightError("page crashed")
+
+    monkeypatch.setattr(capture_module, "fetch_facts", unreadable)
     monkeypatch.setattr(capture_module, "FACTS_TIMEOUT_S", 1)
-    body = """<title>stuck</title><body>hello<script>Object.defineProperty(HTMLElement.prototype, "innerText", {get() { for (;;) {} }})</script>"""
-    result = await asyncio.wait_for(capture_html(browser, serve, tmp_path, monkeypatch, body), 20)
+    result = await asyncio.wait_for(capture_html(browser, serve, tmp_path, monkeypatch, "<title>x</title>hello"), 20)
+    assert result.facts_available is False
     assert (result.text, result.forms, result.links) == ("", [], [])
+    assert result.title == "x"
+    assert result.screenshot_path
+
+
+def test_one_malformed_item_is_dropped_and_valid_ones_are_kept():
+    items = [{"type": "text", "name": "a"}, {"type": 5, "name": "b"}, {"type": "password", "name": "c"}]
+    kept = capture_module.keep_valid(capture_module.PageInput, items, 10)
+    assert [item.name for item in kept] == ["a", "c"]
 
 
 async def test_over_many_and_over_long_values_are_cut(browser, serve, tmp_path, monkeypatch):
@@ -141,3 +184,12 @@ def test_models_cut_long_values_and_refuse_wrong_types():
     assert len(facts.links[0]) == capture_module.STRING_LIMIT
     with pytest.raises(ValidationError):
         capture_module.PageFacts.model_validate({"forms": [{"action": 5, "inputs": []}]})
+
+
+async def test_title_and_final_url_are_cut_to_the_string_limit(browser, serve, tmp_path, monkeypatch):
+    limit = capture_module.STRING_LIMIT
+    origin = serve(f"<title>{'t' * (limit * 3)}</title>hello")
+    monkeypatch.setattr(capture_module, "CAPTURES_DIR", tmp_path)
+    result = await capture(browser, f"{origin}/?{'q' * (limit * 2)}", allowed_origins=[origin])
+    assert len(result.title) == limit
+    assert len(result.final_url) == limit

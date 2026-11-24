@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 NEW_DOMAIN_DAYS = 30
 MIN_MATCH_LENGTH = 4
@@ -23,6 +23,12 @@ REASONS = {
         "sandbox",
         "The page names {brand} in its title or text",
         "الصفحة تذكر {brand} في عنوانها أو نصها",
+    ),
+    "PAGE_FACTS_UNAVAILABLE": (
+        30,
+        "sandbox",
+        "The page prevented inspection of its forms and text",
+        "الصفحة منعت فحص نماذجها ونصها",
     ),
     "NEW_DOMAIN": (
         15,
@@ -61,9 +67,15 @@ def lookalike_tokens(brand: dict) -> set[str]:
     return set(names) | {joined for name in names for keyword in keywords for joined in (name + keyword, keyword + name)}
 
 
+def label_candidates(label: str) -> set[str]:
+    """Every run of adjacent hyphen-separated tokens in the label, joined without separators."""
+    tokens = label.split("-")
+    return {"".join(tokens[start:end]) for start in range(len(tokens)) for end in range(start + 1, len(tokens) + 1)}
+
+
 def lookalike(host: str, brand: dict) -> bool:
-    tokens = {token for label in host.split(".") for token in label.split("-")}
-    return not is_official(host, brand) and not tokens.isdisjoint(lookalike_tokens(brand))
+    candidates = set().union(*(label_candidates(label) for label in host.split(".")))
+    return not is_official(host, brand) and not candidates.isdisjoint(lookalike_tokens(brand))
 
 
 def mentioned(host: str, text: str, brand: dict) -> bool:
@@ -71,9 +83,12 @@ def mentioned(host: str, text: str, brand: dict) -> bool:
 
 
 def is_new(registered_at: str | None, now: datetime) -> bool:
-    if not registered_at:
+    """An unparseable date counts as unknown; a date without a zone is read as UTC."""
+    try:
+        registered = datetime.fromisoformat(registered_at or "")
+    except ValueError:
         return False
-    return now - datetime.fromisoformat(registered_at) < timedelta(days=NEW_DOMAIN_DAYS)
+    return now - registered.replace(tzinfo=registered.tzinfo or UTC) < timedelta(days=NEW_DOMAIN_DAYS)
 
 
 def score(
@@ -81,6 +96,7 @@ def score(
     page_text: str,
     registered_at: str | None,
     credential_form: bool,
+    facts_unavailable: bool,
     brands: list[dict],
     now: datetime,
 ) -> dict:
@@ -92,6 +108,8 @@ def score(
         found.append(reason("BRAND_LOOKALIKE_DOMAIN", brand["names"][0]))
     if credential_form:
         found.append(reason("CREDENTIAL_FORM"))
+    if facts_unavailable:
+        found.append(reason("PAGE_FACTS_UNAVAILABLE"))
     if brand and mentioned(host, lowered, brand):
         found.append(reason("BRAND_IN_PAGE", brand["names"][0]))
     if is_new(registered_at, now):

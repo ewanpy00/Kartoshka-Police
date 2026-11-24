@@ -18,7 +18,7 @@ from app.models import Check
 
 SANDBOX_TIMEOUT = 30
 AUTO_CONFIRM_ABOVE = 90
-NO_CAPTURE = {"title": "", "text": "", "forms": [], "links": [], "screenshot_path": None, "internal_requests_blocked": 0}
+NO_CAPTURE = {"title": "", "text": "", "forms": [], "links": [], "facts_available": False, "screenshot_path": None, "internal_requests_blocked": 0}
 
 
 def capture_page(sandbox: httpx.Client, url: str) -> dict:
@@ -38,6 +38,7 @@ def run_deep_check(session: Session, check_id: str, sandbox: httpx.Client, rdap_
     domain = host.removeprefix("www.")
     forms = capture["forms"]
     credential_form = extract.credential_form(forms)
+    page_loaded = not capture["navigation_blocked"] and bool(capture["final_url"])
     infrastructure = rdap.lookup(rdap_client, host, rdap.resolve(host))
     brands = load_brands(settings.data_dir)
     result = score(
@@ -45,6 +46,7 @@ def run_deep_check(session: Session, check_id: str, sandbox: httpx.Client, rdap_
         f"{capture['title']}\n{capture['text']}",
         infrastructure["registered_at"],
         credential_form,
+        page_loaded and not capture["facts_available"],
         brands,
         datetime.now(UTC),
     )
@@ -56,6 +58,7 @@ def run_deep_check(session: Session, check_id: str, sandbox: httpx.Client, rdap_
             "title": capture["title"],
             "text": capture["text"],
             "forms": forms,
+            "facts_available": capture["facts_available"],
             "internal_requests_blocked": capture["internal_requests_blocked"],
             "navigation_blocked": capture["navigation_blocked"],
         },

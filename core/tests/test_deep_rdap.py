@@ -89,3 +89,30 @@ def test_cloudflare_is_detected_by_name_server():
 
 def test_cloudflare_ranges_come_from_the_data_file():
     assert rdap.cloudflare_networks(get_settings().data_dir)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        {"entities": [{"roles": ["registrar"], "vcardArray": "oops"}, {"roles": ["abuse"], "vcardArray": ["vcard", [["email", {}, "text"]]]}]},
+        {"entities": "nope", "nameservers": [5, {"ldhName": 7}], "events": [None, {"eventAction": "registration", "eventDate": 12.5}]},
+        {"events": [{"eventAction": "registration", "eventDate": "yesterday"}]},
+        {"entities": [{"roles": ["registrar"], "vcardArray": ["vcard", [["fn", {}, "text", {"a": 1.5}]]]}]},
+    ],
+)
+def test_malformed_domain_data_is_skipped_never_raised(document):
+    result = rdap.lookup(client_for({"/domain/x.example": document}), "x.example", None)
+    assert result["rdap_status"] == "ok"
+    assert (result["registrar"], result["registered_at"], result["abuse_emails"], result["name_servers"]) == (None, None, [], [])
+
+
+def test_malformed_ip_data_fails_that_lookup_only():
+    document = {"name": 42, "country": ["NL"], "entities": [{"roles": ["registrant"], "vcardArray": ["vcard", [["fn", {}, "text", 3.5]]]}]}
+    result = rdap.lookup(client_for({"/domain/x.example": DOMAIN_DOCUMENT, "/ip/203.0.113.5": document}), "x.example", "203.0.113.5")
+    assert (result["ip_network"], result["ip_owner"], result["ip_country"]) == (None, None, None)
+    assert result["registrar"] == "Example Registrar LLC"
+
+
+def test_non_object_documents_are_a_failed_lookup():
+    result = rdap.lookup(client_for({"/domain/x.example": [], "/ip/203.0.113.5": "text"}), "x.example", "203.0.113.5")
+    assert result == {**rdap.EMPTY, "ip": "203.0.113.5"}
