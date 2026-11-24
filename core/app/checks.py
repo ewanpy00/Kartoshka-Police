@@ -24,16 +24,24 @@ BLOCKLISTED = {
 }
 
 
-def normalize_host(host: str) -> str:
-    """Lower-case, drop trailing dots and punycode-encode the way browsers do (UTS 46, non-transitional).
-
-    A host that fails to encode is returned as given. It is invalid or non-ASCII, so it cannot equal a seeded domain.
-    """
-    host = host.lower().rstrip(".")
+def encode_label(label: str) -> str:
     try:
-        return idna.encode(host, uts46=True, transitional=False).decode("ascii")
+        return idna.encode(label).decode("ascii")
     except idna.IDNAError:
-        return host
+        return label
+
+
+def normalize_host(host: str) -> str:
+    """Map a host as browsers do (UTS 46, non-transitional), drop trailing dots and punycode each label.
+
+    A label that fails to encode is kept as given, so one odd label cannot stop its parents from matching.
+    It is invalid or non-ASCII, so it cannot equal a seeded label.
+    """
+    try:
+        host = idna.uts46_remap(host, std3_rules=False, transitional=False)
+    except idna.IDNAError:
+        host = host.lower()
+    return ".".join(encode_label(label) for label in host.rstrip(".").split("."))
 
 
 def host_and_parents(url: str) -> list[str]:

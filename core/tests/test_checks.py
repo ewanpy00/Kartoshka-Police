@@ -107,3 +107,9 @@ def test_idna2003_lookalikes_do_not_match_the_allowlist(client):
     assert host_and_parents("https://uaepaß.ae/") == ["xn--uaepa-pqa.ae"]
     assert check(client, "https://uaepaß.ae/login")["verdict"] == "pending"
     assert check(client, "https://uae\u200dpass.ae/login")["verdict"] == "pending"
+
+
+def test_one_odd_label_does_not_stop_the_parent_domains_matching(client, session):
+    session.add(Domain(domain="xn--bcher-kva.example", status="confirmed", brand_id="tamm"))
+    assert check(client, "https://foo_bar.bücher.example/")["verdict"] == "block"
+    assert check(client, "https://foo_bar.uaepass.ae/")["verdict"] == "allow"
