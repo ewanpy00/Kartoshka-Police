@@ -6,6 +6,7 @@ import TakedownsView from './views/TakedownsView.vue'
 import HelplinesView from './views/HelplinesView.vue'
 import FeedView from './views/FeedView.vue'
 import ChainView from './views/ChainView.vue'
+import AuditView from './views/AuditView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -18,5 +19,6 @@ export const router = createRouter({
     { path: '/helplines', component: HelplinesView },
     { path: '/feed', component: FeedView },
     { path: '/chain', component: ChainView },
+    { path: '/audit', component: AuditView },
   ],
 })

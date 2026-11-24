@@ -12,6 +12,8 @@ export interface CaseSummary {
   first_seen: string
   evidence_id: string | null
   campaign_id: string | null
+  last_seen?: string
+  rank?: number
 }
 
 export interface Reason {
@@ -19,6 +21,7 @@ export interface Reason {
   weight: number
   en: string
   ar: string
+  source: string
 }
 
 export interface Location {
@@ -40,6 +43,7 @@ export interface Infrastructure {
   ip?: string | null
   ip_network?: string | null
   ip_owner?: string | null
+  proxy?: string | null
 }
 
 export interface CaseDetail extends CaseSummary {
@@ -48,7 +52,10 @@ export interface CaseDetail extends CaseSummary {
   reasons: Reason[]
   infrastructure: Infrastructure
   location?: Location | null
-  lead_time?: { gsb?: LeadSide | null } | null
+  lead_time?: { gsb?: LeadSide | null; vt?: LeadSide | null } | null
+  final_url?: string | null
+  summary?: { en: string; ar: string } | null
+  checks?: { check_id: string; url: string; source: string; verdict: string; score: number; created_at: string }[]
   report_notes: { id: number; note: string; created_at: string }[]
   reviews: { id: number; decision: string; reason: string | null; reviewer: string; reviewed_at: string }[]
   has_screenshot: boolean
@@ -111,4 +118,24 @@ export interface Verify {
   intact: boolean
   first_broken: { id: string; seq: number; reason: string } | null
   message: string
+}
+
+export interface AuditEntry {
+  id: number
+  actor: string
+  action: string
+  target: string
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  reason: string | null
+  created_at: string
+}
+
+export interface EvidenceExport {
+  id: string
+  check_id: string
+  seq: number
+  prev_hash: string | null
+  hash: string
+  created_at: string
 }
