@@ -29,6 +29,16 @@ class Store(context: Context) {
         get() = prefs.getString("browser", null)
         set(value) = prefs.edit().putString("browser", value).apply()
 
+    /** "system", "en" or "ar" (see Appearance). */
+    var language: String
+        get() = prefs.getString("language", "system") ?: "system"
+        set(value) = prefs.edit().putString("language", value).apply()
+
+    /** "system", "light" or "dark" (see Appearance). */
+    var theme: String
+        get() = prefs.getString("theme", "system") ?: "system"
+        set(value) = prefs.edit().putString("theme", value).apply()
+
     val blockedCount: Int get() = prefs.getInt("blocked_count", 0)
 
     /** How many police-confirmed domains the local list holds. */

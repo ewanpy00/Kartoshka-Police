@@ -57,4 +57,22 @@
 
     <string name="notify_blocked_title">رابط فتحته احتيالي</string>
     <string name="notify_blocked_text">اكتمل التحليل: تم حظر %1$s. لا تُدخل أي بيانات فيه.</string>
+
+    <!-- فحص رابط في الشاشة الرئيسية -->
+    <string name="link_title">افحص رابطًا</string>
+    <string name="link_body">الصق رابطًا من رسالة نصية أو واتساب أو بريد إلكتروني. نفحصه قبل أن تفتحه.</string>
+    <string name="link_hint">الرابط أو عنوان الموقع</string>
+    <string name="link_paste">الصق من الحافظة</string>
+    <string name="link_check">افحص هذا الرابط</string>
+    <string name="link_empty">الصق رابطًا أو اكتبه أولًا</string>
+    <string name="link_nothing_to_paste">لا يوجد نص في الحافظة</string>
+
+    <!-- اللغة والمظهر -->
+    <string name="language_title">اللغة</string>
+    <string name="theme_title">المظهر</string>
+    <string name="option_system">إعداد الهاتف</string>
+    <string name="language_en">English</string>
+    <string name="language_ar">العربية</string>
+    <string name="theme_light">فاتح</string>
+    <string name="theme_dark">داكن</string>
 </resources>

@@ -9,8 +9,16 @@
   font-size: 16px; line-height: 1.5; color: var(--text); background: var(--bg);
   -webkit-text-size-adjust: 100%;
 }
+/* Dark: chosen in the app or the header, or the phone's setting while the choice is "system" (the default). */
+:root[data-theme='dark'] {
+    color-scheme: dark;
+    --bg: #0b1320; --surface: #111a2b; --line: #1e2a40; --text: #e8edf5; --muted: #93a0b5;
+    --accent: #d7b14e; --on-accent: #151925; --gold: #d7b14e; --header: #111a2b; --on-header: #e8edf5;
+    --allow: #5fd19a; --allow-soft: #11271f; --on-allow: #0b1320; --warn: #f0b35a; --warn-soft: #2a2010;
+    --block: #ff9483; --block-soft: #2a1518; --grey-soft: #16233a; --dot: #2c3a52;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
     --bg: #0b1320; --surface: #111a2b; --line: #1e2a40; --text: #e8edf5; --muted: #93a0b5;
     --accent: #d7b14e; --on-accent: #151925; --gold: #d7b14e; --header: #111a2b; --on-header: #e8edf5;
@@ -47,3 +55,22 @@ textarea { min-height: 8rem; }
 .badge.allow { background: var(--allow-soft); color: var(--allow); }
 .badge.warn { background: var(--warn-soft); color: var(--warn); }
 .badge.block { background: var(--block-soft); color: var(--block); }
+
+/* Motion: short, says what changed, and off under reduced motion. */
+@keyframes kp-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes kp-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
+@keyframes kp-spin { to { transform: rotate(360deg); } }
+@keyframes kp-shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+.rise { animation: kp-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.skeleton { border-radius: 8px; background: linear-gradient(90deg, var(--grey-soft) 25%, var(--line) 50%, var(--grey-soft) 75%) 0 0 / 200% 100%; animation: kp-shimmer 1.4s linear infinite; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { min-height: 2.2rem; padding: 0.2rem 0.7rem; border: 0; border-radius: 0; background: transparent; color: inherit; font-weight: 500; font-size: 0.85rem; }
+.seg button + button { border-inline-start: 1px solid var(--line); }
+.seg button[aria-pressed='true'] { background: var(--grey-soft); color: var(--text); font-weight: 700; }
+.chips { display: flex; gap: 0.4rem; overflow-x: auto; scrollbar-width: none; padding-bottom: 0.15rem; }
+.chip { flex: none; min-height: 2.2rem; padding: 0.25rem 0.8rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--line); }
+.chip[aria-pressed='true'] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.chip .n { margin-inline-start: 0.35rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

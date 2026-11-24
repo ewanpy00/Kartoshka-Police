@@ -3,6 +3,9 @@ import { ref, watchEffect } from 'vue'
 
 export type Lang = 'ar' | 'en'
 function initial(): Lang {
+  // Gatekeeper passes the language chosen in the app (?lang=), which wins over everything else.
+  const fromApp = new URLSearchParams(location.search).get('lang')
+  if (fromApp === 'en' || fromApp === 'ar') return fromApp
   try {
     const saved = localStorage.getItem('kp.lang')
     if (saved === 'en' || saved === 'ar') return saved

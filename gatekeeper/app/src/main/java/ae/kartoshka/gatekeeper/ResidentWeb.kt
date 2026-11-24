@@ -19,7 +19,12 @@ import android.webkit.WebViewClient
 object ResidentWeb {
     private val origin: Uri by lazy { Uri.parse(BuildConfig.RESIDENT_URL) }
 
-    fun url(path: String) = BuildConfig.RESIDENT_URL.trimEnd('/') + path
+    /** The page URL with the app's resolved language and theme, so the page matches the native screens. */
+    fun url(context: android.content.Context, path: String): String {
+        val join = if (path.contains('?')) "&" else "?"
+        return BuildConfig.RESIDENT_URL.trimEnd('/') + path + join +
+            "lang=" + Appearance.webLanguage(context) + "&theme=" + Appearance.webTheme(context)
+    }
 
     fun checkPath(url: String) = "/check?source=gatekeeper&url=" + Uri.encode(url)
     fun smsPath(text: String) = "/check?source=share&text=" + Uri.encode(text.take(4000))

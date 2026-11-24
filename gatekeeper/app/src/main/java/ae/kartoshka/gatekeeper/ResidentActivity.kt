@@ -22,7 +22,7 @@ class ResidentActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = if (web.canGoBack()) web.goBack() else finish()
         })
-        web.loadUrl(ResidentWeb.url(path))
+        web.loadUrl(ResidentWeb.url(this, path))
     }
 
     private fun titleFor(path: String) = when {

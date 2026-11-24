@@ -152,6 +152,77 @@
                         </LinearLayout>
                     </com.google.android.material.card.MaterialCardView>
 
+                    <!-- Check a link: the main thing a resident does, right on Home -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/link_card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="12dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="18dp">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/link_title"
+                                android:textColor="@color/ink"
+                                android:textSize="18sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/link_body"
+                                android:textColor="@color/muted"
+                                android:textSize="14sp" />
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/link_layout"
+                                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:hint="@string/link_hint"
+                                app:boxCornerRadiusBottomEnd="14dp"
+                                app:boxCornerRadiusBottomStart="14dp"
+                                app:boxCornerRadiusTopEnd="14dp"
+                                app:boxCornerRadiusTopStart="14dp"
+                                app:boxStrokeColor="@color/ink"
+                                app:endIconContentDescription="@string/link_paste"
+                                app:endIconDrawable="@drawable/ic_paste"
+                                app:endIconMode="custom"
+                                app:endIconTint="@color/ink"
+                                app:startIconDrawable="@drawable/ic_link"
+                                app:startIconTint="@color/muted">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/link_input"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:imeOptions="actionGo"
+                                    android:importantForAutofill="no"
+                                    android:inputType="textUri"
+                                    android:maxLines="1"
+                                    android:textDirection="ltr" />
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/link_check"
+                                style="@style/Widget.Gatekeeper.Button"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:text="@string/link_check"
+                                app:icon="@drawable/ic_search" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
                     <!-- Counters -->
                     <LinearLayout
                         android:id="@+id/stats"
@@ -308,6 +379,22 @@
                                 app:dividerColor="@color/hairline" />
 
                             <include android:id="@+id/setting_browser" layout="@layout/item_setting" />
+
+                            <com.google.android.material.divider.MaterialDivider
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="70dp"
+                                app:dividerColor="@color/hairline" />
+
+                            <include android:id="@+id/setting_language" layout="@layout/item_setting" />
+
+                            <com.google.android.material.divider.MaterialDivider
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="70dp"
+                                app:dividerColor="@color/hairline" />
+
+                            <include android:id="@+id/setting_theme" layout="@layout/item_setting" />
                         </LinearLayout>
                     </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>

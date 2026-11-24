@@ -66,4 +66,22 @@
 
     <string name="notify_blocked_title">A link you opened is a scam</string>
     <string name="notify_blocked_text">Analysis finished: %1$s is now blocked. Do not enter any details there.</string>
+
+    <!-- Check a link on Home -->
+    <string name="link_title">Check a link</string>
+    <string name="link_body">Paste a link from an SMS, WhatsApp or email. We check it before you open it.</string>
+    <string name="link_hint">Link or website address</string>
+    <string name="link_paste">Paste from clipboard</string>
+    <string name="link_check">Check this link</string>
+    <string name="link_empty">Paste or type a link first</string>
+    <string name="link_nothing_to_paste">The clipboard has no text</string>
+
+    <!-- Language and theme -->
+    <string name="language_title">Language</string>
+    <string name="theme_title">Appearance</string>
+    <string name="option_system">Phone setting</string>
+    <string name="language_en">English</string>
+    <string name="language_ar">العربية</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
 </resources>

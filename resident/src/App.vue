@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { embedded } from './embedded'
 import { lang, tr } from './i18n'
+import { theme, type Theme } from './theme'
+
+const THEMES: [Theme, string, string, string][] = [
+  ['system', 'Phone setting', 'إعداد الهاتف', 'M5 2h6a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM7 12h2'],
+  ['light', 'Light', 'فاتح', 'M8 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6ZM8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1'],
+  ['dark', 'Dark', 'داكن', 'M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z'],
+]
 
 // Outline icons (24px grid), drawn with currentColor so they follow the active tab colour.
 const ICONS = {
@@ -17,7 +24,18 @@ const ICONS = {
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5z" /><path d="m8.5 12 2.5 2.5 4.5-5" /></svg>
       {{ tr('Kartoshka link check', 'كارتوشكا · فحص الروابط') }}
     </RouterLink>
-    <button class="lang" @click="lang = lang === 'ar' ? 'en' : 'ar'">{{ lang === 'ar' ? 'English' : 'العربية' }}</button>
+    <div class="controls">
+      <div class="seg" role="group" :aria-label="tr('Language', 'اللغة')">
+        <button type="button" :aria-pressed="lang === 'ar'" @click="lang = 'ar'">عربي</button>
+        <button type="button" :aria-pressed="lang === 'en'" @click="lang = 'en'">EN</button>
+      </div>
+      <div class="seg" role="group" :aria-label="tr('Theme', 'المظهر')">
+        <button v-for="[value, en, ar, icon] in THEMES" :key="value" type="button" class="icon" :aria-pressed="theme === value"
+                :title="tr(en, ar)" :aria-label="tr(en, ar)" @click="theme = value">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path :d="icon" /></svg>
+        </button>
+      </div>
+    </div>
   </header>
   <RouterView />
   <nav v-if="!embedded" class="tabs">
@@ -34,7 +52,13 @@ svg { width: 1.35rem; height: 1.35rem; fill: none; stroke: currentColor; stroke-
   border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--on-header); font-weight: 700; text-decoration: none; }
 .brand svg { color: var(--header-gold); }
-.lang { min-height: 2.2rem; padding: 0.2rem 0.8rem; background: transparent; color: var(--on-header); border-color: rgb(255 255 255 / 0.35); border-radius: 999px; }
+.controls { display: flex; gap: 0.4rem; }
+.controls .seg { border-color: rgb(255 255 255 / 0.3); color: var(--on-header); }
+.controls .seg button { color: inherit; }
+.controls .seg button + button { border-color: rgb(255 255 255 / 0.3); }
+.controls .seg button[aria-pressed='true'] { background: rgb(255 255 255 / 0.16); color: var(--on-header); }
+.controls .icon { padding-inline: 0.5rem; }
+.controls .icon svg { width: 1rem; height: 1rem; stroke-width: 1.5; }
 .tabs { position: fixed; inset-inline: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface);
   border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
 .tabs a { display: grid; justify-items: center; gap: 0.15rem; padding: 0.55rem 0.2rem 0.6rem; color: var(--muted); text-decoration: none;

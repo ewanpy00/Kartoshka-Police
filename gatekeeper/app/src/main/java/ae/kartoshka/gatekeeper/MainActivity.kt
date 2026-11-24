@@ -10,6 +10,8 @@ import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.text.format.DateUtils
 import android.view.View
 import android.webkit.WebView
@@ -23,10 +25,13 @@ import androidx.work.WorkManager
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 
 /**
  * Home and the three resident tabs (Check, Reports, Radar) under one bottom navigation. Home shows the
- * protection status, the counters, quick actions and the settings. No account and no sign-in.
+ * protection status, a box to check a link, the counters, quick actions and the settings (including language
+ * and light or dark appearance). No account and no sign-in.
  */
 class MainActivity : AppCompatActivity() {
     private val app get() = application as GatekeeperApp
@@ -74,6 +79,9 @@ class MainActivity : AppCompatActivity() {
         }
         setting(R.id.setting_dns, R.drawable.ic_globe, R.string.dns_title) { openPrivateDns() }
         setting(R.id.setting_browser, R.drawable.ic_open, R.string.browser_title) { pickBrowser() }
+        setting(R.id.setting_language, R.drawable.ic_translate, R.string.language_title) { pickLanguage() }
+        setting(R.id.setting_theme, R.drawable.ic_contrast, R.string.theme_title) { pickTheme() }
+        setupLinkBox()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -128,7 +136,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun revealHome() {
         Motion.stagger(listOf(
-            findViewById(R.id.hero), findViewById(R.id.status_card), findViewById(R.id.stats),
+            findViewById(R.id.hero), findViewById(R.id.status_card), findViewById(R.id.link_card), findViewById(R.id.stats),
             findViewById(R.id.actions_title), findViewById(R.id.actions_row_1), findViewById(R.id.actions_row_2),
             findViewById(R.id.settings_title), findViewById(R.id.settings_card),
         ), stepMs = 55)
@@ -153,7 +161,7 @@ class MainActivity : AppCompatActivity() {
         web.animate().alpha(1f).setDuration(180).start()
         if (loadedPath != path) {
             loadedPath = path
-            web.loadUrl(ResidentWeb.url(path))
+            web.loadUrl(ResidentWeb.url(this, path))
         }
     }
 
@@ -179,6 +187,8 @@ class MainActivity : AppCompatActivity() {
         val browser = Browsers.target(this)
         settingValue(R.id.setting_browser, Browsers.installed(this).firstOrNull { it.first == browser }?.second ?: getString(R.string.none))
         settingValue(R.id.setting_dns, getString(R.string.dns_value))
+        settingValue(R.id.setting_language, getString(languageLabel(Appearance.currentLanguage(app.store))))
+        settingValue(R.id.setting_theme, getString(themeLabel(app.store.theme)))
     }
 
     private fun tile(id: Int, icon: Int, title: Int, hint: Int, bg: Int, tint: Int, onClick: () -> Unit) {
@@ -202,6 +212,91 @@ class MainActivity : AppCompatActivity() {
 
     private fun settingValue(id: Int, value: String) {
         findViewById<View>(id).findViewById<TextView>(R.id.setting_value).text = value
+    }
+
+    // --- check a link from Home ----------------------------------------------------------------------
+
+    private fun setupLinkBox() {
+        val layout = findViewById<TextInputLayout>(R.id.link_layout)
+        val input = findViewById<TextInputEditText>(R.id.link_input)
+        layout.setEndIconOnClickListener {
+            val text = getSystemService(ClipboardManager::class.java).primaryClip
+                ?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()?.trim()
+            if (text.isNullOrEmpty()) {
+                Toast.makeText(this, R.string.link_nothing_to_paste, Toast.LENGTH_SHORT).show()
+            } else {
+                input.setText(text)
+                input.setSelection(input.length())
+                layout.error = null
+            }
+        }
+        input.setOnEditorActionListener { _, action, _ ->
+            if (action == EditorInfo.IME_ACTION_GO) { checkTyped(); true } else false
+        }
+        findViewById<MaterialButton>(R.id.link_check).setOnClickListener { checkTyped() }
+    }
+
+    /** A bare host ("tamm-pay.com") gets https:// so the X-ray can parse it; text with several links goes to the SMS check. */
+    private fun checkTyped() {
+        val layout = findViewById<TextInputLayout>(R.id.link_layout)
+        val input = findViewById<TextInputEditText>(R.id.link_input)
+        val text = input.text?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) {
+            layout.error = getString(R.string.link_empty)
+            return
+        }
+        layout.error = null
+        getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(input.windowToken, 0)
+        val path = if (text.any { it.isWhitespace() }) ResidentWeb.smsPath(text)
+            else ResidentWeb.checkPath(if (text.contains("://")) text else "https://$text")
+        nav.selectedItemId = R.id.tab_check
+        showWeb(path)
+        input.text = null
+    }
+
+    // --- language and appearance --------------------------------------------------------------------
+
+    private fun languageLabel(value: String) = when (value) {
+        "en" -> R.string.language_en
+        "ar" -> R.string.language_ar
+        else -> R.string.option_system
+    }
+
+    private fun themeLabel(value: String) = when (value) {
+        "light" -> R.string.theme_light
+        "dark" -> R.string.theme_dark
+        else -> R.string.option_system
+    }
+
+    /** Changing either recreates the screens; the resident pages pick the new choice up from ?lang= and ?theme=. */
+    private fun pickLanguage() {
+        val values = Appearance.LANGUAGES
+        val current = values.indexOf(Appearance.currentLanguage(app.store)).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.language_title)
+            .setSingleChoiceItems(values.map { getString(languageLabel(it)) }.toTypedArray(), current) { dialog, which ->
+                dialog.dismiss()
+                if (which != current) {
+                    app.store.language = values[which]
+                    Appearance.setLanguage(values[which])
+                }
+            }
+            .show()
+    }
+
+    private fun pickTheme() {
+        val values = Appearance.THEMES
+        val current = values.indexOf(app.store.theme).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.theme_title)
+            .setSingleChoiceItems(values.map { getString(themeLabel(it)) }.toTypedArray(), current) { dialog, which ->
+                dialog.dismiss()
+                if (which != current) {
+                    app.store.theme = values[which]
+                    Appearance.setTheme(values[which])
+                }
+            }
+            .show()
     }
 
     // --- actions ------------------------------------------------------------------------------------
