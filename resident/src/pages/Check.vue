@@ -168,11 +168,11 @@ const asks = computed(() => (result.value?.preview?.asks_for ?? []).map((a) => A
 </template>
 
 <style scoped>
-.verdict.block { border-color: var(--block); background: var(--block-soft); }
-.verdict.warn { border-color: var(--warn); background: var(--warn-soft); }
-.verdict.allow { border-color: var(--allow); background: var(--allow-soft); }
-.verdict.block h1 { color: var(--block); }
-.reasons { padding-inline-start: 1.2rem; margin: 0.5rem 0 0.9rem; }
-.shot { width: 100%; border: 1px solid var(--line); border-radius: 10px; pointer-events: none; user-select: none; }
-.asks { background: var(--block-soft); color: var(--block); font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 10px; }
+.verdict.block { border-color: var(--c-risk); background: var(--c-risk-bg); }
+.verdict.warn { border-color: var(--c-amber); background: var(--c-amber-bg); }
+.verdict.allow { border-color: var(--c-ok); background: var(--c-ok-bg); }
+.verdict.block h1 { color: var(--c-risk); }
+.reasons { padding-inline-start: 1.2rem; margin: var(--space-2) 0 var(--space-4); }
+.shot { width: 100%; border: 1px solid var(--c-hairline); border-radius: var(--radius-2); pointer-events: none; user-select: none; }
+.asks { background: var(--c-risk-bg); color: var(--c-risk); font-weight: 600; padding: var(--space-2) var(--space-3); border-radius: var(--radius-1); }
 </style>

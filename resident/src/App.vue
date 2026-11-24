@@ -17,11 +17,11 @@ import { lang, tr } from './i18n'
 </template>
 
 <style scoped>
-.top { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 1rem; background: var(--accent); color: #fff; }
-.brand { color: #fff; font-weight: 700; text-decoration: none; }
-.lang { min-height: 2.2rem; padding: 0.2rem 0.7rem; background: transparent; color: #fff; border-color: rgb(255 255 255 / 0.5); }
-.tabs { position: fixed; inset-inline: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface);
-  border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-.tabs a { text-align: center; padding: 0.8rem 0.2rem; color: var(--muted); text-decoration: none; font-size: 0.85rem; font-weight: 600; }
-.tabs a.router-link-exact-active { color: var(--accent); }
+.top { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-4); background: var(--c-surface); color: var(--c-ink); border-block-end: 1px solid var(--c-hairline); }
+.brand { color: var(--c-ink); font-weight: 600; text-decoration: none; }
+.lang { min-height: 2.2rem; padding: var(--space-1) var(--space-3); font-size: var(--fs-13); }
+.tabs { position: fixed; inset-inline: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--c-surface);
+  border-block-start: 1px solid var(--c-hairline); padding-bottom: env(safe-area-inset-bottom); }
+.tabs a { text-align: center; padding: var(--space-3) var(--space-1); color: var(--c-muted); text-decoration: none; font-size: var(--fs-13); font-weight: 600; }
+.tabs a.router-link-exact-active { color: var(--c-ink); background: var(--c-selected); box-shadow: inset 0 -2px 0 var(--c-accent); }
 </style>

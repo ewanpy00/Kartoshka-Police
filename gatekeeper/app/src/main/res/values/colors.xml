@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="accent">#1F4E8C</color>
-    <color name="text">#1C2430</color>
-    <color name="muted">#5F6B7A</color>
+    <!-- Literal copies of the light-theme tokens in design/tokens.css (Android cannot import CSS).
+         Keep in step with that file. Resource names are unchanged; the value comes from the matching role:
+         accent = --c-primary, text = --c-ink, muted = --c-muted, surface = --c-surface,
+         block = --c-risk, block_soft = --c-risk-bg, warn = --c-amber, warn_soft = --c-amber-bg. -->
+    <color name="accent">#151925</color>
+    <color name="text">#101727</color>
+    <color name="muted">#5B6475</color>
     <color name="surface">#FFFFFF</color>
-    <color name="block">#B42318</color>
-    <color name="block_soft">#FDE8E6</color>
-    <color name="warn">#A35F00</color>
-    <color name="warn_soft">#FDF0DC</color>
+    <color name="block">#B32416</color>
+    <color name="block_soft">#FDECEA</color>
+    <color name="warn">#B4530A</color>
+    <color name="warn_soft">#FDF1E3</color>
 </resources>

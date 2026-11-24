@@ -9,6 +9,8 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5174,
     strictPort: true,
+    // shared tokens: ./design is mounted at /design (app at /app) in the container, ../design on the host
+    fs: { allow: ['.', '..', '/design'] },
     proxy: {
       '/api': {
         target: process.env.CORE_PROXY_TARGET ?? 'http://127.0.0.1:8000',

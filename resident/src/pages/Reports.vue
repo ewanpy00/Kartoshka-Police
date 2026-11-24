@@ -49,10 +49,10 @@ onMounted(load)
 
 <style scoped>
 .row-head { display: flex; align-items: center; justify-content: space-between; }
-.timeline { list-style: none; padding: 0; margin: 0.5rem 0 0; }
-.timeline li { position: relative; padding-inline-start: 1.6rem; padding-bottom: 0.6rem; display: grid; color: var(--muted); }
+.timeline { list-style: none; padding: 0; margin: var(--space-2) 0 0; }
+.timeline li { position: relative; padding-inline-start: 1.6rem; padding-bottom: var(--space-3); display: grid; color: var(--c-muted); }
 .timeline li::before { content: ''; position: absolute; inset-inline-start: 0.2rem; top: 0.35rem; width: 0.7rem; height: 0.7rem; border-radius: 50%;
-  border: 2px solid #c2c8d0; background: var(--surface); }
-.timeline li.done { color: var(--text); }
-.timeline li.done::before { background: var(--accent); border-color: var(--accent); }
+  border: 2px solid var(--c-muted); background: var(--c-surface); }
+.timeline li.done { color: var(--c-ink); }
+.timeline li.done::before { background: var(--c-accent); border-color: var(--c-accent); }
 </style>

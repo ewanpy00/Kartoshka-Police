@@ -51,6 +51,6 @@ const LABEL = { allow: ['No warning signs', 'لا علامات خطر'], warn: [
 </template>
 
 <style scoped>
-.item { display: grid; gap: 0.3rem; color: inherit; text-decoration: none; }
+.item { display: grid; gap: var(--space-2); color: inherit; text-decoration: none; }
 .item .badge { justify-self: start; }
 </style>
