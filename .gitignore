@@ -1,0 +1,20 @@
+# Secrets: keep the template, ignore the real file
+.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Node
+node_modules/
+console/dist/
+
+# macOS
+.DS_Store
+
+# DNS config is generated at runtime; keep only the placeholder
+dns/conf/*
+!dns/conf/.gitkeep

@@ -1,0 +1,7 @@
+url,label
+https://uaepass.ae/,benign
+https://www.tamm.abudhabi/,benign
+https://www.wikipedia.org/,benign
+https://uaepass-verify.example/login,phish
+https://tamm-fines-pay.example/pay-fines,phish
+https://unknown-site.example/,benign
