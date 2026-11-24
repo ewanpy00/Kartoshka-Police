@@ -51,6 +51,11 @@ def host_and_parents(url: str) -> list[str]:
     return [".".join(labels[i:]) for i in range(len(labels) - 1)] or [".".join(labels)]
 
 
+def domain_of(url: str) -> str:
+    """The case key for a URL: its normalised host without a leading `www.`."""
+    return host_and_parents(url)[0].removeprefix("www.")
+
+
 def lookup_domain(session: Session, url: str) -> Domain | None:
     """Official and confirmed entries match the host or a parent; allowlisted ones only the host or its www form."""
     host, *_ = candidates = host_and_parents(url)
@@ -71,6 +76,7 @@ def run_check(session: Session, url: str, source: str, mode: str, data_dir: str)
         score=0,
         stage="fast",
         reasons=[],
+        domain=domain_of(url),
     )
     if match and match.status == "confirmed":
         brand = find_brand(load_brands(data_dir), match.brand_id)
