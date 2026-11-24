@@ -1,4 +1,6 @@
 import { adaptRequest, adaptResponse, pagedKey } from './adapt'
+import { demoRunning } from './demo'
+import { DEMO_WAIT_MS, demoFallback, demoFill } from './demoData'
 
 export class ApiError extends Error {
   constructor(
@@ -48,11 +50,20 @@ async function allPages(path: string, key: string): Promise<unknown> {
 
 // Views ask in main's vocabulary; adapt.ts turns the backend's answers into main's shapes (types.ts).
 export async function apiJson<T>(path: string): Promise<T> {
+  const real = loadJson<T>(path)
+  const sample = demoRunning.value ? demoFallback(path) : null
+  if (sample === null) return real
+  // During the demo a slow backend must not leave a page on "Loading": after a short wait, show the sample.
+  real.catch(() => undefined)
+  return Promise.race([real, new Promise<T>((resolve) => setTimeout(() => resolve(sample as T), DEMO_WAIT_MS))])
+}
+
+async function loadJson<T>(path: string): Promise<T> {
   const key = pagedKey(path)
-  if (key) return adaptResponse(path, await allPages(path, key)) as T
+  if (key) return demoFill(path, adaptResponse(path, await allPages(path, key)) as T)
   const response = await apiFetch(path)
   if (!response.ok) throw await failure(response)
-  return adaptResponse(path, await response.json()) as T
+  return demoFill(path, adaptResponse(path, await response.json()) as T)
 }
 
 export async function postJson<T>(path: string, body: object): Promise<T> {

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { adaptRefused } from '../adapt'
 import { ApiError, apiJson, download, errorText, postJson } from '../api'
 import { defang } from '../defang'
+import { demoRunning } from '../demo'
 import { formatTime, t } from '../i18n'
 import { officerName } from '../session'
 import type { CaseSummary, Pack } from '../types'
@@ -79,6 +80,10 @@ async function save(pack: Pack) {
 }
 
 onMounted(load)
+// Sample packs shown during the demo go away as soon as it stops.
+watch(demoRunning, (running) => {
+  if (!running) void load()
+})
 </script>
 
 <template>

@@ -1248,3 +1248,33 @@ dl {
     min-inline-size: 38px;
   }
 }
+
+/* ---------- demo mode button ---------- */
+
+.demo-toggle {
+  min-block-size: 32px;
+  padding: 5px 12px;
+  font-size: var(--fs-13);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.demo-toggle svg {
+  inline-size: 12px;
+  block-size: 12px;
+  fill: currentcolor;
+}
+
+.demo-toggle.running {
+  color: var(--c-on-primary);
+  background: var(--c-primary);
+  border-color: transparent;
+}
+
+@media (max-width: 700px) {
+  .topbar .demo-toggle {
+    flex: none;
+    min-block-size: 38px;
+    padding: 5px 10px;
+  }
+}

@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { apiJson, errorText } from '../api'
-import { t } from '../i18n'
+import { demoRunning } from '../demo'
+import { sampleChainRecords } from '../demoData'
+import { defang } from '../defang'
+import { formatTime, t } from '../i18n'
 import type { Verify } from '../types'
 
 const result = ref<Verify | null>(null)
 const error = ref('')
 const loading = ref(false)
+const samples = sampleChainRecords()
+
+// A result shown during the demo may be a sample, so clear it when the demo stops.
+watch(demoRunning, (running) => {
+  if (!running) result.value = null
+})
 
 async function verify() {
   error.value = ''
@@ -46,4 +55,33 @@ async function verify() {
       <dd>{{ result.first_broken.reason }}</dd>
     </dl>
   </div>
+  <div v-if="demoRunning" class="card chain-records">
+    <div class="card-section">
+      <h2 class="section-title">{{ t('chainRecentTitle') }}</h2>
+    </div>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ t('chainColSeq') }}</th>
+          <th>{{ t('domain') }}</th>
+          <th>{{ t('sha256') }}</th>
+          <th>{{ t('colTime') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="r in samples" :key="r.seq">
+          <td :data-label="t('chainColSeq')" class="mono">#{{ r.seq }}</td>
+          <td :data-label="t('domain')" class="mono">{{ defang(r.domain) }}</td>
+          <td :data-label="t('sha256')" class="mono">{{ r.hash }}</td>
+          <td :data-label="t('colTime')">{{ formatTime(r.at) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </template>
+
+<style scoped>
+.chain-records {
+  margin-block-start: 16px;
+}
+</style>

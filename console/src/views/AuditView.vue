@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { apiJson, errorText } from '../api'
 import { defang } from '../defang'
+import { demoRunning } from '../demo'
 import { formatTime, t, type Key } from '../i18n'
 import type { AuditEntry } from '../types'
 
@@ -25,15 +26,22 @@ function actionLabel(action: string): string {
   return KNOWN.has(action) ? t(`audit.${action}` as Key) : action
 }
 
-onMounted(async () => {
+async function load() {
   try {
     const res = await apiJson<{ entries: AuditEntry[] }>('/v1/admin/audit?limit=200')
     entries.value = res.entries
+    error.value = ''
   } catch (e) {
     error.value = t('failed', { error: errorText(e) })
   } finally {
     loading.value = false
   }
+}
+
+onMounted(load)
+// Sample entries shown during the demo go away as soon as it stops.
+watch(demoRunning, (running) => {
+  if (!running) void load()
 })
 </script>
 

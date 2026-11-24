@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import DemoOverlay from './components/DemoOverlay.vue'
+import { demoRunning, startDemo, stopDemo } from './demo'
 import { locale, setLocale, t } from './i18n'
 import { officer, officerName, signIn, signOut } from './session'
 import { refreshStats, useStats } from './stats'
 import { theme, toggleTheme } from './theme'
 
 const route = useRoute()
+const router = useRouter()
+
+function toggleDemo() {
+  if (demoRunning.value) stopDemo()
+  else void startDemo(router)
+}
 const { awaiting } = useStats()
 
 const head = ref<HTMLElement | null>(null)
@@ -48,6 +56,18 @@ watch(officer, (value) => {
       <strong class="brand">{{ t('appTitle') }}</strong>
     </div>
     <div class="topbar-end">
+      <button
+        type="button"
+        class="btn demo-toggle"
+        :class="{ running: demoRunning }"
+        :aria-pressed="demoRunning"
+        :title="demoRunning ? t('demoStop') : t('demoStartLabel')"
+        @click="toggleDemo"
+      >
+        <svg v-if="demoRunning" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1" /></svg>
+        <svg v-else viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" /></svg>
+        <span>{{ demoRunning ? t('demoStop') : t('demoStart') }}</span>
+      </button>
       <div class="seg" role="group" :aria-label="t('languageLabel')">
         <button type="button" :aria-pressed="locale === 'en'" @click="setLocale('en')">{{ t('langEn') }}</button>
         <button type="button" :aria-pressed="locale === 'ar'" @click="setLocale('ar')">{{ t('langAr') }}</button>
@@ -115,4 +135,5 @@ watch(officer, (value) => {
       <button @click="signIn">{{ t('signInButton') }}</button>
     </section>
   </main>
+  <DemoOverlay />
 </template>

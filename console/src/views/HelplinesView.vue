@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { apiJson, download, errorText } from '../api'
 import { defang } from '../defang'
+import { demoRunning } from '../demo'
 import { formatTime, t } from '../i18n'
 import type { Helpline } from '../types'
 
@@ -17,13 +18,20 @@ async function save() {
   }
 }
 
-onMounted(async () => {
+async function load() {
   try {
     numbers.value = (await apiJson<{ numbers: Helpline[] }>('/v1/admin/helplines')).numbers
+    error.value = ''
   } catch (e) {
     error.value = t('failed', { error: errorText(e) })
   }
   loaded.value = true
+}
+
+onMounted(load)
+// Sample numbers shown during the demo go away as soon as it stops.
+watch(demoRunning, (running) => {
+  if (!running) void load()
 })
 </script>
 

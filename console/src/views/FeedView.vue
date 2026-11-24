@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { adaptEvent } from '../adapt'
 import { apiJson, apiToken, errorText } from '../api'
 import { band } from '../bands'
+import { demoFeedRows } from '../demo'
 import { defang } from '../defang'
 import { formatTime, t } from '../i18n'
 import type { FeedRow } from '../types'
@@ -18,6 +19,9 @@ const error = ref('')
 let socket: WebSocket | null = null
 let retry: ReturnType<typeof setTimeout> | undefined
 let closed = false
+
+// Demo rows (only while the demo runs) sit on top of the real ones; they are never stored.
+const shown = computed(() => [...demoFeedRows.value, ...rows.value])
 
 function push(row: FeedRow) {
   if (rows.value.some((existing) => existing.key === row.key)) return
@@ -80,7 +84,7 @@ onBeforeUnmount(() => {
     </div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <div class="card">
-      <p v-if="!rows.length" class="empty">{{ t('feedEmpty') }}</p>
+      <p v-if="!shown.length" class="empty">{{ t('feedEmpty') }}</p>
       <table v-else class="table">
         <thead>
           <tr>
@@ -93,7 +97,7 @@ onBeforeUnmount(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.key">
+          <tr v-for="row in shown" :key="row.key" :class="{ 'demo-new': row.key.startsWith('demo-') }">
             <td :data-label="t('time')">{{ formatTime(row.at) }}</td>
             <td :data-label="t('event')">{{ t(`event.${row.type}`) }}</td>
             <td :data-label="t('domain')" class="mono">{{ row.domain ? defang(row.domain) : t('unknown') }}</td>
@@ -108,3 +112,26 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.demo-new {
+  animation: demo-row-in 0.6s ease-out;
+}
+
+@keyframes demo-row-in {
+  from {
+    background: color-mix(in srgb, var(--c-amber) 30%, transparent);
+    opacity: 0;
+  }
+  to {
+    background: transparent;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-new {
+    animation: none;
+  }
+}
+</style>
