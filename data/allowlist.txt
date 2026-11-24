@@ -1,0 +1,6 @@
+# Seed allowlist. Official brand domains come from data/brands.yaml and need not be repeated here.
+# The Tranco top-10k import replaces this list later.
+google.com
+apple.com
+microsoft.com
+wikipedia.org
