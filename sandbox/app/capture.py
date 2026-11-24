@@ -26,6 +26,7 @@ MAX_FORMS = 20
 MAX_INPUTS = 50
 MAX_LINKS = 100
 FACTS_TIMEOUT_S = 5
+MAX_DOM_NODES = 50000
 LINK_PREFIXES = ("tel:", "https://wa.me/", "https://api.whatsapp.com/")
 
 def cut_string(limit: int):
@@ -56,6 +57,10 @@ class PageFacts(BaseModel):
     available: bool = False
 
 
+class DomTooLarge(Exception):
+    pass
+
+
 def keep_valid[T: BaseModel](model: type[T], items: list[dict], limit: int) -> list[T]:
     """The first `limit` items that validate; a malformed item is dropped on its own."""
     kept = []
@@ -76,12 +81,17 @@ def parse_dom(root: dict) -> tuple[list[dict], list[str]]:
     """Forms, with inputs outside any form gathered into one form without an action, and the contact links.
 
     Reads the DOM the browser reports over CDP, so no script of the page runs and nothing the page defines can shadow it.
+    Visits at most MAX_DOM_NODES nodes; a larger document raises DomTooLarge.
     """
     base = root.get("baseURL") or root.get("documentURL") or ""
     loose = {"action": "", "inputs": []}
     forms, links = [], []
     stack = [(root, None)]
+    visited = 0
     while stack:
+        visited += 1
+        if visited > MAX_DOM_NODES:
+            raise DomTooLarge
         node, form = stack.pop()
         name, attrs = node.get("nodeName", ""), attributes(node)
         if name == "FORM":
@@ -123,7 +133,7 @@ async def read_page_facts(page: Page) -> PageFacts:
     """What the page shows. When it cannot be read in time, `available` stays false so the caller can fail closed."""
     try:
         return await asyncio.wait_for(fetch_facts(page), FACTS_TIMEOUT_S)
-    except (TimeoutError, PlaywrightError, ValidationError, KeyError):
+    except Exception:
         return PageFacts()
 
 

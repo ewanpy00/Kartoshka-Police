@@ -193,3 +193,21 @@ async def test_title_and_final_url_are_cut_to_the_string_limit(browser, serve, t
     result = await capture(browser, f"{origin}/?{'q' * (limit * 2)}", allowed_origins=[origin])
     assert len(result.title) == limit
     assert len(result.final_url) == limit
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["<div>" * 5000 + "deep", "<p>x</p>" * 100000 + '<form><input type="password" name="pw"></form>'],
+    ids=["5000-nested", "100000-nodes"],
+)
+async def test_hostile_dom_size_never_fails_the_capture(browser, serve, tmp_path, monkeypatch, body):
+    result = await capture_html(browser, serve, tmp_path, monkeypatch, "<title>big</title>" + body)
+    assert result.title == "big"
+    assert result.screenshot_path
+    assert result.facts_available is False or result.forms == [] or result.forms[0].inputs[0].type == "password"
+
+
+def test_dom_over_the_node_budget_is_refused():
+    node = {"nodeName": "DIV", "children": [{"nodeName": "P"}] * capture_module.MAX_DOM_NODES}
+    with pytest.raises(capture_module.DomTooLarge):
+        capture_module.parse_dom(node)

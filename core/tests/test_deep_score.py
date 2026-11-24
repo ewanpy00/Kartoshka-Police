@@ -1,3 +1,4 @@
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -122,3 +123,16 @@ def test_unparseable_registration_date_is_unknown(registered_at):
 
 def test_registration_date_without_a_zone_is_read_as_utc():
     assert codes(run(registered_at="2026-11-23T00:00:00")) == ["NEW_DOMAIN"]
+
+
+def test_very_long_host_of_single_letter_tokens_is_fast_and_does_not_match():
+    host = ".".join("-".join("a" * 31) for _ in range(31))
+    started = time.perf_counter()
+    result = run(host=host)
+    assert time.perf_counter() - started < 0.1
+    assert result["reasons"] == []
+
+
+def test_label_longer_than_a_dns_label_is_never_a_lookalike():
+    assert run(host="x" * 50 + "-tamm-pay.example")["reasons"] != []
+    assert run(host="x" * 70 + "-tamm-pay.example")["reasons"] == []

@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 NEW_DOMAIN_DAYS = 30
 MIN_MATCH_LENGTH = 4
+MAX_LABEL_LENGTH = 63
 BLOCK_AT = 70
 WARN_AT = 30
 
@@ -67,15 +68,27 @@ def lookalike_tokens(brand: dict) -> set[str]:
     return set(names) | {joined for name in names for keyword in keywords for joined in (name + keyword, keyword + name)}
 
 
-def label_candidates(label: str) -> set[str]:
-    """Every run of adjacent hyphen-separated tokens in the label, joined without separators."""
+def label_candidates(label: str, max_length: int) -> set[str]:
+    """Runs of adjacent hyphen-separated tokens in the label, joined without separators, up to `max_length` characters."""
+    if len(label) > MAX_LABEL_LENGTH:
+        return set()
     tokens = label.split("-")
-    return {"".join(tokens[start:end]) for start in range(len(tokens)) for end in range(start + 1, len(tokens) + 1)}
+    runs = set()
+    for start in range(len(tokens)):
+        joined = ""
+        for token in tokens[start:]:
+            joined += token
+            if len(joined) > max_length:
+                break
+            runs.add(joined)
+    return runs
 
 
 def lookalike(host: str, brand: dict) -> bool:
-    candidates = set().union(*(label_candidates(label) for label in host.split(".")))
-    return not is_official(host, brand) and not candidates.isdisjoint(lookalike_tokens(brand))
+    forms = lookalike_tokens(brand)
+    longest = max(map(len, forms), default=0)
+    candidates = set().union(*(label_candidates(label, longest) for label in host.split(".")))
+    return not is_official(host, brand) and not candidates.isdisjoint(forms)
 
 
 def mentioned(host: str, text: str, brand: dict) -> bool:
