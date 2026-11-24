@@ -54,8 +54,16 @@ def names_in_text(brand: dict) -> list[str]:
     return [name.lower() for name in brand["names"] if len(squash(name)) >= MIN_MATCH_LENGTH]
 
 
+def lookalike_tokens(brand: dict) -> set[str]:
+    """Tokens that count as the brand: its name, or its name joined directly to one of its keywords."""
+    names = names_in_domain(brand)
+    keywords = [keyword.lower() for keyword in brand.get("keywords", [])]
+    return set(names) | {joined for name in names for keyword in keywords for joined in (name + keyword, keyword + name)}
+
+
 def lookalike(host: str, brand: dict) -> bool:
-    return not is_official(host, brand) and any(name in squash(host) for name in names_in_domain(brand))
+    tokens = {token for label in host.split(".") for token in label.split("-")}
+    return not is_official(host, brand) and not tokens.isdisjoint(lookalike_tokens(brand))
 
 
 def mentioned(host: str, text: str, brand: dict) -> bool:

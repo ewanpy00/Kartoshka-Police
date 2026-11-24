@@ -59,6 +59,39 @@ def test_score_is_capped_at_100():
     assert result["brand"]["id"] == "tamm"
 
 
+@pytest.mark.parametrize(
+    "host",
+    ["rustammullagaliev.ru", "tammycarusofineart.com", "janaoseimaisoqueescreveresgotammedetantoblkplease.autos"],
+)
+def test_brand_inside_an_unrelated_word_is_not_a_lookalike(host):
+    assert "BRAND_LOOKALIKE_DOMAIN" not in codes(run(host=host))
+
+
+@pytest.mark.parametrize(
+    ("host", "brand_id"),
+    [
+        ("tamm-pay.xyz", "tamm"),
+        ("pay.tamm-services.com", "tamm"),
+        ("uaepass-login.top", "uaepass"),
+        ("uaepasslogin.xyz", "uaepass"),
+        ("verifyuaepass.xyz", "uaepass"),
+    ],
+)
+def test_brand_token_or_brand_joined_to_its_keyword_is_a_lookalike(host, brand_id):
+    result = run(host=host)
+    assert "BRAND_LOOKALIKE_DOMAIN" in codes(result)
+    assert result["brand"]["id"] == brand_id
+
+
+def test_brand_joined_to_a_word_that_is_not_its_keyword_is_not_matched():
+    assert run(host="tammpay.xyz")["reasons"] == []
+
+
+@pytest.mark.parametrize("host", ["tamm.abudhabi", "www.tamm.abudhabi", "uaepass.ae", "login.id.uaepass.ae"])
+def test_official_domains_never_match(host):
+    assert run(host=host)["reasons"] == []
+
+
 def test_official_domain_and_its_subdomains_are_not_lookalikes():
     for host in ("tamm.abudhabi", "www.tamm.abudhabi"):
         assert run(host=host, text="TAMM")["reasons"] == []
