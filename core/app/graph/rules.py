@@ -9,7 +9,8 @@ from pathlib import Path
 
 from app.config import get_settings
 
-STRONG_KINDS = ("phone", "whatsapp", "payment", "kit_hash", "favicon_hash", "cert", "ip")
+# officer_link: written by an officer merge (app.api.admin_campaigns), so the merge survives a rebuild.
+STRONG_KINDS = ("phone", "whatsapp", "payment", "kit_hash", "favicon_hash", "cert", "ip", "officer_link")
 WEAK_KINDS = ("asn", "registrar", "ns", "kit_sim")
 # Kinds written before the rules existed: an IP on a CDN and a big DNS provider.
 LEGACY_WEAK = ("ip_shared", "ns_provider")
