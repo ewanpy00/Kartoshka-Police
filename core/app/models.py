@@ -71,6 +71,8 @@ class Domain(Base):
     # When GSB or VirusTotal first flagged a domain we already had: the lead-time number.
     gsb_first_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     vt_first_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Who confirmed it: 'officer', 'auto' or null.
+    confirmed_by: Mapped[str | None] = mapped_column(String)
 
 
 class Verdict(Base):
@@ -162,6 +164,9 @@ class Watchlist(Base):
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     offline_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     checks_done: Mapped[int] = mapped_column(Integer, server_default="0")
+    gsb_last_clean_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    vt_last_clean_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    vt_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     added_at: Mapped[datetime] = now_column()
     next_check_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -254,7 +259,7 @@ class TakedownRequest(Base):
 
 
 class AuditLog(Base):
-    """Every officer and system decision. Append-only (trigger in migration 0003)."""
+    """Every officer and system decision. Append-only (trigger in migration 0004)."""
 
     __tablename__ = "audit_log"
 

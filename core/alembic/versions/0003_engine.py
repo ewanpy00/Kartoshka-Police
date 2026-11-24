@@ -1,14 +1,14 @@
-"""engine: scoring, deep analysis, evidence chain, graph, reports, hits
+"""engine: scoring, deep analysis, evidence chain, graph, reports, hits (delta on 0002 admin console)
 
-Revision ID: 0002
-Revises: 0001
+Revision ID: 0003
+Revises: 0002
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0002'
-down_revision = '0001'
+revision = '0003'
+down_revision = '0002'
 branch_labels = None
 depends_on = None
 
@@ -26,9 +26,9 @@ CREATE TRIGGER evidence_no_update BEFORE UPDATE OR DELETE ON evidence
 
 
 def upgrade() -> None:
+    # checks.domain and its index come from 0002.
     with op.batch_alter_table('checks') as t:
         t.add_column(sa.Column('host', sa.String(), nullable=True))
-        t.add_column(sa.Column('domain', sa.String(), nullable=True))
         t.add_column(sa.Column('brand_id', sa.String(), nullable=True))
         t.add_column(sa.Column('sources', sa.JSON(), nullable=True))
         t.add_column(sa.Column('features', sa.JSON(), nullable=True))
@@ -37,7 +37,6 @@ def upgrade() -> None:
         t.add_column(sa.Column('deep_status', sa.String(), nullable=True))
         t.add_column(sa.Column('updated_at', sa.DateTime(timezone=True), server_default=NOW, nullable=False))
     op.create_index(op.f('ix_checks_host'), 'checks', ['host'])
-    op.create_index(op.f('ix_checks_domain'), 'checks', ['domain'])
     op.create_index(op.f('ix_checks_campaign_id'), 'checks', ['campaign_id'])
     op.create_index(op.f('ix_checks_created_at'), 'checks', ['created_at'])
 
@@ -45,18 +44,18 @@ def upgrade() -> None:
 
     op.add_column('verdicts', sa.Column('reasons', sa.JSON(), nullable=True))
 
-    op.add_column('evidence', sa.Column('seq', sa.BigInteger(), nullable=False))
+    # evidence.seq: 0002 made it an identity column; evidence/store.py numbers rows itself (max + 1 under
+    # an advisory lock), so the column becomes a plain NOT NULL bigint. Existing values are kept.
+    op.execute("ALTER TABLE evidence ALTER COLUMN seq DROP IDENTITY IF EXISTS")
     op.add_column('evidence', sa.Column('domain', sa.String(), nullable=True))
-    op.create_unique_constraint(op.f('uq_evidence_seq'), 'evidence', ['seq'])
     op.create_index(op.f('ix_evidence_domain'), 'evidence', ['domain'])
-    op.execute(APPEND_ONLY)
 
     op.add_column('artifacts', sa.Column('kind', sa.String(), server_default='file', nullable=False))
 
     op.add_column('entities', sa.Column('first_seen', sa.DateTime(timezone=True), server_default=NOW, nullable=False))
 
+    # campaigns.name and last_activity_at come from 0002.
     with op.batch_alter_table('campaigns') as t:
-        t.add_column(sa.Column('name', sa.String(), nullable=True))
         t.add_column(sa.Column('domain_count', sa.Integer(), server_default='0', nullable=False))
         t.add_column(sa.Column('confirmed_count', sa.Integer(), server_default='0', nullable=False))
         t.add_column(sa.Column('summary', sa.Text(), nullable=True))
@@ -89,6 +88,9 @@ def upgrade() -> None:
     op.create_index(op.f('ix_feed_entries_source'), 'feed_entries', ['source'])
     op.create_index(op.f('ix_feed_entries_domain'), 'feed_entries', ['domain'])
 
+    # reports: main's 0002 shape (bigint id, no token) is replaced by the resident-report shape.
+    op.drop_index(op.f('ix_reports_domain'), table_name='reports')
+    op.drop_table('reports')
     op.create_table('reports',
     sa.Column('id', sa.String(), nullable=False),
     sa.Column('token_hash', sa.String(length=64), nullable=False),
@@ -120,13 +122,28 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('key')
     )
 
+    # Last, after every data-changing statement of this revision.
+    op.execute(APPEND_ONLY)
+
 
 def downgrade() -> None:
+    op.execute("DROP TRIGGER IF EXISTS evidence_no_update ON evidence; DROP FUNCTION IF EXISTS evidence_append_only();")
     op.drop_table('model_state')
     op.drop_table('hits')
     op.drop_index(op.f('ix_reports_domain'), table_name='reports')
     op.drop_index(op.f('ix_reports_check_id'), table_name='reports')
     op.drop_table('reports')
+    op.create_table('reports',
+    sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
+    sa.Column('domain', sa.String(), nullable=False),
+    sa.Column('url', sa.Text(), nullable=False),
+    sa.Column('note', sa.Text(), nullable=True),
+    sa.Column('check_id', sa.String(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=NOW, nullable=False),
+    sa.ForeignKeyConstraint(['check_id'], ['checks.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_reports_domain'), 'reports', ['domain'], unique=False)
     op.drop_index(op.f('ix_feed_entries_domain'), table_name='feed_entries')
     op.drop_index(op.f('ix_feed_entries_source'), table_name='feed_entries')
     op.drop_table('feed_entries')
@@ -134,20 +151,16 @@ def downgrade() -> None:
     for column in ('checks_done', 'offline_since', 'last_checked_at', 'last_status', 'brand_id', 'reason', 'url'):
         op.drop_column('watchlist', column)
     op.drop_constraint(op.f('uq_edges_src_id_dst_id'), 'edges', type_='unique')
-    for column in ('updated_at', 'summary', 'confirmed_count', 'domain_count', 'name'):
+    for column in ('updated_at', 'summary', 'confirmed_count', 'domain_count'):
         op.drop_column('campaigns', column)
     op.drop_column('entities', 'first_seen')
     op.drop_column('artifacts', 'kind')
-    op.execute("DROP TRIGGER IF EXISTS evidence_no_update ON evidence; DROP FUNCTION IF EXISTS evidence_append_only();")
     op.drop_index(op.f('ix_evidence_domain'), table_name='evidence')
-    op.drop_constraint(op.f('uq_evidence_seq'), 'evidence', type_='unique')
     op.drop_column('evidence', 'domain')
-    op.drop_column('evidence', 'seq')
     op.drop_column('verdicts', 'reasons')
     op.drop_column('domains', 'source')
     op.drop_index(op.f('ix_checks_created_at'), table_name='checks')
     op.drop_index(op.f('ix_checks_campaign_id'), table_name='checks')
-    op.drop_index(op.f('ix_checks_domain'), table_name='checks')
     op.drop_index(op.f('ix_checks_host'), table_name='checks')
-    for column in ('updated_at', 'deep_status', 'preview', 'chain', 'features', 'sources', 'brand_id', 'domain', 'host'):
+    for column in ('updated_at', 'deep_status', 'preview', 'chain', 'features', 'sources', 'brand_id', 'host'):
         op.drop_column('checks', column)
