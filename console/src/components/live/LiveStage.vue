@@ -334,7 +334,7 @@ mark.glyph.ch { font-size: inherit; }
 .btn { margin-top: 0.3rem; height: 1.7rem; border-radius: 6px; background: #3b4656; color: #fff; display: grid; place-items: center; font-size: 0.7rem; font-weight: 600; }
 .parked { text-align: center; color: #9aa3ae; font-size: 1.2rem; margin-top: 3rem; }
 .asks { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; justify-content: center; }
-.ask { padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--block); color: #fff; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; animation: ask-pop 420ms var(--ease-spring) both; }
+.ask { padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--block); color: var(--on-block); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; animation: ask-pop 420ms var(--ease-spring) both; }
 @keyframes ask-pop { from { transform: scale(0.3); opacity: 0; } to { transform: none; opacity: 1; } }
 .looks { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.5rem; align-items: center; }
 .looks b { font-size: 1.3rem; color: var(--block); font-variant-numeric: tabular-nums; }

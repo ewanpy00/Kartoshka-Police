@@ -18,7 +18,7 @@ let cy: Core | null = null
 
 const COLORS: Record<string, string> = {
   phone: '#b42318', whatsapp: '#1b7f4b', payment: '#a35f00', kit_hash: '#5b3aa6', favicon_hash: '#7a4fd1',
-  cert: '#1f4e8c', ip: '#2f6f9f', officer_link: '#111827', asn: '#9aa3ae', registrar: '#9aa3ae', ns: '#9aa3ae', kit_sim: '#b8a6e0',
+  cert: '#1f4e8c', ip: '#2f6f9f', officer_link: '#8a6100', asn: '#9aa3ae', registrar: '#9aa3ae', ns: '#9aa3ae', kit_sim: '#b8a6e0',
 }
 
 function elements(): ElementDefinition[] {

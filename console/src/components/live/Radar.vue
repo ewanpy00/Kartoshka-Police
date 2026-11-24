@@ -32,11 +32,11 @@ function pos(domain: string): { x: number; y: number } {
 
 <style scoped>
 .radar { position: relative; width: 100%; max-width: 15rem; aspect-ratio: 1; margin: 0 auto; border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--allow) 10%, transparent), transparent 70%); border: 1px solid var(--line); overflow: hidden; }
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%); border: 1px solid var(--line); overflow: hidden; }
 .sweep { position: absolute; inset: 0; border-radius: 50%; animation: kp-spin 4s linear infinite;
-  background: conic-gradient(from 0deg, color-mix(in srgb, var(--allow) 45%, transparent), transparent 18%, transparent); }
+  background: conic-gradient(from 0deg, color-mix(in srgb, var(--accent) 45%, transparent), transparent 18%, transparent); }
 svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.grid { fill: none; stroke: var(--allow); stroke-opacity: 0.18; stroke-width: 0.6; }
+.grid { fill: none; stroke: var(--accent); stroke-opacity: 0.18; stroke-width: 0.6; }
 .blip { animation: blip-life 16s linear forwards; }
 .dot { fill: var(--warn); filter: drop-shadow(0 0 3px var(--warn)); }
 .ping { fill: none; stroke: var(--warn); stroke-width: 1; animation: blip-ping 1.6s ease-out 2; transform-box: fill-box; transform-origin: center; }

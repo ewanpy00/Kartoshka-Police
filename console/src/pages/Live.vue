@@ -14,6 +14,7 @@ import { lang, t, toggleLang } from '../i18n'
 import { createDemoSource } from '../live/demo'
 import { realSource, type LiveSource, type ReplayItem } from '../live/source'
 import { useCountUp } from '../motion'
+import { cycleTheme, dark, theme } from '../theme'
 
 interface Candidate { id: string; domain: string; source: string; brand: string | null; at: number; band: 'cand' | 'warn' | 'block'; score: number | null }
 interface Entry { id: string; kind: string; domain: string; text: string; tone: 'block' | 'allow' | 'warn' | 'info'; at: number; propagate: boolean }
@@ -190,7 +191,7 @@ function ago(at: number): string {
   <div class="live">
     <header class="bar">
       <RouterLink :to="{ name: 'queue' }" class="brand">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5.5c0 4.2 3 8 7 9.5 4-1.5 7-5.3 7-9.5V6l-7-3Z" /></svg>
+        <span class="mark" aria-hidden="true">KP</span>
         <span>KARTOSHKA<span class="dim">·POLICE</span></span>
       </RouterLink>
       <span class="onair" :class="{ off: !connected }"><i />{{ connected ? t('nav.live') : t('live.offline_socket') }}</span>
@@ -205,6 +206,9 @@ function ago(at: number): string {
       </div>
       <span class="clock mono">{{ clock }} <small>GST</small></span>
       <button class="ghost" @click="toggleLang">{{ lang === 'ar' ? 'EN' : 'ع' }}</button>
+      <button class="ghost theme" :title="t(`theme.${theme}`)" :aria-label="t(`theme.${theme}`)" @click="cycleTheme">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path :d="dark ? 'M8 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6ZM8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1' : 'M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z'" /></svg>
+      </button>
     </header>
 
     <Transition name="drop">
@@ -264,28 +268,24 @@ function ago(at: number): string {
 </template>
 
 <style scoped>
-/* The wall is always dark, whatever the console theme. */
+/* The wall follows the console theme (system by default); in dark it reads as an operations centre. */
 .live {
-  --bg: #070b10; --surface: #0f151e; --surface-2: #151d28; --line: #223042; --text: #e6ebf2; --muted: #8392a5;
-  --accent: #6aa3ff; --accent-soft: #15253d; --allow: #3ccf86; --allow-soft: #0f2a1e; --warn: #f3a93c; --warn-soft: #2d2110;
-  --block: #ff5a4e; --block-soft: #331513; --ai: #b294ff; --ai-soft: #231b3a; --glow-block: 0 0 18px 0 rgb(255 90 78 / 0.35);
-  color-scheme: dark;
   min-height: 100vh; overflow-x: hidden; display: grid; grid-template-rows: auto auto 1fr auto; color: var(--text);
   background:
-    radial-gradient(60% 50% at 50% -10%, rgb(106 163 255 / 0.12), transparent 70%),
-    linear-gradient(rgb(255 255 255 / 0.018) 1px, transparent 1px) 0 0 / 100% 32px,
+    radial-gradient(60% 50% at 50% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    linear-gradient(color-mix(in srgb, var(--text) 2%, transparent) 1px, transparent 1px) 0 0 / 100% 32px,
     var(--bg);
 }
-.bar { display: flex; align-items: center; gap: 1rem; padding: 0.7rem 1.25rem; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: rgb(7 11 16 / 0.7); backdrop-filter: blur(8px); position: sticky; top: 0; z-index: 5; }
+.bar { display: flex; align-items: center; gap: 1rem; padding: 0.7rem 1.25rem; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(8px); position: sticky; top: 0; z-index: 5; }
 .brand { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text); text-decoration: none; font-weight: 800; letter-spacing: 0.14em; font-size: 0.9rem; }
-.brand svg { width: 1.3rem; height: 1.3rem; fill: color-mix(in srgb, var(--accent) 25%, transparent); stroke: var(--accent); stroke-width: 1.8; }
+.brand .mark { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--primary); color: var(--on-primary); font-size: 11px; letter-spacing: 0.04em; }
 .dim { color: var(--muted); font-weight: 600; }
 .onair { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--block); border: 1px solid color-mix(in srgb, var(--block) 50%, transparent); background: var(--block-soft); }
 .onair i { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--block); box-shadow: 0 0 8px var(--block); animation: kp-blink 1.2s infinite; }
 .onair.off { color: var(--muted); border-color: var(--line); background: transparent; }
 .onair.off i { background: var(--muted); box-shadow: none; animation: none; }
-.demo { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; padding: 0.15rem 0.5rem; border-radius: 4px; background: var(--warn); color: #1a1205; }
+.demo { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; padding: 0.15rem 0.5rem; border-radius: 4px; background: var(--banner); color: var(--banner-text); border: 1px solid color-mix(in srgb, var(--banner-text) 40%, transparent); }
 .spacer { flex: 1; }
 .kpis { display: flex; gap: 1.4rem; }
 .kpis div { display: grid; text-align: end; }
@@ -296,6 +296,7 @@ function ago(at: number): string {
 .clock { font-size: 1.05rem; color: var(--muted); }
 .clock small { font-size: 0.65rem; }
 .bar button { color: var(--muted); }
+.theme svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 900px) { .kpis { gap: 0.8rem; order: 5; width: 100%; justify-content: space-between; } .kpis div { text-align: start; } }
 
 .spike { margin: 0.6rem 1.25rem 0; padding: 0.5rem 0.9rem; border-radius: 8px; background: var(--block-soft); color: var(--block); border: 1px solid var(--block); animation: kp-pulse 1.2s 3; }

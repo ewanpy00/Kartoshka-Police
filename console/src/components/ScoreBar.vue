@@ -67,7 +67,7 @@ function label(reason: Reason): string {
 .seg.ai { background: var(--ai); }
 .seg.dim { opacity: 0.28; }
 .seg.active { opacity: 1; filter: brightness(1.15); }
-.lbl { font-size: 0.66rem; font-weight: 700; color: #fff; font-family: var(--mono); pointer-events: none; }
+.lbl { font-size: 0.66rem; font-weight: 700; color: var(--on-block); font-family: var(--mono); pointer-events: none; }
 .big .lbl { font-size: 0.78rem; }
 .tick { position: absolute; top: -2px; bottom: -2px; width: 0; border-inline-start: 1px dashed var(--muted); opacity: 0.6; pointer-events: none; }
 .legend { margin-top: 0.25rem; }
