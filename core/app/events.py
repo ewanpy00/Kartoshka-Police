@@ -13,6 +13,7 @@ from app.config import Settings, get_settings
 
 CHANNEL = "kp:events"
 UNAUTHORISED = 4401
+AUTH_TIMEOUT_SECONDS = 5
 
 logger = logging.getLogger(__name__)
 ws_router = APIRouter(prefix="/v1")
@@ -32,14 +33,28 @@ async def forward(websocket: WebSocket, pubsub) -> None:
         await websocket.send_text(message["data"].decode())
 
 
+async def authenticated(websocket: WebSocket, expected: str) -> bool:
+    """The first message must be {"type": "auth", "token": ...}; the token never travels in the URL."""
+    try:
+        message = json.loads(await asyncio.wait_for(websocket.receive_text(), AUTH_TIMEOUT_SECONDS))
+        token = message["token"]
+        return bool(expected) and isinstance(token, str) and message["type"] == "auth" and hmac.compare_digest(
+            token.encode(), expected.encode()
+        )
+    except (TimeoutError, ValueError, KeyError, TypeError):
+        return False
+
+
 @ws_router.websocket("/events")
-async def events(websocket: WebSocket, settings: Annotated[Settings, Depends(get_settings)], token: str = "") -> None:
-    expected = settings.core_write_token
-    if not expected or not hmac.compare_digest(token.encode(), expected.encode()):
-        await websocket.close(code=UNAUTHORISED)
-        return
+async def events(websocket: WebSocket, settings: Annotated[Settings, Depends(get_settings)]) -> None:
     await websocket.accept()
-    client = aioredis.from_url(settings.redis_url)
+    try:
+        if not await authenticated(websocket, settings.core_write_token):
+            await websocket.close(code=UNAUTHORISED)
+            return
+        client = aioredis.from_url(settings.redis_url)
+    except WebSocketDisconnect:
+        return
     pubsub = client.pubsub(ignore_subscribe_messages=True)
     await pubsub.subscribe(CHANNEL)
     await websocket.send_json({"type": "hello"})
