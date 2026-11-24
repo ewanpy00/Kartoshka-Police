@@ -79,7 +79,7 @@ def test_hunter_checks_publish_a_candidate_event(client, published):
 
 
 def test_reserved_sources_need_the_write_token(client, session, published):
-    for source in ("hunter", "watchlist", "user_report"):
+    for source in ("hunter", "watchlist", "user_report", "officer"):
         response = client.post("/v1/check", json={"url": "https://forged.example/", "source": source})
         assert response.status_code == 401
     assert published == []

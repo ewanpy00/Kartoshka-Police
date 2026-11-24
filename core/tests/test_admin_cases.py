@@ -64,15 +64,42 @@ def test_queue_skips_allow_checks_official_and_allowlisted_domains(client, sessi
     assert queue(client, state="all") == []
 
 
-def test_a_cleared_domain_leaves_the_queue_unless_it_has_a_report(client, session):
-    older = datetime.now(UTC) - timedelta(days=1)
-    flagged = add_check(session, "cleared.example", 85, created_at=older)
-    add_evidence(session, flagged)
-    add_evidence(session, add_check(session, "cleared.example", 5))
+def flagged_then(session, domain, source, score):
+    """Block evidence two days ago, then a newer evidence-bearing check from `source`."""
+    now = datetime.now(UTC)
+    add_evidence(session, add_check(session, domain, 85, created_at=now - timedelta(days=2)))
+    add_evidence(session, add_check(session, domain, score, source=source, created_at=now))
+
+
+def test_an_anonymous_clean_check_cannot_clear_a_case(client, session):
+    flagged_then(session, "cloaked.example", "api", 5)
+    cases = queue(client)
+    assert [(c["domain"], c["score"]) for c in cases] == [("cloaked.example", 85)]
+
+
+def test_an_officer_recheck_that_scores_allow_clears_the_case(client, session):
+    flagged_then(session, "cleared.example", "officer", 5)
     assert queue(client, state="all") == []
-    session.add(Report(domain="cleared.example", url="https://cleared.example/"))
+    detail = client.get("/v1/admin/cases/cleared.example", headers=AUTH)
+    assert (detail.status_code, detail.json()["state"], detail.json()["score"]) == (200, "open", 5)
+
+
+def test_an_officer_recheck_with_a_report_keeps_the_case(client, session):
+    flagged_then(session, "reported-clear.example", "officer", 5)
+    session.add(Report(domain="reported-clear.example", url="https://reported-clear.example/"))
     session.flush()
-    assert [c["domain"] for c in queue(client)] == ["cleared.example"]
+    assert [c["domain"] for c in queue(client)] == ["reported-clear.example"]
+
+
+def test_an_officer_recheck_that_scores_block_keeps_the_case(client, session):
+    flagged_then(session, "still-bad.example", "officer", 90)
+    assert [(c["domain"], c["score"]) for c in queue(client)] == [("still-bad.example", 90)]
+
+
+def test_a_pending_officer_recheck_keeps_the_earlier_evidence(client, session):
+    add_evidence(session, add_check(session, "waiting.example", 85, created_at=datetime.now(UTC) - timedelta(days=1)))
+    add_check(session, "waiting.example", 0, verdict="pending", source="officer")
+    assert [(c["domain"], c["score"]) for c in queue(client)] == [("waiting.example", 85)]
 
 
 def test_report_alone_makes_a_case(client, session):

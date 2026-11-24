@@ -38,7 +38,7 @@ from app.schemas import (
 app = FastAPI(title="Kartoshka Core", version="0.1.0")
 v1 = APIRouter(prefix="/v1")
 
-RESERVED_SOURCES = ("hunter", "watchlist", "user_report")
+RESERVED_SOURCES = ("hunter", "watchlist", "user_report", "officer")
 
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -77,7 +77,7 @@ def create_check(
 ) -> Verdict:
     """Official and confirmed domains match the host or any parent; allowlisted ones only the host or its www form.
 
-    The sources `hunter`, `watchlist` and `user_report` are reserved: they need the write token.
+    The sources `hunter`, `watchlist`, `user_report` and `officer` are reserved: they need the write token.
     """
     if body.source in RESERVED_SOURCES:
         require_write_token(credentials, settings)

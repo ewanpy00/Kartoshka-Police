@@ -42,7 +42,12 @@ class Case:
     reports: list[Report]
     reviews: list[Review]
     row: Domain | None
+    check: Check
     evidence: Evidence | None
+
+    @property
+    def in_queue(self) -> bool:
+        return bool(self.reports) or self.check.verdict in ("warn", "block")
 
 
 def rank_case(score: int, reports: int, hits: int, last_seen: datetime, now: datetime) -> float:
@@ -71,13 +76,35 @@ def group(rows, key) -> defaultdict:
     return grouped
 
 
+def pick_representative(checks: list[Check], evidence: dict[str, Evidence]) -> tuple[Check, Evidence | None]:
+    """The highest-scoring evidence-bearing check from the latest officer re-run on (all of them if none).
+
+    Only an officer's own re-run can clear a case, so an anonymous clean check cannot hide a scam.
+    A recheck still waiting for its evidence leaves the earlier evidence in place.
+    Without any evidence the latest check stands in. `checks` is newest first.
+    """
+    with_evidence = [c for c in checks if c.id in evidence]
+    officer_runs = [c.created_at for c in checks if c.source == "officer"]
+    since = max(officer_runs, default=None)
+    pool = [c for c in with_evidence if since is None or c.created_at >= since] or with_evidence
+    if not pool:
+        return checks[0], None
+    best = max(reversed(pool), key=lambda c: c.score)
+    return best, evidence[best.id]
+
+
 def collect(session: Session, only: str | None = None) -> list[Case]:
-    """Every domain whose latest evidence-bearing check is warn or block, or that has a report, minus official and allowlisted ones."""
-    candidates = set(session.scalars(select(Check.domain).where(Check.verdict.in_(("warn", "block")))))
-    candidates |= set(session.scalars(select(Report.domain)))
+    """Every domain with a warn or block check or a report, minus official and allowlisted ones.
+
+    With `only`, any domain that has a check or a report. Callers decide queue membership with `in_queue`.
+    """
+    if only is None:
+        candidates = set(session.scalars(select(Check.domain).where(Check.verdict.in_(("warn", "block")))))
+        candidates |= set(session.scalars(select(Report.domain)))
+    else:
+        candidates = set(session.scalars(select(Check.domain).where(Check.domain == only)))
+        candidates |= set(session.scalars(select(Report.domain).where(Report.domain == only)))
     candidates.discard(None)
-    if only is not None:
-        candidates &= {only}
     rows = {row.domain: row for row in session.scalars(select(Domain).where(Domain.domain.in_(candidates)))}
     candidates = {d for d in candidates if d not in rows or rows[d].status not in PROTECTED}
     checks = group(
@@ -89,32 +116,23 @@ def collect(session: Session, only: str | None = None) -> list[Case]:
         session.scalars(select(Review).where(Review.domain.in_(candidates)).order_by(Review.id.desc())),
         lambda review: review.domain,
     )
-    latest_evidence = {}
-    for evidence in session.scalars(
-        select(Evidence).where(Evidence.check_id.in_([c.id for cs in checks.values() for c in cs])).order_by(Evidence.seq)
-    ):
-        latest_evidence[evidence.check_id] = evidence
+    evidence = {
+        e.check_id: e
+        for e in session.scalars(
+            select(Evidence).where(Evidence.check_id.in_([c.id for cs in checks.values() for c in cs])).order_by(Evidence.seq)
+        )
+    }
     cases = []
     for domain in candidates:
-        with_evidence = next((c for c in checks[domain] if c.id in latest_evidence), None)
-        cases.append(
-            Case(
-                domain, checks[domain], reports[domain], reviews[domain], rows.get(domain),
-                latest_evidence[with_evidence.id] if with_evidence else None,
-            )
-        )
-    return [case for case in cases if case.reports or representative(case).verdict in ("warn", "block")]
-
-
-def representative(case: Case) -> Check:
-    """The most recent check that has evidence, else the most recent check."""
-    if case.evidence is not None:
-        return next(c for c in case.checks if c.id == case.evidence.check_id)
-    return case.checks[0]
+        if not checks[domain]:
+            continue
+        check, picked = pick_representative(checks[domain], evidence)
+        cases.append(Case(domain, checks[domain], reports[domain], reviews[domain], rows.get(domain), check, picked))
+    return cases
 
 
 def summarise(case: Case, now: datetime) -> CaseSummary:
-    check = representative(case)
+    check = case.check
     seen = [c.created_at for c in case.checks] + [r.created_at for r in case.reports]
     last_seen = max(seen)
     return CaseSummary(
@@ -150,7 +168,7 @@ def queue_view(
     band: Annotated[Literal["allow", "warn", "block"] | None, Query()] = None,
 ) -> QueueResponse:
     now = datetime.now(UTC)
-    summaries = [summarise(case, now) for case in collect(session)]
+    summaries = [summarise(case, now) for case in collect(session) if case.in_queue]
     kept = [
         s for s in summaries
         if state in (s.state, "all")
@@ -164,7 +182,7 @@ def queue_view(
 @router.get("/cases/{domain}", response_model=CaseDetail)
 def case_detail(domain: str, session: SessionDep) -> CaseDetail:
     case = require_case(session, domain)
-    check = representative(case)
+    check = case.check
     payload = case.evidence.payload if case.evidence else {}
     watching = session.get(Watchlist, domain)
     return CaseDetail(
