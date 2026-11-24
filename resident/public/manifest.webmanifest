@@ -1,0 +1,13 @@
+{
+  "name": "Kartoshka link check",
+  "short_name": "Kartoshka",
+  "description": "Check a link before you open it, see what a page asks for, follow your reports and the scam radar.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#1f4e8c",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }],
+  "share_target": { "action": "/check", "method": "GET", "params": { "url": "url", "text": "text" } }
+}

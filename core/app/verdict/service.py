@@ -13,6 +13,7 @@ from app.fast.score import Assessment, assess, cache_key
 from app.models import Check, Hit, Verdict
 from app.verdict.bands import band, needs_deep, source, total
 
+BLOCKLIST_EVIDENCE_HOURS = 30 * 24
 DEEP_SOURCES = ("hunter", "user_report", "preview", "pivot", "watchlist")
 BLOCK_CHANNELS = {"browser": "browser", "gatekeeper": "browser", "share": "share", "dns": "dns", "sms": "share"}
 
@@ -96,6 +97,11 @@ async def run_check(
         check.evidence_id, check.campaign_id, check.deep_status = reused.evidence_id, reused.campaign_id, "done"
         check.brand, check.brand_id = reused.brand or check.brand, reused.brand_id or check.brand_id
         check.safe_action = reused.safe_action or check.safe_action
+    elif assessment.decided_by == "blocklist" and not force_deep and (
+            prior := recent_deep(session, assessment.n.host, BLOCKLIST_EVIDENCE_HOURS)) is not None:
+        # A police-list hit needs no new sandbox run, but the resident still gets the safe preview and the
+        # evidence behind the block. The verdict and reasons stay the list's.
+        check.preview, check.evidence_id, check.campaign_id = prior.preview, prior.evidence_id, prior.campaign_id
     elif enqueue and (force_deep or wants_deep(check, mode, source_name, assessment.decided_by)):
         check.deep_status = "queued"
         check.sources = [

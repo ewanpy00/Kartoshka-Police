@@ -154,6 +154,25 @@ services:
       retries: 10
       start_period: 40s
 
+  resident:
+    # Resident screens (PWA). Published on BIND_ADDR so the demo phone can open them; never gets the token.
+    build: ./resident
+    command: ["npm", "run", "dev"]
+    environment:
+      CORE_PROXY_TARGET: http://core:8000
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${RESIDENT_PORT:-5174}:5174"
+    volumes:
+      - ./resident:/app
+      - /app/node_modules
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5174/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
   adguard:
     image: adguard/adguardhome:v0.107.80
     profiles: ["stretch"]

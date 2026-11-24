@@ -249,3 +249,17 @@ def test_url_model_adds_weight_only_when_confident(client, monkeypatch):
     model = next(r for r in body["reasons"] if r["code"] == "URL_MODEL")
     assert model["weight"] == 39
     assert "99" in model["en"]
+
+
+def test_a_blocklist_hit_shows_the_preview_of_the_last_deep_analysis(client, session):
+    from factories import make_check, with_evidence
+
+    old = make_check(session, "shown-before.example", 95, deep_status="done",
+                     preview={"screenshot": "/v1/preview/ev_x.png", "asks_for": ["card"], "title": "Pay"})
+    old.stage = "deep"
+    evidence_id = with_evidence(session, old)
+    session.add(Domain(domain="shown-before.example", status="confirmed", brand_id="tamm"))
+    session.flush()
+    body = check(client, "https://shown-before.example/pay", source="resident")
+    assert body["reasons"][0]["code"] == "BLOCKLISTED" and body["verdict"] == "block"
+    assert body["preview"]["asks_for"] == ["card"] and body["evidence_id"] == evidence_id
