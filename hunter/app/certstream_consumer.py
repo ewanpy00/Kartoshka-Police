@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ CERTSTREAM_URL = os.environ.get("CERTSTREAM_URL", "ws://certstream:8080/")
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/srv/data"))
 STATS_INTERVAL_SECONDS = 30
 MAX_BACKOFF_SECONDS = 60
+HOSTNAME = re.compile(r"[A-Za-z0-9*._-]+")
 
 log = logging.getLogger("hunter")
 
@@ -39,13 +41,32 @@ async def log_stats(counters: Counters) -> None:
 
 
 def certificate_domains(raw: str | bytes) -> list[str] | None:
-    try:
-        message = json.loads(raw)
-        if message["message_type"] != "certificate_update":
-            return None
-        return message["data"]["leaf_cert"]["all_domains"]
-    except (ValueError, KeyError, TypeError):
+    message = json.loads(raw)
+    if message["message_type"] != "certificate_update":
         return None
+    domains = message["data"]["leaf_cert"]["all_domains"]
+    if not isinstance(domains, list):
+        raise ValueError("all_domains is not a list")
+    return [
+        domain
+        for domain in domains
+        if isinstance(domain, str) and HOSTNAME.fullmatch(domain)
+    ]
+
+
+def handle_message(raw: str | bytes, brands: list[dict], counters: Counters) -> None:
+    try:
+        domains = certificate_domains(raw)
+        if domains is None:
+            return
+        found = match_domains(domains, brands)
+    except Exception as error:
+        log.warning("skipping malformed message: %r", error)
+        return
+    counters.certificates += 1
+    for brand_id, domain in found:
+        counters.matches += 1
+        log.info("match brand=%s domain=%s", brand_id, domain)
 
 
 async def consume(ws, brands: list[dict], counters: Counters) -> None:
@@ -56,13 +77,7 @@ async def consume(ws, brands: list[dict], counters: Counters) -> None:
         if now - last_beat >= 1:
             HEARTBEAT_PATH.touch()
             last_beat = now
-        domains = certificate_domains(raw)
-        if domains is None:
-            continue
-        counters.certificates += 1
-        for brand_id, domain in match_domains(domains, brands):
-            counters.matches += 1
-            log.info("match brand=%s domain=%s", brand_id, domain)
+        handle_message(raw, brands, counters)
 
 
 async def main() -> None:
