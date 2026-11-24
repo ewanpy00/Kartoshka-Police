@@ -220,3 +220,6 @@ The final report covers what works, what is stubbed, what could not be verified,
 
 - 2026-11-24: plan written and amended (sandbox guard, write token, hostile-page test, batch budget, pending rule).
 - 2026-11-24: approved with `BATCH_CONCURRENCY`, loopback-only console, `navigation_blocked` and the guard fallback rule. Branch `devops/skeleton` created.
+- 2026-11-24: packages F, A, B, C, D and E built and committed. Fix rounds committed for core host parsing (backslash, trailing dot, UTS-46), the hunter's message validation, the sandbox guard (iframes, workers, fail closed) and the AdGuard port binding.
+- 2026-11-24: first integration pass in the working directory. `make up` brought all eight default services up healthy. Verification steps 2 to 6, 8 and 9 passed there; step 6 produced the published-port finding now in decision 2.
+- Still to do: independent review and its fixes, console favicon, then the full verification list from a clean clone (including `make test`, `make up-stretch`, `make reset` and hot reload with real edits).
