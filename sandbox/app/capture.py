@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 import uuid
@@ -6,7 +7,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from playwright.async_api import Browser, Error as PlaywrightError
-from pydantic import BaseModel, Field
+from typing import Annotated
+
+from pydantic import AfterValidator, BaseModel, Field
 
 from app import collect
 from app.guard import Guard, Unresolvable
@@ -16,6 +19,8 @@ CAPTURE_TIMEOUT_MS = int(os.environ.get("CAPTURE_TIMEOUT_MS", "15000"))
 SETTLE_MS = 800
 MAX_TIMEOUT_MS = 45000
 MAX_SETTLE_MS = 5000
+STRING_LIMIT = 2000
+PAGE_CALL_TIMEOUT_S = 10
 
 SITE_ISOLATION_FLAG = "--disable-site-isolation-trials"
 BLOCK_POPUPS_FLAG = "--block-new-web-contents"
@@ -34,6 +39,18 @@ class NavigationFailed(Exception):
     pass
 
 
+async def limited(call, seconds: float, default):
+    """The result of a page call, or `default` when the page is gone or does not answer in time."""
+    try:
+        return await asyncio.wait_for(call, seconds)
+    except (PlaywrightError, asyncio.TimeoutError):
+        return default
+
+
+def cut(value: str) -> str:
+    return value[:STRING_LIMIT]
+
+
 class FileRef(BaseModel):
     path: str
     sha256: str
@@ -48,16 +65,18 @@ class Favicon(FileRef):
 class BotVisit(BaseModel):
     """The same URL opened as a desktop crawler. A different page here than on the phone means cloaking."""
 
-    final_url: str | None = None
-    title: str = ""
+    final_url: Annotated[str, AfterValidator(cut)] | None = None
+    title: Annotated[str, AfterValidator(cut)] = ""
     text: str = ""
     navigation_blocked: bool = False
     error: str | None = None
+    # False when the page facts could not be read; text is then empty and must not be taken for a clean page.
+    facts_available: bool = False
 
 
 class CaptureResponse(BaseModel):
-    final_url: str
-    title: str
+    final_url: Annotated[str, AfterValidator(cut)]
+    title: Annotated[str, AfterValidator(cut)]
     screenshot_path: str | None
     navigation_blocked: bool
     internal_requests_blocked: int
@@ -85,6 +104,9 @@ class CaptureResponse(BaseModel):
     bot_visit: BotVisit | None = None
     load_complete: bool = True
     elapsed_ms: int = 0
+    # False when the page facts could not be read (timeout, DOM too large, CDP error): the fact fields are then
+    # empty and this must not be read as a clean page. Also false when the navigation was blocked.
+    facts_available: bool = False
 
 
 def validate_url(url: str) -> None:
@@ -119,7 +141,7 @@ async def bot_visit(browser: Browser, url: str, allowed_origins: Collection[str]
         if blocked is not None:
             return BotVisit(final_url=blocked, navigation_blocked=True), guard
         data = await collect.read_page(page)
-        return BotVisit(final_url=page.url, title=await page.title(), text=data["text"][:5000]), guard
+        return BotVisit(final_url=page.url, title=await limited(page.title(), PAGE_CALL_TIMEOUT_S, ""), text=data["text"][:5000], facts_available=data["facts_available"]), guard
     finally:
         await context.close()
 
@@ -184,24 +206,34 @@ async def capture(
             final_url, title, screenshot_path = blocked_url, "", None
         else:
             await page.wait_for_timeout(settle_ms)
-            final_url, title = page.url, await page.title()
+            # A page whose script never returns blocks every call into it: each one below is time-limited, and the
+            # facts are read first so a hung page is known before anything else is attempted.
+            data = await collect.read_page(page)
+            final_url = page.url
+            title = await limited(page.title(), PAGE_CALL_TIMEOUT_S, "")
             capture_id = uuid.uuid4().hex
             screenshot_path = str(CAPTURES_DIR / f"{capture_id}.png")
-            await page.screenshot(path=screenshot_path)
-            data = await collect.read_page(page)
-            screenshot = Path(screenshot_path).read_bytes()
-            extra["screenshot"] = FileRef(path=screenshot_path, sha256=collect.sha256(screenshot), bytes=len(screenshot))
-            height = min(max(int(data["height"] or 0), 1), collect.FULL_PAGE_MAX_HEIGHT)
-            width = collect.PROFILES[profile]["viewport"]["width"]
             try:
-                full = await page.screenshot(full_page=True, clip={"x": 0, "y": 0, "width": width, "height": height})
-                extra["full_screenshot"] = write(CAPTURES_DIR / f"{capture_id}.full.png", full)
+                await page.screenshot(path=screenshot_path, timeout=PAGE_CALL_TIMEOUT_S * 1000)
             except PlaywrightError:
+                if data["facts_available"]:
+                    raise
+                screenshot_path = None
+            if screenshot_path:
+                screenshot = Path(screenshot_path).read_bytes()
+                extra["screenshot"] = FileRef(path=screenshot_path, sha256=collect.sha256(screenshot), bytes=len(screenshot))
+            width = collect.PROFILES[profile]["viewport"]["width"]
+            # Without readable facts the page height is unknown: take the largest allowed capture.
+            height = min(max(int(data["height"] or 0), 1), collect.FULL_PAGE_MAX_HEIGHT) if data["facts_available"] else collect.FULL_PAGE_MAX_HEIGHT
+            try:
+                full = await page.screenshot(full_page=True, clip={"x": 0, "y": 0, "width": width, "height": height}, timeout=PAGE_CALL_TIMEOUT_S * 1000)
+                extra["full_screenshot"] = write(CAPTURES_DIR / f"{capture_id}.full.png", full)
+            except (PlaywrightError, asyncio.TimeoutError):
                 pass
             try:
-                html = (await page.content()).encode("utf-8", errors="replace")[: collect.HTML_LIMIT]
+                html = (await asyncio.wait_for(page.content(), PAGE_CALL_TIMEOUT_S)).encode("utf-8", errors="replace")[: collect.HTML_LIMIT]
                 extra["html"] = write(CAPTURES_DIR / f"{capture_id}.html", html)
-            except PlaywrightError:
+            except (PlaywrightError, asyncio.TimeoutError):
                 pass
             icon = await collect.read_favicon(page, data["icons"])
             if icon:
@@ -219,6 +251,7 @@ async def capture(
                 links=data["links"],
                 images=data["images"],
                 skeleton=data["skeleton"],
+                facts_available=data["facts_available"],
             )
     finally:
         await context.close()
