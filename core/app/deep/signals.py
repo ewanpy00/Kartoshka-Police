@@ -44,7 +44,6 @@ INJECTION = re.compile(
 )
 PHONE = re.compile(r"(?:\+|00)971[\s-]?\d{1,2}[\s-]?\d{3}[\s-]?\d{4}|\b05\d[\s-]?\d{3}[\s-]?\d{4}\b")
 WHATSAPP_HOSTS = ("wa.me", "api.whatsapp.com", "chat.whatsapp.com", "whatsapp.com")
-CREDENTIALS = ("otp", "card", "cvv", "uaepass")
 PAYMENT_DATA = ("card", "cvv", "otp", "iban")
 
 # Credential cap. The per-kind ASKS_* reasons stay in the explanation, but together they add at most
@@ -56,7 +55,7 @@ CREDENTIAL_CAP = 25
 CREDENTIAL_CODES = frozenset(code for code in CATALOG if code.startswith("ASKS_"))
 CAP_LIFTING_CODES = frozenset({
     "BRAND_IN_DOMAIN", "BRAND_IN_SUBDOMAIN",
-    "LOOKALIKE", "HOMOGLYPH", "MIXED_SCRIPTS", "PUNYCODE",
+    "LOOKALIKE", "HOMOGLYPH",
     "VISUAL_MATCH", "BRAND_MISMATCH",
     "CAMPAIGN_LINK",
     "BLOCKLISTED", "OFFICER_CONFIRMED", "GSB_HIT", "VT_HIT",
@@ -116,6 +115,8 @@ def cloaking(capture: dict) -> dict | None:
     bot = capture.get("bot_visit") or {}
     if not bot or bot.get("error") or bot.get("navigation_blocked"):
         return None
+    if capture.get("facts_available") is not True or bot.get("facts_available") is not True:
+        return None  # an unreadable visit has no text: comparing it would call a normal page cloaked
     phone_host = urlsplit(capture.get("final_url") or "").hostname or ""
     bot_host = urlsplit(bot.get("final_url") or "").hostname or ""
     if phone_host and bot_host and registrable(phone_host) != registrable(bot_host):
@@ -210,7 +211,7 @@ def page_brand(capture: dict, host: str, claimed: dict | None, brands: list[dict
 
 def analyse(capture: dict, host: str, claimed_brand: dict | None, brands: list[dict]) -> Signals:
     result = Signals()
-    result.facts_available = capture.get("facts_available", True) is not False  # a missing key means true
+    result.facts_available = capture.get("facts_available") is True  # a missing key is not "available": fail closed
     if not result.facts_available:
         result.reasons.append(reason("PAGE_FACTS_UNAVAILABLE"))
     text = capture.get("text") or ""
@@ -285,8 +286,7 @@ def cap_credentials(reasons: list[dict]) -> list[dict]:
 # Impersonation signals only (no reputation hits): a page that hides its facts while one of these is present
 # is scored as if it had shown its credential form.
 IMPERSONATION_CODES = frozenset({
-    "BRAND_IN_DOMAIN", "BRAND_IN_SUBDOMAIN", "LOOKALIKE", "HOMOGLYPH", "MIXED_SCRIPTS", "PUNYCODE",
-    "VISUAL_MATCH", "BRAND_MISMATCH",
+    "BRAND_IN_DOMAIN", "BRAND_IN_SUBDOMAIN", "LOOKALIKE", "HOMOGLYPH", "VISUAL_MATCH", "BRAND_MISMATCH",
 })
 
 
@@ -301,9 +301,10 @@ def hidden_facts_floor(reasons: list[dict], signals: "Signals", floor: int = 75)
 
 
 def credential_floor(reasons: list[dict], signals: Signals, host: str, floor: int = 75) -> dict | None:
-    """A page that is not the brand's and asks for a code, a card or UAE PASS credentials scores at least `floor`."""
+    """A page that is not the brand's and asks for any credential (a code, a card, UAE PASS, a password, an Emirates ID,
+    an IBAN) scores at least `floor`."""
     brand = signals.brand
-    asked = [kind for kind in CREDENTIALS if kind in signals.asks_for]
+    asked = [kind for kind in ASKS_EN if kind in signals.asks_for]  # every credential kind a page can ask for
     if brand is None or not asked or is_official(host, brand):
         return None
     current = max(0, min(100, sum(r["weight"] or 0 for r in reasons)))

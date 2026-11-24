@@ -35,6 +35,7 @@ def page(**overrides) -> dict:
         "to avoid additional penalties. Contact +971 50 123 4567.", "forms": CARD_FORM, "links": ["https://wa.me/971501234567"],
         "images": [], "skeleton": SKELETON, "post_hosts": [], "navigation_blocked": False, "internal_requests_blocked": 0,
         "chain": ["https://tamm-fines.top/pay"], "status": 200, "tls": None, "server_ip": None, "bot_visit": None,
+        "facts_available": True,  # the sandbox always sends the key; a missing one reads as not available
     }
     base.update(overrides)
     return base
@@ -82,11 +83,11 @@ def test_parked_and_cloaked_pages():
 
     long_text = " ".join(f"word{i}" for i in range(40))
     cloaked = signals.analyse(
-        page(text=long_text, bot_visit={"final_url": "https://tamm-fines.top/pay", "title": "Hello", "text": "under construction"}),
+        page(text=long_text, bot_visit={"final_url": "https://tamm-fines.top/pay", "title": "Hello", "text": "under construction", "facts_available": True}),
         "tamm-fines.top", TAMM, BRANDS,
     )
     assert cloaked.cloaking["kind"] == "different_content"
-    elsewhere = signals.analyse(page(bot_visit={"final_url": "https://www.google.com/", "title": "Google", "text": ""}),
+    elsewhere = signals.analyse(page(bot_visit={"final_url": "https://www.google.com/", "title": "Google", "text": "", "facts_available": True}),
                                 "tamm-fines.top", TAMM, BRANDS)
     assert elsewhere.cloaking == {"kind": "different_site", "phone": "tamm-fines.top", "bot": "www.google.com"}
 
@@ -510,9 +511,10 @@ def test_facts_unavailable_adds_the_reason_and_is_not_read_as_parked():
     blank = dict(forms=[], text="", title="", links=[])
     found = signals.analyse(page(**blank, facts_available=False), "x.top", None, BRANDS)
     assert "PAGE_FACTS_UNAVAILABLE" in codes(found.reasons) and not found.parked and "PARKED" not in codes(found.reasons)
-    for capture in (page(**blank), page(**blank, facts_available=True)):  # a missing key means true
-        again = signals.analyse(capture, "x.top", None, BRANDS)
-        assert "PAGE_FACTS_UNAVAILABLE" not in codes(again.reasons) and again.parked
+    missing = {key: value for key, value in page(**blank).items() if key != "facts_available"}
+    assert "PAGE_FACTS_UNAVAILABLE" in codes(signals.analyse(missing, "x.top", None, BRANDS).reasons)  # a missing key fails closed
+    again = signals.analyse(page(**blank, facts_available=True), "x.top", None, BRANDS)
+    assert "PAGE_FACTS_UNAVAILABLE" not in codes(again.reasons) and again.parked
 
 
 def test_deep_job_scores_a_page_that_hid_its_facts(session, deep_env):
@@ -611,3 +613,58 @@ def test_lookalike_with_visible_facts_and_no_credential_fields_is_unchanged(sess
     check = make_check(session, reasons=[reason("LOOKALIKE", official="tamm.abudhabi", distance=1)])
     found = run_deep(session, deep_env, check, forms=[], text="Welcome to our long page " * 10, final_url="https://tamm-fines.top/pay")
     assert "BRAND_FACTS_HIDDEN" not in found and "PAGE_FACTS_UNAVAILABLE" not in found and "BRAND_CREDENTIALS" not in found
+
+
+# ---- review fixes ---------------------------------------------------------------------------------------------
+
+def test_cloaking_is_not_judged_when_either_visit_could_not_be_read():
+    long_text = " ".join(f"word{i}" for i in range(40))
+    bot = {"final_url": "https://tamm-fines.top/pay", "title": "", "text": "", "facts_available": False}
+    assert signals.cloaking(page(text=long_text, bot_visit=bot)) is None
+    readable = {**bot, "text": "under construction", "facts_available": True}
+    assert signals.cloaking(page(text=long_text, bot_visit=readable))["kind"] == "different_content"
+    assert signals.cloaking(page(text=long_text, facts_available=False, bot_visit=readable)) is None
+    assert signals.cloaking(page(text=long_text, bot_visit={k: v for k, v in readable.items() if k != "facts_available"})) is None
+
+
+def test_lookalike_with_only_a_password_reaches_the_75_floor_and_blocks(session, deep_env):
+    check = make_check(session, reasons=[reason("BRAND_IN_DOMAIN", token="tamm", brand="TAMM", brand_ar="تم"), reason("RISKY_TLD", tld="top")])
+    found = run_deep(session, deep_env, check, forms=PASSWORD_FORM, final_url="https://tamm-fines.top/pay")
+    assert "BRAND_CREDENTIALS" in found and check.score == 75 and check.verdict == "block"
+
+
+def test_a_password_on_the_brands_own_domain_is_not_floored():
+    official = signals.analyse(page(final_url="https://www.tamm.abudhabi/", forms=PASSWORD_FORM), "www.tamm.abudhabi", None, BRANDS)
+    assert "password" in official.asks_for and signals.credential_floor([], official, "www.tamm.abudhabi") is None
+
+
+def test_non_brand_password_page_is_neither_capped_nor_floored(session, deep_env):
+    found = run_deep(session, deep_env, plain_check(session), forms=PASSWORD_FORM)
+    assert "BRAND_CREDENTIALS" not in found and found["ASKS_PASSWORD"]["weight"] == 15 and "capped" not in found["ASKS_PASSWORD"]
+
+
+def test_idn_without_a_brand_signal_keeps_the_cap_and_is_not_floored_when_hidden(session, deep_env):
+    idn = [reason("PUNYCODE"), reason("MIXED_SCRIPTS", scripts="Latin + Arabic")]
+    both = [{**CARD_CVV_FORM[0], "fields": CARD_CVV_FORM[0]["fields"] + OTP_FORM[0]["fields"]}]
+    found = run_deep(session, deep_env, plain_check(session, reasons=idn), forms=both)
+    assert credential_points(found) == 25 and "BRAND_CREDENTIALS" not in found
+    check = plain_check(session, reasons=[reason("PUNYCODE")])
+    hidden = run_deep(session, deep_env, check, forms=[], text="", title="", facts_available=False)
+    assert "BRAND_FACTS_HIDDEN" not in hidden and check.score == 40  # facts 30 + punycode 10
+
+
+def test_host_like_reason_parameters_are_defanged_once_and_names_are_not():
+    cases = [
+        reason("BRAND_IN_SUBDOMAIN", token="tamm", domain="evil-site.xyz", brand="TAMM", brand_ar="تم"),
+        reason("PAYMENT_ENDPOINT", host="collector.evil-site.xyz"),
+        reason("CAMPAIGN_LINK", kind="domain", kind_ar="النطاق", value="evil-site.xyz", campaign="k_1"),
+        reason("LOOKALIKE", official="tamm.abudhabi", distance=1),
+        reason("FREE_HOSTING", suffix="evil.web.app"),
+    ]
+    for item in cases:
+        for text in (item["en"], item["ar"]):
+            assert "[.]" in text and not any(raw in text for raw in ("evil-site.xyz", "tamm.abudhabi", "evil.web.app"))
+    assert "evil-site[.]xyz" in cases[0]["en"] and "tamm" in cases[0]["en"]
+    assert "TAMM" in reason("BRAND_ACTION", brand="TAMM", brand_ar="x")["en"]
+    assert "+971501234567" in reason("OFF_PLATFORM_CONTACT", contact="+971501234567")["en"]
+    assert "[.][.]" not in cases[1]["en"]

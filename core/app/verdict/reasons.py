@@ -5,6 +5,8 @@ written for residents first.
 """
 from dataclasses import dataclass
 
+from app.defang import defang
+
 
 @dataclass(frozen=True)
 class Template:
@@ -180,9 +182,15 @@ class _Defaults(dict):
         return ""
 
 
+# Placeholders that carry a domain, host, URL or hostname-shaped value. Reason text is shown by the API, the
+# resident app, the console and the evidence PDF, so these are defanged here, once, and nowhere downstream.
+# Phone numbers (contact), brand names and tokens are not.
+HOST_PARAMS = frozenset({"domain", "host", "official", "value", "suffix"})
+
+
 def reason(code: str, weight: int | None = None, **params) -> dict:
     template = CATALOG[code]
-    values = _Defaults(params)
+    values = _Defaults({k: defang(v) if k in HOST_PARAMS and isinstance(v, str) else v for k, v in params.items()})
     return {
         "code": code,
         "weight": template.weight if weight is None else weight,
