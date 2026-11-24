@@ -95,32 +95,40 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="panel">
-    <h1>{{ t('feed') }}</h1>
-    <p>
-      <span :class="['badge', connected ? 'allow' : 'block']">{{ connected ? t('connected') : unauthorised ? t('notAuthorised') : t('disconnected') }}</span>
-    </p>
+  <div>
+    <div class="page-head">
+      <h1>{{ t('navFeed') }}</h1>
+      <div class="actions">
+        <span :class="['status-chip', connected ? 'confirmed' : 'rejected']">{{ connected ? t('connected') : unauthorised ? t('notAuthorised') : t('disconnected') }}</span>
+      </div>
+    </div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="!rows.length" class="muted">{{ t('feedEmpty') }}</p>
-    <table v-else>
-      <thead>
-        <tr>
-          <th>{{ t('time') }}</th>
-          <th>{{ t('event') }}</th>
-          <th>{{ t('domain') }}</th>
-          <th>{{ t('brand') }}</th>
-          <th>{{ t('verdict') }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="row in rows" :key="row.key">
-          <td>{{ formatTime(row.at) }}</td>
-          <td>{{ t(`event.${row.type}`) }}</td>
-          <td class="mono">{{ row.domain ? defang(row.domain) : t('unknown') }}</td>
-          <td>{{ row.brand ?? '' }}</td>
-          <td>{{ row.verdict ?? '' }}{{ row.score !== null ? ` (${row.score})` : '' }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+    <div class="card">
+      <p v-if="!rows.length" class="empty">{{ t('feedEmpty') }}</p>
+      <table v-else class="table">
+        <thead>
+          <tr>
+            <th>{{ t('time') }}</th>
+            <th>{{ t('event') }}</th>
+            <th>{{ t('domain') }}</th>
+            <th>{{ t('brand') }}</th>
+            <th>{{ t('verdict') }}</th>
+            <th>{{ t('score') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in rows" :key="row.key">
+            <td>{{ formatTime(row.at) }}</td>
+            <td>{{ t(`event.${row.type}`) }}</td>
+            <td class="mono">{{ row.domain ? defang(row.domain) : t('unknown') }}</td>
+            <td>{{ row.brand ?? '' }}</td>
+            <td>{{ row.verdict ?? '' }}</td>
+            <td>
+              <span v-if="row.score !== null" :class="['q-score', row.score >= 70 ? 'high' : row.score >= 30 ? 'mid' : 'low']">{{ row.score }}</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </template>
