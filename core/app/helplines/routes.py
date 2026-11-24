@@ -13,7 +13,7 @@ from app.brands import load_brands
 from app.config import Settings, get_settings
 from app.csvsafe import cell
 from app.db import get_session
-from app.models import Check, Evidence
+from app.models import Check, Domain, Evidence
 
 router = APIRouter()
 
@@ -29,6 +29,7 @@ class Number(BaseModel):
     domain: str
     evidence_id: str
     first_seen: datetime
+    confirmed: bool
 
 
 class NumberList(BaseModel):
@@ -48,6 +49,9 @@ def is_official_host(domain: str, official_domains: list[str]) -> bool:
 
 def listed_numbers(session: Session, settings: Settings) -> list[Number]:
     brands = {name.lower(): b for b in load_brands(settings.data_dir) for name in (b["id"], *b["names"])}
+    officer_confirmed = set(
+        session.scalars(select(Domain.domain).where(Domain.status == "confirmed", Domain.confirmed_by == "officer"))
+    )
     found: dict[tuple[str, str, str], Number] = {}
     rows = session.execute(
         select(Evidence, Check.domain).join(Check, Check.id == Evidence.check_id).order_by(Evidence.seq)
@@ -67,6 +71,7 @@ def listed_numbers(session: Session, settings: Settings) -> list[Number]:
                 Number(
                     phone=phone, brand=scam["brand"], source="page", domain=domain,
                     evidence_id=evidence.id, first_seen=evidence.created_at,
+                    confirmed=domain in officer_confirmed,
                 ),
             )
     return list(found.values())
@@ -83,6 +88,8 @@ def helplines_csv(session: SessionDep, settings: SettingsDep) -> Response:
     writer = csv.writer(out)
     writer.writerow(COLUMNS)
     for number in listed_numbers(session, settings):
+        if not number.confirmed:
+            continue
         row = number.model_dump(mode="json")
         writer.writerow(cell(row[column]) for column in COLUMNS)
     return Response(

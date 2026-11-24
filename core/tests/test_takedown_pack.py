@@ -2,6 +2,7 @@ import hashlib
 import io
 import zipfile
 
+import pytest
 from admin_factories import AUTH
 from app.models import AuditLog, Domain, Report, TakedownPack, TakedownRequest
 from sqlalchemy import func, select
@@ -120,3 +121,18 @@ def test_mark_sent_records_who_when_and_hash_once(client, session):
     assert again.status_code == 409
     listed = client.get("/v1/admin/takedowns", headers=AUTH).json()["packs"]
     assert [p["id"] for p in listed] == [pack["id"]] and listed[0]["sent_by"] == "officer2"
+
+
+def test_malformed_abuse_addresses_are_dropped(client, session):
+    infra = {"abuse_emails": ["a@reg.example\nBcc: x@y", "two@x.example, three@x.example", "no at.example"]}
+    confirmed_case(session, "evil-one.example", infrastructure=infra)
+    body = build(client, ["evil-one.example"]).json()
+    assert body["packs"] == [] and body["without_recipient"] == ["evil-one.example"]
+
+
+def test_registrar_name_with_a_line_break_is_refused(client, session):
+    infra = {**REGISTRAR, "registrar": "Reg Inc\nBcc: x@y.example"}
+    confirmed_case(session, "evil-one.example", infrastructure=infra)
+    with pytest.raises(ValueError, match="Line break"):
+        build(client, ["evil-one.example"])
+    assert session.scalar(select(func.count()).select_from(TakedownPack)) == 0

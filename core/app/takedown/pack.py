@@ -31,7 +31,11 @@ def check_domain(domain: str) -> str:
 
 
 def one_line(value: object) -> str:
-    return " ".join(str(value or "-").split())
+    """The value as text for email.txt; a line break would let third-party data inject header or body lines."""
+    text = str(value or "-")
+    if "\r" in text or "\n" in text:
+        raise ValueError(f"Line break in email field: {text[:80]!r}")
+    return text
 
 
 def email_text(recipient: str, items: list[tuple[str, Evidence]]) -> str:
@@ -39,12 +43,12 @@ def email_text(recipient: str, items: list[tuple[str, Evidence]]) -> str:
     for domain, evidence in items:
         infra = evidence.payload.get("infrastructure", {})
         lines.append(
-            f"- {defang(domain)} | IP {defang(infra.get('ip') or '-')} | "
-            f"registrar {one_line(infra.get('registrar'))} | evidence {evidence.hash}"
+            f"- {one_line(defang(domain))} | IP {one_line(defang(infra.get('ip') or '-'))} | "
+            f"registrar {one_line(infra.get('registrar'))} | evidence {one_line(evidence.hash)}"
         )
     domains = "\n".join(lines)
     return (
-        f"To: {recipient}\n"
+        f"To: {one_line(recipient)}\n"
         "Subject: Abuse report: phishing domains impersonating a UAE government service / "
         "بلاغ إساءة: نطاقات تصيد تنتحل صفة جهة حكومية إماراتية\n\n"
         f"{REQUEST_EN}\n\nDomains:\n{domains}\n\n---\n\n{REQUEST_AR}\n\nالنطاقات:\n{domains}\n"
