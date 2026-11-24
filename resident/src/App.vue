@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { lang, tr } from './i18n'
+
+const demoEnvironment = import.meta.env.VITE_DEMO_BANNER === 'true'
 </script>
 
 <template>
+  <div v-if="demoEnvironment" class="demo" role="status">{{ tr('Demo environment', 'بيئة تجريبية') }}</div>
   <header class="top">
     <RouterLink to="/" class="brand">{{ tr('Kartoshka link check', 'كارتوشكا · فحص الروابط') }}</RouterLink>
     <button class="lang" @click="lang = lang === 'ar' ? 'en' : 'ar'">{{ lang === 'ar' ? 'English' : 'العربية' }}</button>
@@ -17,6 +20,7 @@ import { lang, tr } from './i18n'
 </template>
 
 <style scoped>
+.demo { padding: var(--space-1) var(--space-4); background: var(--c-selected); color: var(--c-ink); font-size: var(--fs-12); font-weight: 600; text-align: center; border-block-end: 1px solid var(--c-hairline); }
 .top { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-4); background: var(--c-surface); color: var(--c-ink); border-block-end: 1px solid var(--c-hairline); }
 .brand { color: var(--c-ink); font-weight: 600; text-decoration: none; }
 .lang { min-height: 2.2rem; padding: var(--space-1) var(--space-3); font-size: var(--fs-13); }
