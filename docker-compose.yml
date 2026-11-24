@@ -1,0 +1,180 @@
+name: kartoshka-police
+
+x-core: &core
+  build: ./core
+  image: kartoshka-police-core:dev
+  env_file: .env
+  working_dir: /srv/core
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
+  volumes:
+    - ./core:/srv/core
+    - ./data:/srv/data:ro
+    - ./eval:/srv/eval:ro
+
+services:
+  postgres:
+    image: postgres:16.16-alpine3.24
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kartoshka}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kartoshka_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-kartoshka}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7.4.12-alpine3.22
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  core:
+    <<: *core
+    command: ["sh", "-c", "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${CORE_PORT:-8000}:8000"
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  worker:
+    <<: *core
+    command: ["watchfiles", "--filter", "python", "rq worker ${RQ_QUEUE:-deep} --url ${REDIS_URL:-redis://redis:6379/0}", "app"]
+    volumes:
+      - ./core:/srv/core
+      - ./data:/srv/data:ro
+      - ./eval:/srv/eval:ro
+      - captures:/captures:ro
+    networks: [internal, sandbox_net]
+    depends_on:
+      core:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      sandbox:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker_health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  sandbox:
+    build: ./sandbox
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--reload-dir", "app"]
+    environment:
+      CAPTURE_TIMEOUT_MS: ${CAPTURE_TIMEOUT_MS:-15000}
+      CAPTURES_DIR: /captures
+      HOME: /tmp
+      PYTHONDONTWRITEBYTECODE: "1"
+    user: pwuser
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    shm_size: 256m
+    init: true
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 512
+    volumes:
+      - ./sandbox/app:/srv/sandbox/app:ro
+      - captures:/captures
+    networks: [sandbox_net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  certstream:
+    image: 0rickyy0/certstream-server-go:v1.10.1
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/example.json"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  hunter:
+    build: ./hunter
+    command: ["watchfiles", "--filter", "python", "python -m app.certstream_consumer", "app"]
+    env_file: .env
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./hunter:/srv/hunter
+      - ./data:/srv/data:ro
+    networks: [internal]
+    depends_on:
+      certstream:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  console:
+    build: ./console
+    command: ["npm", "run", "dev"]
+    environment:
+      CORE_PROXY_TARGET: http://core:8000
+      VITE_CORE_WRITE_TOKEN: ${CORE_WRITE_TOKEN:-}
+    ports:
+      - "127.0.0.1:${CONSOLE_PORT:-5173}:5173"
+    volumes:
+      - ./console:/app
+      - /app/node_modules
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  adguard:
+    image: adguard/adguardhome:v0.107.80
+    profiles: ["stretch"]
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${ADGUARD_DNS_PORT:-5335}:53/tcp"
+      - "${BIND_ADDR:-127.0.0.1}:${ADGUARD_DNS_PORT:-5335}:53/udp"
+      - "127.0.0.1:${ADGUARD_UI_PORT:-3001}:3000"
+    volumes:
+      - ./dns/conf:/opt/adguardhome/conf
+      - adguard_work:/opt/adguardhome/work
+    networks: [internal]
+
+networks:
+  internal:
+  sandbox_net:
+
+volumes:
+  pgdata:
+  captures:
+  adguard_work:
