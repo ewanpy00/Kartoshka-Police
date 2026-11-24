@@ -283,6 +283,29 @@ Sign in with UAE PASS — **mock, no real API** (buys the integration time):
 - Campaign view: graph, domain count, first seen, brand, where victims meet it.
 - Export: PDF evidence, takedown pack, campaign report.
 
+The console is also the admin dashboard. Build contract: `docs/admin-dashboard.md`.
+
+- **One review queue, one case per domain.** Resident reports, Hunter candidates and warn/block checks
+  share one ranked list: `score × ln(1 + reports + hits) × freshness`, with a boost for the 30–70 band
+  (those labels teach the model most). Reject needs a reason; it becomes the resident's report status.
+- **Early detection.** Live Hunter feed, brand spikes (many new look-alikes for one brand within an hour),
+  watchlist wake-ups (a parked domain starts serving a form), lead time against feeds, GSB, VirusTotal
+  and the first resident report.
+- **Campaigns.** Only strong links merge domains: phone, WhatsApp, payment endpoint, kit hash, favicon hash,
+  shared multi-SAN certificate, dedicated IP. ASN, registrar, big name servers and CDN IPs are shown but
+  never merge, and any entity shared by more than ~50 domains becomes weak (hub rule). "Confirm all" writes
+  one review per domain and never touches official or allowlisted domains.
+- **Takedown tracker.** One request per recipient (registrar, host, Cloudflare, aeDA for `.ae`, GSB), a
+  hashed pack per recipient, states `pack_ready → sent → offline_pending → closed / reopened`, overdue after
+  an SLA. An officer sends; nothing is sent automatically. Offline needs two consecutive checks with both
+  profiles, so cloaking cannot fake a takedown.
+- **Operations.** KPI page (exposure window, time to block, lead time), model quality (officer agreement per
+  band, disagreements), hash-chain check, system health.
+- **AI here explains and ranks, never decides.** A2 facts and AR/EN reasons on the case card, A1 in ranking,
+  officer decisions stored as labels (A7). Confirm, reject, merges and sending are human or deterministic.
+- Attacker-controlled text (titles, page text, URLs, report notes) is rendered as plain text; domains are
+  defanged and never clickable.
+
 ---
 
 ## 6. API
@@ -301,6 +324,7 @@ Sign in with UAE PASS — **mock, no real API** (buys the integration time):
 | POST | `/v1/review/{evidence_id}` `{decision}` | console |
 | GET | `/v1/evidence/{id}.pdf` / `.json` | console, takedown |
 | WS | `/v1/events` | console live feed |
+| GET/POST | `/v1/admin/*` (queue, cases, hunter feed, campaigns, takedowns, stats, health) | console only, write token on every route; full list in `docs/admin-dashboard.md` |
 
 CLI: `kartoshka eval data/eval/test.csv` → precision, recall, FPR, confusion matrix, per-brand.
 
@@ -309,7 +333,8 @@ CLI: `kartoshka eval data/eval/test.csv` → precision, recall, FPR, confusion m
 ## 7. Data
 
 Postgres tables: `checks`, `domains`, `verdicts`, `evidence` (append-only, hash-chained),
-`artifacts` (hashes + paths), `entities`, `edges`, `campaigns`, `watchlist`, `reviews`.
+`artifacts` (hashes + paths), `entities`, `edges`, `campaigns`, `watchlist`, `reviews`,
+`takedown_requests`, `audit_log` (append-only).
 Redis: job queue, verdict cache, rate limits. Object storage (local dir for the demo): screenshots, HTML.
 
 `data/brands.yaml` — the UAE brand registry, used by every layer:

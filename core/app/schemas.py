@@ -1,23 +1,39 @@
 from datetime import datetime
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.normalize.url import clean
+
+MAX_URL = 4096
+
 
 def require_http_url(value: str) -> str:
-    parsed = urlparse(value)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+    """Accept absolute http(s) URLs and bare hosts (a bare host gets http://, as a browser would)."""
+    if len(value) > MAX_URL:
+        raise ValueError("URL is too long")
+    stripped = value.strip()
+    if "://" not in stripped and stripped.split(":", 1)[0].lower() in ("javascript", "data", "file", "mailto", "tel"):
         raise ValueError("must be an absolute http(s) URL")
-    return value
+    parsed = urlsplit(clean(stripped))
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or "." not in parsed.hostname.strip("."):
+        raise ValueError("must be an absolute http(s) URL")
+    return stripped
 
 
 class Reason(BaseModel):
     code: str
-    weight: int
+    weight: int | None = Field(description="Points this reason adds. Hidden (null) in resident views.")
     source: str
     en: str
     ar: str
+
+
+class Source(BaseModel):
+    id: str
+    status: Literal["hit", "clean", "unknown", "skipped"]
+    detail: str | None = None
 
 
 class SafeAction(BaseModel):
@@ -26,10 +42,17 @@ class SafeAction(BaseModel):
     url: str
 
 
+class Preview(BaseModel):
+    screenshot: str | None = None
+    asks_for: list[str] = []
+    title: str | None = None
+
+
 class CheckRequest(BaseModel):
-    url: str = Field(max_length=2000)
+    url: str
     source: str = "api"
     mode: Literal["fast", "deep"] = "fast"
+    text: str = Field("", max_length=4000, description="Pasted SMS text around the link; used to pick the safe action")
 
     _url = field_validator("url")(require_http_url)
 
@@ -46,12 +69,28 @@ class Verdict(BaseModel):
     brand: str | None
     safe_action: SafeAction | None
     reasons: list[Reason]
+    sources: list[Source] = []
+    preview: Preview | None = None
+    deep_status: str | None = None
     campaign_id: str | None
     evidence_id: str | None
 
+    @field_validator("sources", mode="before")
+    @classmethod
+    def none_is_empty(cls, value):
+        return value or []
+
+
+def for_resident(verdict: Verdict) -> dict:
+    """Residents see reasons and the verdict, never the per-reason weights."""
+    body = verdict.model_dump()
+    for item in body["reasons"]:
+        item["weight"] = None
+    return body
+
 
 class BatchRequest(BaseModel):
-    urls: list[str]
+    urls: list[str] = Field(max_length=5000)
 
     _urls = field_validator("urls")(lambda urls: [require_http_url(url) for url in urls])
 
@@ -62,6 +101,9 @@ class BatchResult(BaseModel):
     verdict: Literal["allow", "block"]
     score: int
     timed_out: bool
+    band: Literal["allow", "warn", "block"] | None = None
+    brand: str | None = None
+    reasons: list[Reason] | None = None
 
 
 class BatchResponse(BaseModel):
@@ -70,8 +112,9 @@ class BatchResponse(BaseModel):
 
 
 class ReportRequest(BaseModel):
-    url: str = Field(max_length=2000)
-    note: str = Field("", max_length=1000)
+    url: str
+    note: str = Field("", max_length=2000)
+    push_token: str | None = Field(None, max_length=512)
 
     _url = field_validator("url")(require_http_url)
 
@@ -79,12 +122,17 @@ class ReportRequest(BaseModel):
 class ReportResponse(BaseModel):
     check_id: str
     status: Literal["received"]
+    report_id: str | None = None
+    token: str | None = None
 
 
 class ReviewRequest(BaseModel):
     decision: Literal["confirm", "reject"]
-    reason: str | None = None
-    reviewer: str = "Demo Officer"
+    reviewer: str = Field("Demo Officer", max_length=200)
+    reason: Literal["legitimate_site", "not_a_scam", "insufficient_evidence", "duplicate"] | None = Field(
+        None, description="Required on reject. Shown to the resident as a plain status."
+    )
+    note: str = Field("", max_length=2000, description="Officer-only free text; never leaves the console.")
 
 
 class ReviewResponse(BaseModel):
@@ -92,6 +140,10 @@ class ReviewResponse(BaseModel):
     decision: str
     reviewer: str
     reviewed_at: datetime
+    domain: str | None = None
+    status: str | None = Field(None, description="New domain status: confirmed, cleared, or null when unchanged")
+    reason: str | None = None
+    blocklist_version: int | None = None
 
 
 class BlocklistEntry(BaseModel):
@@ -102,132 +154,24 @@ class BlocklistEntry(BaseModel):
 
 class BlocklistResponse(BaseModel):
     domains: list[BlocklistEntry]
+    removed: list[BlocklistEntry] = []
+    version: int = 0
+    generated_at: datetime | None = None
+
+
+class EvidenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    seq: int | None = None
+    check_id: str
+    prev_hash: str | None
+    hash: str
+    payload: dict
+    created_at: datetime
 
 
 class Health(BaseModel):
     status: str
     db: str
     redis: str
-
-
-CaseState = Literal["open", "auto_confirmed", "confirmed", "rejected"]
-
-
-class CaseSummary(BaseModel):
-    domain: str
-    state: CaseState
-    score: int
-    verdict: str
-    brand: str | None
-    sources: list[str]
-    reports: int
-    hits: int
-    first_seen: datetime
-    last_seen: datetime
-    evidence_id: str | None
-    campaign_id: str | None
-    rank: float
-
-
-class QueueResponse(BaseModel):
-    cases: list[CaseSummary]
-
-
-class CaseCheck(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    check_id: str
-    url: str
-    source: str
-    verdict: str
-    score: int
-    created_at: datetime
-
-
-class CaseReview(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    evidence_id: str
-    decision: str
-    reason: str | None
-    reviewer: str
-    reviewed_at: datetime
-
-
-class ReportNote(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    note: str
-    created_at: datetime
-
-
-class CaseDetail(CaseSummary):
-    url: str
-    final_url: str | None
-    title: str | None
-    reasons: list[dict]
-    infrastructure: dict
-    location: dict | None
-    lead_time: dict | None
-    report_notes: list[ReportNote]
-    checks: list[CaseCheck]
-    reviews: list[CaseReview]
-    has_screenshot: bool
-
-
-class OfficerAction(BaseModel):
-    reviewer: str = "Demo Officer"
-
-
-class RecheckResponse(BaseModel):
-    check_id: str
-
-
-class WatchResponse(BaseModel):
-    domain: str
-    next_check_at: datetime
-    expires_at: datetime
-
-
-class UndoResponse(BaseModel):
-    domain: str
-    state: CaseState
-
-
-class AuditEntry(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    actor: str
-    action: str
-    target: str
-    before: dict | None
-    after: dict | None
-    reason: str | None
-    created_at: datetime
-
-
-class AuditResponse(BaseModel):
-    entries: list[AuditEntry]
-
-
-class FeedItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    check_id: str
-    domain: str | None
-    url: str
-    brand: str | None
-    verdict: str
-    score: int
-    created_at: datetime
-
-
-class FeedResponse(BaseModel):
-    items: list[FeedItem]
-
-
-class WatchRunResponse(BaseModel):
-    queued: int

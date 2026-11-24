@@ -1,0 +1,258 @@
+[
+ {
+  "id": "uaepass",
+  "name_en": "UAE PASS",
+  "name_ar": "الهوية الرقمية",
+  "tokens": [
+   "uaepass"
+  ],
+  "official_domains": [
+   "uaepass.ae"
+  ],
+  "services": [
+   {
+    "keywords": [
+     "verify",
+     "login",
+     "update",
+     "pass",
+     "هوية"
+    ],
+    "label_en": "Continue in the official UAE PASS app",
+    "label_ar": "المتابعة في تطبيق الهوية الرقمية الرسمي",
+    "url": "https://uaepass.ae"
+   }
+  ]
+ },
+ {
+  "id": "tamm",
+  "name_en": "TAMM",
+  "name_ar": "تم",
+  "tokens": [
+   "tamm"
+  ],
+  "official_domains": [
+   "tamm.abudhabi"
+  ],
+  "services": [
+   {
+    "keywords": [
+     "fine",
+     "fines",
+     "traffic",
+     "pay",
+     "مخالفة",
+     "مخالفات"
+    ],
+    "label_en": "Check your real fines in TAMM",
+    "label_ar": "تحقق من مخالفاتك الحقيقية في تم",
+    "url": "https://www.tamm.abudhabi/wb/adp/pay-traffic-fines"
+   }
+  ]
+ },
+ {
+  "id": "rta",
+  "name_en": "RTA",
+  "name_ar": "هيئة الطرق والمواصلات",
+  "tokens": [
+   "rta",
+   "rtadubai"
+  ],
+  "official_domains": [
+   "rta.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "dubaipolice",
+  "name_en": "Dubai Police",
+  "name_ar": "شرطة دبي",
+  "tokens": [
+   "dubaipolice"
+  ],
+  "official_domains": [
+   "dubaipolice.gov.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "adpolice",
+  "name_en": "Abu Dhabi Police",
+  "name_ar": "شرطة أبوظبي",
+  "tokens": [
+   "adpolice",
+   "abudhabipolice"
+  ],
+  "official_domains": [
+   "adpolice.gov.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "emiratespost",
+  "name_en": "Emirates Post",
+  "name_ar": "بريد الإمارات",
+  "tokens": [
+   "emiratespost"
+  ],
+  "official_domains": [
+   "emiratespost.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "icp",
+  "name_en": "ICP",
+  "name_ar": "الهيئة الاتحادية للهوية والجنسية",
+  "tokens": [
+   "icp",
+   "emiratesid",
+   "icpuae"
+  ],
+  "official_domains": [
+   "icp.gov.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "salik",
+  "name_en": "Salik",
+  "name_ar": "سالك",
+  "tokens": [
+   "salik"
+  ],
+  "official_domains": [
+   "salik.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "darb",
+  "name_en": "Darb",
+  "name_ar": "درب",
+  "tokens": [
+   "darb"
+  ],
+  "official_domains": [
+   "darb.itc.gov.ae",
+   "itc.gov.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "etisalat",
+  "name_en": "etisalat",
+  "name_ar": "اتصالات",
+  "tokens": [
+   "etisalat",
+   "eand"
+  ],
+  "official_domains": [
+   "etisalat.ae",
+   "eand.com"
+  ],
+  "services": []
+ },
+ {
+  "id": "du",
+  "name_en": "du",
+  "name_ar": "دو",
+  "tokens": [
+   "dutelecom"
+  ],
+  "official_domains": [
+   "du.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "dewa",
+  "name_en": "DEWA",
+  "name_ar": "هيئة كهرباء ومياه دبي",
+  "tokens": [
+   "dewa"
+  ],
+  "official_domains": [
+   "dewa.gov.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "emiratesnbd",
+  "name_en": "Emirates NBD",
+  "name_ar": "بنك الإمارات دبي الوطني",
+  "tokens": [
+   "emiratesnbd",
+   "enbd"
+  ],
+  "official_domains": [
+   "emiratesnbd.com",
+   "enbd.com"
+  ],
+  "services": []
+ },
+ {
+  "id": "adcb",
+  "name_en": "ADCB",
+  "name_ar": "بنك أبوظبي التجاري",
+  "tokens": [
+   "adcb"
+  ],
+  "official_domains": [
+   "adcb.com"
+  ],
+  "services": []
+ },
+ {
+  "id": "fab",
+  "name_en": "First Abu Dhabi Bank",
+  "name_ar": "بنك أبوظبي الأول",
+  "tokens": [
+   "bankfab",
+   "fabbank"
+  ],
+  "official_domains": [
+   "bankfab.com",
+   "fab.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "mashreq",
+  "name_en": "Mashreq",
+  "name_ar": "المشرق",
+  "tokens": [
+   "mashreq"
+  ],
+  "official_domains": [
+   "mashreq.com",
+   "mashreqbank.com"
+  ],
+  "services": []
+ },
+ {
+  "id": "dib",
+  "name_en": "Dubai Islamic Bank",
+  "name_ar": "بنك دبي الإسلامي",
+  "tokens": [
+   "dib",
+   "dubaiislamic"
+  ],
+  "official_domains": [
+   "dib.ae"
+  ],
+  "services": []
+ },
+ {
+  "id": "moi",
+  "name_en": "Ministry of Interior",
+  "name_ar": "وزارة الداخلية",
+  "tokens": [
+   "moiuae"
+  ],
+  "official_domains": [
+   "moi.gov.ae"
+  ],
+  "services": []
+ }
+]

@@ -1,0 +1,35 @@
+:root {
+  --bg: #f3f4f6; --surface: #fff; --line: #e2e5ea; --text: #1c2430; --muted: #5f6b7a; --accent: #1f4e8c;
+  --allow: #1b7f4b; --allow-soft: #e3f4ea; --warn: #a35f00; --warn-soft: #fdf0dc; --block: #b42318; --block-soft: #fde8e6;
+  --grey-soft: #eef0f3;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Arabic', 'Geeza Pro', sans-serif;
+  font-size: 16px; line-height: 1.5; color: var(--text); background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+main { max-width: 34rem; margin: 0 auto; padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom)); }
+h1 { font-size: 1.4rem; margin: 0.25rem 0 0.75rem; }
+h2 { font-size: 1.1rem; margin: 0 0 0.5rem; }
+p { margin: 0.4rem 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin-bottom: 0.85rem; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.domain { font-family: ui-monospace, Menlo, monospace; direction: ltr; unicode-bidi: isolate; overflow-wrap: anywhere; }
+button, .button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 2.9rem; padding: 0.6rem 1rem;
+  font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  text-decoration: none; cursor: pointer;
+}
+button:disabled { opacity: 0.55; }
+.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.safe { background: var(--allow); border-color: var(--allow); color: #fff; width: 100%; }
+.full { width: 100%; }
+input, textarea { width: 100%; font: inherit; padding: 0.7rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); }
+textarea { min-height: 8rem; }
+.error { background: var(--block-soft); color: var(--block); padding: 0.6rem 0.8rem; border-radius: 10px; }
+.stack { display: grid; gap: 0.6rem; }
+.badge { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; background: var(--grey-soft); color: var(--muted); }
+.badge.allow { background: var(--allow-soft); color: var(--allow); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.block { background: var(--block-soft); color: var(--block); }

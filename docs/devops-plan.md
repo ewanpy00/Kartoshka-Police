@@ -77,7 +77,7 @@ Sandbox hardening: `user: pwuser`, `cap_drop: [ALL]`, `security_opt: [no-new-pri
 | `DATA_DIR` | `/srv/data` | core, worker, hunter |
 | `CORE_WRITE_TOKEN` | empty in `.env.example`; `make up` generates one when it creates `.env` | core, console (as `VITE_CORE_WRITE_TOKEN`) |
 | `BATCH_URL_BUDGET_MS` | `3000` | core |
-| `BATCH_CUTOFF` | `70` | core |
+| `BATCH_CUTOFF` | `70` (40 since app slice 1) | core |
 | `BATCH_CONCURRENCY` | `20` | core |
 | `BIND_ADDR`, `CORE_PORT` | `127.0.0.1`, `8000` | compose (core's published address) |
 | `CONSOLE_PORT` | `5173` | compose (always bound to 127.0.0.1) |
@@ -182,7 +182,7 @@ Package details that are not obvious from the table:
    - Closing these needs an egress proxy with `sandbox_net` set to internal; that is a follow-up, not part of this skeleton.
 4. **The write token is a shared dev token, not officer auth.** It ships in the console's client bundle, so anyone who can open the console can read it. The console login is a mock in the docs; real auth replaces this.
 5. **Unknown URLs return `pending` from `/v1/check`, and a definite answer from `/v1/batch`.**
-6. **`BATCH_CUTOFF` is 70**, the brief's block band. The eval owner tunes it. In the skeleton nothing resolves a pending check, so every unknown URL in a batch uses its full budget and comes back `allow` with `timed_out` true. This is skeleton-only and is replaced by the fast score in slice 1.
+6. **`BATCH_CUTOFF` is 70**, the brief's block band. The eval owner tunes it (slice 1 of the application build set it to 40; see `docs/app-plan.md`, decision 11). In the skeleton nothing resolves a pending check, so every unknown URL in a batch uses its full budget and comes back `allow` with `timed_out` true. This is skeleton-only and is replaced by the fast score in slice 1.
 7. **Chromium runs with Playwright's default (its own sandbox off).** The container is the boundary. Turning Chromium's sandbox on needs a custom seccomp profile; it is a follow-up.
 8. **Fresh browser context per job, not a container per job.** The brief asks for a container per job; the spec for this skeleton asks for a context per job.
 9. **AdGuard pinned to v0.107.80, not v1.0.0.** v1.0.0 was five days old on 2026-11-24. No config is committed because AdGuard rewrites its config file at runtime; the first-run wizard is at port 3001.
@@ -225,3 +225,4 @@ The final report covers what works, what is stubbed, what could not be verified,
 - 2026-11-24: first integration pass in the working directory. `make up` brought all eight default services up healthy. Verification steps 2 to 6, 8 and 9 passed there; step 6 produced the published-port finding now in decision 2.
 - 2026-11-24: independent review returned five findings (popup redirect bypass, allowlist subdomain matching, stale sandbox tests, scripts failing before the first `make up`, stale console dependencies). All five fixed and committed.
 - 2026-11-24: full verification list run from a clean clone of the branch; every step passed. Test counts: core 27, sandbox 36, hunter 20, console build clean. Images were already cached, so cold build time was not measured. `make up` then run again in the working directory.
+- 2026-11-24: verified on a second machine (Docker Engine 29.7.2, 4 GiB, 2 CPUs, empty image cache) from `main` after the merge. Cold `make up` took 265 s; every service came up healthy and peak use stayed under 1 GiB in total. Verification steps 1 to 11 passed, with step 9 checked by curl through the Vite proxy. Step 6 reproduced decision 2: core is reachable from the sandbox by container IP and through `host.docker.internal`, postgres and redis are not. Vite logs an HMR update only when a loaded module's content changes, so `touch` alone is not enough to see it.

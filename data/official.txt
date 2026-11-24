@@ -1,0 +1,5 @@
+# Domains whose every subdomain is official. Registration under these is restricted by the UAE TDRA.
+# Format: domain [brand_id]
+gov.ae
+mil.ae
+u.ae

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">الحارس</string>
+    <string name="share_label">افحص مع كرتوشكا</string>
+    <string name="demo_banner">نسخة تجريبية للهاكاثون. ليست تطبيقًا رسميًا للشرطة.</string>
+    <string name="channel_alerts">تنبيهات الاحتيال</string>
+
+    <string name="checking">جارٍ فحص الرابط…</string>
+    <string name="no_browser">لا يوجد متصفح آخر مثبت لفتح هذا الرابط.</string>
+
+    <string name="imitates">ينتحل صفة: %1$s · %2$s</string>
+    <string name="offline_note">تم الفحص على هذا الهاتف فقط: تعذر الوصول إلى خادم الشرطة.</string>
+    <string name="go_back">رجوع</string>
+    <string name="report">إبلاغ الشرطة</string>
+    <string name="details">التفاصيل: شكل الصفحة وكل الفحوصات</string>
+    <string name="open_anyway">فتح على أي حال</string>
+    <string name="report_sent">تم إرسال البلاغ. تابعه في بلاغاتي.</string>
+    <string name="report_failed">تعذر إرسال البلاغ. حاول مرة أخرى.</string>
+
+    <string name="notify_blocked_title">رابط فتحته احتيالي</string>
+    <string name="notify_blocked_text">اكتمل التحليل: تم حظر %1$s. لا تُدخل أي بيانات فيه.</string>
+
+    <string name="protection">الحماية</string>
+    <string name="default_on">الحارس يفحص كل رابط تضغط عليه.</string>
+    <string name="default_off">الحارس ليس متصفحك الافتراضي بعد، لذلك لا تُفحص الروابط.</string>
+    <string name="set_default">افحص كل رابط (اجعله المتصفح الافتراضي)</string>
+    <string name="set_dns">احظر مواقع الاحتيال في كل التطبيقات (DNS الخاص)</string>
+    <string name="dns_copied">تم نسخ %1$s. افتح DNS الخاص والصقه.</string>
+    <string name="dns_not_configured">لا يوجد خادم DNS خاص في هذه النسخة التجريبية.</string>
+    <string name="forward_to">تُفتح الروابط الآمنة في: %1$s</string>
+    <string name="pick_browser">اختر متصفح الروابط الآمنة</string>
+    <string name="none">لا يوجد</string>
+    <string name="never">أبدًا</string>
+    <string name="list_state">المحظور على هذا الهاتف: %1$d · تحديث قائمة الشرطة %2$s</string>
+
+    <string name="tools">افحص وأبلغ</string>
+    <string name="open_check">افحص رابطًا</string>
+    <string name="open_sms">الصق رسالة نصية</string>
+    <string name="open_reports">بلاغاتي</string>
+    <string name="open_radar">رادار الاحتيال</string>
+</resources>
