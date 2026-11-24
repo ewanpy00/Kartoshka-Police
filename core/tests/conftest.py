@@ -1,4 +1,7 @@
+import asyncio
+import json
 import os
+from types import SimpleNamespace
 
 import pytest
 from alembic import command
@@ -94,6 +97,62 @@ def session():
         outer.rollback()
 
 
+class RecordingRedis:
+    """Stands in for the Redis connection `app.events` publishes on. Everything sent is kept in memory, and
+    a fake pub/sub reads it back, so no test reaches the real `kp:events` channel."""
+
+    def __init__(self):
+        self.sent: list[tuple[str, str]] = []  # (channel, raw message)
+        self.pairs: list[tuple[str, dict]] = []  # (type, data) of each envelope
+
+    def publish(self, channel, message):
+        self.sent.append((channel, message))
+        envelope = json.loads(message)
+        self.pairs.append((envelope["type"], envelope["data"]))
+        return 0
+
+
+class FakePubSub:
+    def __init__(self, recorder: RecordingRedis):
+        self.recorder = recorder
+        self.start = len(recorder.sent)
+
+    async def subscribe(self, *channels):
+        self.start = len(self.recorder.sent)
+
+    async def listen(self):
+        index = self.start
+        while True:
+            if index < len(self.recorder.sent):
+                yield {"type": "message", "data": self.recorder.sent[index][1].encode()}
+                index += 1
+            else:
+                await asyncio.sleep(0.01)
+
+    async def aclose(self):
+        pass
+
+
+class FakeAsyncRedis:
+    def __init__(self, recorder: RecordingRedis):
+        self.recorder = recorder
+
+    def pubsub(self, **kwargs):
+        return FakePubSub(self.recorder)
+
+    async def aclose(self):
+        pass
+
+
+@pytest.fixture(autouse=True)
+def redis_events(monkeypatch):
+    """Replace the lowest boundary `app.events` sends through (the Redis connection) with a recorder."""
+    recorder = RecordingRedis()
+    monkeypatch.setattr(events, "queue", SimpleNamespace(get_redis=lambda: recorder))
+    monkeypatch.setattr(events, "aioredis", SimpleNamespace(from_url=lambda url: FakeAsyncRedis(recorder)))
+    return recorder
+
+
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     """No network in tests: RDAP finds nothing, DNS resolves nothing, the verdict cache is empty, and the
@@ -118,6 +177,9 @@ def offline(monkeypatch):
     monkeypatch.setattr(cache, "set_json", drop)
     monkeypatch.setattr(cache, "publish", lambda event: None, raising=False)
     monkeypatch.setattr(queue, "claim_deep", lambda host: True)
+    monkeypatch.setattr(queue, "release_deep", lambda host: None)
+    monkeypatch.setattr(queue, "enqueue", lambda name, *args, timeout=300: None)
+    monkeypatch.setattr(cache, "bump_blocklist_version", lambda: None)
     monkeypatch.setattr(url_model, "predict", lambda features: None)
     return registered
 
@@ -130,12 +192,11 @@ def enqueued(monkeypatch):
 
 
 @pytest.fixture
-def published(monkeypatch):
-    """(type, data) pairs sent through app.events.publish. Events held by publish_after_commit arrive here
-    when the session commits."""
-    messages = []
-    monkeypatch.setattr(events, "publish", lambda type, data: messages.append((type, data)), raising=False)
-    return messages
+def published(redis_events):
+    """(type, data) pairs sent through app.events.publish, including events held by publish_after_commit
+    once the session commits. The list grows as events are sent."""
+
+    return redis_events.pairs
 
 
 @pytest.fixture

@@ -1,18 +1,17 @@
 import json
 import logging
 from datetime import datetime
+from types import SimpleNamespace
 
-from app import events, queue
+from app import events
 
 
-def test_publish_sends_envelope_on_channel():
-    pubsub = queue.get_redis().pubsub(ignore_subscribe_messages=True)
-    pubsub.subscribe(events.CHANNEL)
-    pubsub.get_message(timeout=1)
+def test_publish_sends_envelope_on_channel(redis_events):
     events.publish("case.reviewed", {"domain": "tamm-pay.xyz", "decision": "confirm", "reviewer": "officer"})
-    message = pubsub.get_message(timeout=2)
-    pubsub.close()
-    envelope = json.loads(message["data"])
+    [(channel, message)] = redis_events.sent
+    assert channel == events.CHANNEL
+    envelope = json.loads(message)
+    assert set(envelope) == {"type", "at", "data"}
     assert envelope["type"] == "case.reviewed"
     assert envelope["data"] == {"domain": "tamm-pay.xyz", "decision": "confirm", "reviewer": "officer"}
     assert datetime.fromisoformat(envelope["at"]).utcoffset().total_seconds() == 0
@@ -22,7 +21,7 @@ def test_publish_logs_and_swallows_redis_failure(monkeypatch, caplog):
     def broken():
         raise ConnectionError("redis down")
 
-    monkeypatch.setattr(queue, "get_redis", broken)
+    monkeypatch.setattr(events, "queue", SimpleNamespace(get_redis=broken))
     with caplog.at_level(logging.ERROR):
         events.publish("check.completed", {})
     assert "Could not publish check.completed event" in caplog.text
