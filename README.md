@@ -49,12 +49,14 @@ On first run this creates `.env` from `.env.example` with a generated `CORE_WRIT
 | What | Address |
 |---|---|
 | Core API | http://127.0.0.1:8000 (interactive docs at `/docs`) |
-| Officer console | http://127.0.0.1:5173 (mock sign-in, clearly labelled as a demo) |
+| Officer console | http://127.0.0.1:5173 (asks for an access code, which is `CORE_WRITE_TOKEN` from `.env`; the officer sign-in is a clearly labelled demo) |
 | Resident PWA | http://127.0.0.1:5174 |
 | AdGuard admin (`make up-stretch` only) | http://127.0.0.1:3001 (user and password in `.env`) |
 | AdGuard DNS (`make up-stretch` only) | port 5335 |
 
 Nothing else is published to the host. Postgres and redis are reachable only from inside the compose network.
+
+To run it as one public service on Railway, see [docs/railway.md](docs/railway.md).
 
 ### Make targets
 
