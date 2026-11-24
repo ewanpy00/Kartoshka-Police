@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { adaptEvent } from '../adapt'
 import { apiJson, apiToken, errorText } from '../api'
 import { band } from '../bands'
+import WatchlistPanel from '../components/WatchlistPanel.vue'
 import { defang } from '../defang'
 import { formatTime, t } from '../i18n'
 import type { FeedRow } from '../types'
@@ -15,6 +16,7 @@ const rows = ref<FeedRow[]>([])
 const connected = ref(false)
 const unauthorised = ref(false)
 const error = ref('')
+const woke = ref<string[]>([])
 let socket: WebSocket | null = null
 let retry: ReturnType<typeof setTimeout> | undefined
 let closed = false
@@ -22,6 +24,7 @@ let closed = false
 function push(row: FeedRow) {
   if (rows.value.some((existing) => existing.key === row.key)) return
   rows.value = [row, ...rows.value].slice(0, MAX_ROWS)
+  if (row.type === 'watchlist.woke' && row.domain && !woke.value.includes(row.domain)) woke.value = [...woke.value, row.domain]
 }
 
 function connect() {
@@ -79,6 +82,8 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <div class="queue-layout">
+    <WatchlistPanel :woke="woke" />
     <div class="card">
       <p v-if="!rows.length" class="empty">{{ t('feedEmpty') }}</p>
       <table v-else class="table">
@@ -105,6 +110,7 @@ onBeforeUnmount(() => {
           </tr>
         </tbody>
       </table>
+    </div>
     </div>
   </div>
 </template>
