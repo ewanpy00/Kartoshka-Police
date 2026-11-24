@@ -50,6 +50,7 @@ export const navGroups: NavGroup[] = [
         icon: 'M6.5 9.5l3-3M5 7.5L3.5 9a2.1 2.1 0 003 3L8 10.5M8 5.5L9.5 4a2.1 2.1 0 013 3L11 8.5',
       },
       { to: '/audit', label: 'navAudit', icon: 'M4 1.500h6l3 3v10H4zM9.5 1.500v3.500h3.500M6 8h5M6 11h5' },
+      { to: '/health', label: 'navHealth', icon: 'M1.5 8.5h3l1.500-3.500 3 7 1.500-3.500h4' },
     ],
   },
 ]

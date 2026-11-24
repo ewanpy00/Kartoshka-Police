@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { locale, setLocale, t } from './i18n'
+import HealthStrip from './components/HealthStrip.vue'
 import { navGroups } from './nav'
 import { officer, officerName, signIn, signOut } from './session'
 import { refreshStats, useStats } from './stats'
@@ -49,6 +50,7 @@ watch(officer, (value) => {
       <strong class="brand">{{ t('appTitle') }}</strong>
     </div>
     <div class="topbar-end">
+      <HealthStrip v-if="officer" />
       <div class="seg" role="group" :aria-label="t('languageLabel')">
         <button type="button" :aria-pressed="locale === 'en'" @click="setLocale('en')">{{ t('langEn') }}</button>
         <button type="button" :aria-pressed="locale === 'ar'" @click="setLocale('ar')">{{ t('langAr') }}</button>
