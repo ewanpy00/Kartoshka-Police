@@ -309,3 +309,18 @@ Same rules as above: Sonnet subagents write, the main session verifies and commi
 - Auto-confirmed today reads the newest 500 audit entries.
 - The review independent of the authors found a confirm that could reach the previously selected case while the next one loaded, a reject reason carried between cases, and a double post on a double click. All three are fixed and tested.
 - The dev database now also holds `restyle-uaepass-verify.example` and `restyle-plain-shop.example` (open) and `restyle-tamm-pay.example` (rejected), created for this verification.
+
+## Stage 2 (2026-11-24)
+
+Scope: `console/` only, on `feat/console-stage2` from `main` after the feat/app merge. Six screens from feat/app's older console, rebuilt in the restyled design. No backend change.
+
+1. Foundation first: grouped side menu (Review, Detection, Insights, System), types, adapters with fixtures from the running API, and all i18n keys. One owner for `router.ts`, `App.vue`, `nav.ts`, `i18n.ts`, `types.ts`, `adapt.ts`, `style.css`.
+2. Then one package per screen with its own files: Impact, Model quality, Hunter watchlist (on the feed page), Campaign actions, Health (page and top-bar strip), Takedown extras. A screen gets its route and menu entry only after its browser check.
+3. Impact: totals, an inline SVG chart (no chart library is installed) with the same numbers in a table, and lead time only for cases whose Safe Browsing or VirusTotal lookup really ran (`lead_time.state` of `ahead` or `hit` on the case), worded "at least N h, K cases".
+4. Model quality: per-band table from `/v1/admin/stats`, a disagreement list derived from the newest 500 audit entries (system said block and the officer rejected, or allow and confirmed), and URL-model metrics with row counts. Dataset name, dataset date and held-out show "not stated": the API does not send them.
+5. Watchlist: attempts, page state, next re-check. The API has no credential-form flag, so `live` rows are looked up on the case (`page.asks_for`) and `watchlist.woke` events highlight at once.
+6. Campaign actions: merge and exclude need a reason and a confirm step and are audited by the backend. Pivot is a read-only search (the route writes nothing); official and allowlisted domains show as refused.
+7. Health: `/v1/admin/health` on a page and a compact strip, a single dot under 700px. Only the AI key state is reported by the API; other keys show "not stated".
+8. Takedown extras: stats, states after "sent", a detail panel with the request's audit rows, and "Check now". "Verifying, N of 2" until the backend closes the request; the 2 mirrors `TAKEDOWN_OFFLINE_CHECKS`, which the API does not expose.
+9. No drawer or modal exists in the design: detail panels use the two-column `.split` layout, confirmations use the armed-button pattern with a reason field.
+10. Tests: one vitest file per package, run once. One review pass, one round of fixes, then `make test` once.

@@ -927,5 +927,145 @@ export const backend: Record<string, any> = {
     }
    ]
   }
+ },
+ "stats": {
+  "range": "7d",
+  "since": "2026-11-17T18:00:23.885639+00:00",
+  "now": "2026-11-24T18:00:23.885639+00:00",
+  "totals": {
+   "checks": 729, "warn": 523, "block": 50, "candidates": 721,
+   "candidates_by_source": { "ct": 715, "nrd": 6 },
+   "reports": 1, "confirmed": 1, "rejected": 1,
+   "blocked_hits": { "share": 3 },
+   "blocklist_size": 5, "taken_down": 0
+  },
+  "series": {
+   "buckets": ["2026-11-23T00:00:00+00:00", "2026-11-24T00:00:00+00:00", "2026-11-25T00:00:00+00:00"],
+   "checks": [0, 573],
+   "candidates": [0, 721, 4],
+   "confirmed": [0, 1, 0]
+  },
+  "lead_time": {
+   "domains": [
+    {
+     "domain": "lead-one.example", "display": "lead-one[.]example", "brand_id": "adpolice",
+     "seen": "2026-11-24T10:00:00+00:00", "confirmed": "2026-11-24T12:00:00+00:00", "hours_to_confirm": 2.0,
+     "gsb_first_hit": null, "vt_first_hit": null,
+     "lead_vs_gsb_h": 5.0, "lead_vs_gsb_open": true, "lead_vs_vt_h": null, "lead_vs_vt_open": false
+    }
+   ],
+   "median_hours_to_confirm": 2.0, "median_lead_vs_gsb_h": 5.0, "median_lead_vs_vt_h": null,
+   "flagged_by_gsb_later": 0, "not_flagged_by_gsb_yet": 1
+  },
+  "takedown_median_hours": null,
+  "quality": {
+   "days": 30, "reviews": 2,
+   "by_band": {
+    "warn": { "confirmed": 1, "cleared": 0, "other_reject": 0 },
+    "block": { "confirmed": 0, "cleared": 0, "other_reject": 1 }
+   },
+   "block_precision": null, "warn_confirm_rate": 1.0, "false_blocks": 0,
+   "url_model": null, "labels_for_retrain": 1
+  }
+ },
+ "statsModel": {
+  "range": "24h",
+  "totals": {},
+  "series": { "buckets": [], "checks": [], "candidates": [], "confirmed": [] },
+  "lead_time": { "domains": [] },
+  "quality": {
+   "days": 30, "reviews": 40,
+   "by_band": {
+    "allow": { "confirmed": 1, "cleared": 3, "other_reject": 0 },
+    "warn": { "confirmed": 9, "cleared": 6, "other_reject": 1 },
+    "block": { "confirmed": 18, "cleared": 2, "other_reject": 0 }
+   },
+   "block_precision": 0.9, "warn_confirm_rate": 0.56, "false_blocks": 2,
+   "url_model": {
+    "updated_at": "2026-11-20T09:00:00+00:00", "score": 0.93,
+    "metrics": {
+     "train_rows": 12000, "holdout_rows": 3000, "precision@0.5": 0.94, "recall@0.5": 0.88, "recall@0.9": 0.61,
+     "top_features": ["url_length", "digit_ratio"], "officer_phish": 18, "officer_benign": 5
+    }
+   },
+   "labels_for_retrain": 23
+  }
+ },
+ "watchlist": {
+  "total": 335,
+  "entries": [
+   {
+    "domain": "watch-one.example", "display": "watch-one[.]example", "display_url": "hxxps://watch-one[.]example/",
+    "reason": "PARKED", "brand_id": null, "last_status": "parked",
+    "last_checked_at": "2026-11-24T14:51:15.078256+00:00", "offline_since": null, "checks_done": 0,
+    "next_check_at": "2026-11-24T20:51:15.078256+00:00", "expires_at": "2026-12-08T14:51:15.078256+00:00"
+   },
+   {
+    "domain": "watch-two.example", "display": "watch-two[.]example", "display_url": "hxxps://www[.]watch-two[.]example/",
+    "reason": "UNREACHABLE", "brand_id": "adpolice", "last_status": "unreachable",
+    "last_checked_at": "2026-11-24T14:51:22.069081+00:00", "offline_since": "2026-11-24T14:51:22.069081+00:00", "checks_done": 1,
+    "next_check_at": "2026-11-24T20:51:22.069081+00:00", "expires_at": "2026-12-08T14:51:22.069081+00:00"
+   }
+  ],
+  "next_cursor": 2
+ },
+ "health": {
+  "checked_at": "2026-11-24T18:00:23.965187+00:00",
+  "deep_queue": { "waiting": 30, "failed": 0, "workers": 1 },
+  "redis": "ok",
+  "hunter": {
+   "ct": { "last": "2026-11-24T18:00:19.463191+00:00", "last_24h": 715 },
+   "nrd": { "last": null, "last_24h": 0 }
+  },
+  "checks": { "last": "2026-11-24T18:00:19.465967+00:00", "last_hour": 195, "deep_running": 31, "deep_stale": 40 },
+  "models": { "url_model": null, "visual_refs": { "updated_at": "2026-11-20T09:00:00+00:00", "score": 0.8 } },
+  "evidence": { "records": 491 },
+  "blocklist_version": 46,
+  "ai": "configured"
+ },
+ "takedownStats": {
+  "by_status": { "pack_ready": 1, "sent": 0, "offline_pending": 0, "closed": 0, "reopened": 0 },
+  "overdue": 0,
+  "median_hours_to_offline": null,
+  "recipients": { "gsb": { "requests": 1, "closed": 0, "median_hours": null }, "registrar": { "requests": 2, "closed": 1, "median_hours": 6.5 } },
+  "sla_hours": 48
+ },
+ "takedownDetail": {
+  "id": "td_1", "domain": "a.example", "display": "a[.]example", "campaign_id": null,
+  "recipient_kind": "gsb", "recipient": "https://safebrowsing.google.com/safebrowsing/report_phish/", "form": true,
+  "status": "offline_pending", "overdue": false, "pack_sha256": "a16fa6a960a89453cf67701b74fab70ba7820e00228ec95ae5898857318c87a4",
+  "generated_at": "2026-11-24T15:22:20.928128+00:00", "sent_at": "2026-11-24T16:00:00+00:00", "sent_by": "Demo Officer",
+  "offline_at": "2026-11-24T17:00:00+00:00", "offline_reason": "nxdomain", "checks_offline": 1,
+  "pack": [
+   {
+    "id": "td_1", "domain": "a.example", "display": "a[.]example", "campaign_id": null,
+    "recipient_kind": "gsb", "recipient": "https://safebrowsing.google.com/safebrowsing/report_phish/", "form": true,
+    "status": "offline_pending", "overdue": false, "pack_sha256": "a16fa6a960a89453cf67701b74fab70ba7820e00228ec95ae5898857318c87a4",
+    "generated_at": "2026-11-24T15:22:20.928128+00:00", "sent_at": "2026-11-24T16:00:00+00:00", "sent_by": "Demo Officer",
+    "offline_at": "2026-11-24T17:00:00+00:00", "offline_reason": "nxdomain", "checks_offline": 1
+   }
+  ]
+ },
+ "recheck": { "queued": true, "domain": "a.example", "display": "a[.]example" },
+ "excludeResult": { "domain": "b.example", "display": "b[.]example", "campaign": "cmp_1", "domain_count": 3 },
+ "mergeResult": { "id": "cmp_1", "name": "Merged campaign", "status": "suspected", "merged": ["cmp_2"] },
+ "pivot": {
+  "leads": [
+   {
+    "domain": "lead-a.example", "display": "lead-a[.]example",
+    "via": [{ "kind": "ns", "label": "ns1.shared.example", "strong": true }, { "kind": "ip", "label": "203.0.113.7", "strong": false }],
+    "status": "open", "score": 82, "campaign": null
+   },
+   { "domain": "lead-b.example", "display": "lead-b[.]example", "via": [], "status": null, "score": null, "campaign": "cmp_9" }
+  ],
+  "total": 2
+ },
+ "entity": {
+  "kind": "ns", "value": "ns1.shared.example", "label": "ns1.shared.example", "first_seen": "2026-11-20T10:00:00+00:00",
+  "domain_count": 2, "hub": false,
+  "domains": [
+   { "domain": "c.example", "display": "c[.]example", "status": "confirmed", "strength": "strong", "excluded": false, "campaign": "cmp_1", "evidence_id": "ev_1", "score": 91 },
+   { "domain": "d.example", "display": "d[.]example", "status": null, "strength": "weak", "excluded": true, "campaign": null, "evidence_id": null, "score": null }
+  ]
  }
 }
