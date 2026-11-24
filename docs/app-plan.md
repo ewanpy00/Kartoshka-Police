@@ -1,6 +1,6 @@
 # Kartoshka-Police application build: plan
 
-Status: in progress on branch `feat/app`. Builds the application described in `ARCHITECTURE.md` on top of the DevOps skeleton (`docs/devops-plan.md`). Progress notes are at the bottom.
+Status: built and merged into `main` (it was developed on branch `feat/app`). This plan builds the application described in `ARCHITECTURE.md` on top of the DevOps skeleton (`docs/devops-plan.md`). Progress notes are at the bottom. Where the build differs from the slices below (for example, A5 kit clustering and A6 officer copilot were not built), `ARCHITECTURE.md` marks it.
 
 ## Slices
 

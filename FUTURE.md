@@ -1,17 +1,17 @@
-# Kartoshka / ScamShield — Future
+# Kartoshka-Police: what comes next
 
-Things we want after the hackathon. They are not in the 24h build because they need development time on the other side (TAMM, UAE PASS, registrars), not because the Core API is missing. Each one is safe to show in the presentation as a next step: same check API, another client.
+Things we want after the ScamShield AI hackathon. They are not in the 24h build because they need development time on the other side (TAMM, UAE PASS, registrars), not because the Core API is missing. Each one is safe to show in the presentation as a next step: same check API, another client.
 
 ---
 
 ## 1. "Check a link" inside TAMM
 
-Add ScamShield's link check as a service inside the TAMM app. The resident pastes a suspicious link, or shares one into TAMM, and gets the same verdict the Android app gets: allow / warn / block, score, and reasons in Arabic and English.
+Add Kartoshka-Police's link check as a service inside the TAMM app. The resident pastes a suspicious link, or shares one into TAMM, and gets the same verdict the Android app gets: allow / warn / block, score, and reasons in Arabic and English.
 
 TAMM becomes another entry point. It calls the same Core API as Gatekeeper (`POST /v1/check`). No second scoring engine.
 
 Why it matters:
-- It covers the biggest limit of the current app. iPhone cannot use Kartoshka as the default browser. TAMM is already on iPhone and Android, so both platforms get the check.
+- It covers the biggest limit of the current app: Gatekeeper is Android only (the iPhone route is in [docs/apple-development-plan.md](docs/apple-development-plan.md)). TAMM is already on iPhone and Android, so both platforms get the check.
 - Millions of residents already have TAMM. They can check a link without installing a new app and without changing their default browser.
 - A fake fine link checked here can still offer **Check your real fines in TAMM**, because the user is already inside the real service.
 

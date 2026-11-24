@@ -1,6 +1,6 @@
 # Kartoshka-Police admin dashboard: build plan
 
-Status: approved 2026-11-24, not started. Progress notes go at the bottom of this file.
+Status: approved and built on 2026-11-24, and merged into `main`. The build log, including later changes, is in `docs/admin-plan.md`.
 
 The admin dashboard is the Officer Console (`console/`), slice 5 of `docs/app-plan.md`, extended with campaigns, a takedown tracker and operational pages. The design rationale is in the proposal on the `docs` branch (`docs/admin-panel.md`); this file holds the build contract. ARCHITECTURE.md section 5 summarises it.
 

@@ -1,6 +1,6 @@
 # Kartoshka-Police DevOps skeleton: plan
 
-Status: built and verified on 2026-11-24, on branch `devops/skeleton` (not pushed). Progress notes are at the bottom of this file.
+Status: built and verified on 2026-11-24, and merged into `main`. Progress notes are at the bottom of this file.
 
 ## Context
 

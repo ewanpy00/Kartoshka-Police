@@ -1,6 +1,6 @@
 # Officer Console (admin panel) plan
 
-This is the build plan and progress log for branch `feat/admin-console`.
+This is the build plan and progress log of the Officer Console. It was built on branch `feat/admin-console`, then restyled and extended (stage 2), and all of it is merged into `main`.
 
 ## Status (2026-11-24)
 

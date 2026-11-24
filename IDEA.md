@@ -1,62 +1,61 @@
-Engine - VirusTotal/Google/urllib.parse.html.  
-    Detection Accuracy - ✅
+# Kartoshka-Police: the idea
 
+Scam links reach UAE residents by SMS, WhatsApp and email, usually pretending to be TAMM, RTA, UAE PASS, a bank or a delivery company. Known-bad lists such as Google Safe Browsing and VirusTotal catch them late: a new page made for UAE residents often shows 0 detections in its first hours, which is when most victims open it.
 
-IDEAS:
+Kartoshka-Police answers with one link-checking engine and several ways to reach it. This file records the starting ideas and how they were weighed against the ScamShield AI judging criteria on 24 November 2026. The design that came out of it is [ARCHITECTURE.md](ARCHITECTURE.md); what is built is listed in the [README](README.md).
 
-    DNS for house router
-        IDEA: Usage for families and closed communities
+## The three starting ideas
 
-    set up a default browser on the phone that can define the threat and then call a normal browser if there is nothing dangerous.
+| Idea | Verdict | Why |
+|---|---|---|
+| A detection engine on top of VirusTotal, Google Safe Browsing and URL parsing | Keep, but add our own scoring | The lookups lag on new pages, and URL parsing only splits a link into parts. The signals have to be built on top (see below). |
+| DNS blocking on the home router, for families and closed communities | Keep, as an extra layer | Covers every device at home with no setup per device. DNS can only allow or block a whole domain, so it blocks officer-confirmed domains only. |
+| A default browser on the phone that checks every link first, then hands safe links to the normal browser | The strongest idea, Android first | It sees the full link from SMS, WhatsApp and email, exactly where UAE scams start. |
 
+## The engine
 
----
+- **Our own signals:** registrable domain, decoded international (punycode) names, a brand name in the subdomain, distance to the official domain, look-alike characters, scam words (pay, fine, verify), and domain age from RDAP.
+- **A small model on top:** a LightGBM model over the same URL features, trained on public phishing feeds against popular legitimate sites.
+- **AI explains, it doesn't decide.** The numeric score stays deterministic so precision and recall are stable and reproducible. AI is used for the uncertain middle band and for reasons in Arabic and English.
+- **An allowlist of official UAE domains** (`*.gov.ae`, `tamm.abudhabi`, `uaepass.ae`, the UAE banks, the most popular sites) keeps false positives low, which is judged explicitly.
+- **Evasion:** follow the full redirect chain, expand URL shorteners, normalise look-alike characters, and visit the page twice (as a bot and as an Arabic phone) to catch pages that hide from scanners.
+- **A dead page is not a safe page.** URL features and domain age must work without loading the page.
+- **Free API limits** (VirusTotal allows about 4 requests a minute) mean results are cached and every check works without the external lookups.
+- **Judges need numbers:** a batch route and an evaluation tool that print precision, recall and false positive rate on a labelled set.
 
-## Review of the ideas above against the judging criteria (24 Nov)
+## DNS for homes and communities
 
-### Engine (VirusTotal / Google Safe Browsing / urllib.parse) — Detection Accuracy: partial, not ✅
-- VT can scan a NEW URL live (~70 engines, some heuristic/ML), so it is not only a known-list. But on brand-new, UAE-targeted pages detections often lag (0/70 in the first hours), and a live scan takes seconds to minutes. GSB is list-based.
-- urllib.parse only SPLITS the URL (scheme/host/path/query). Signals must be built on top: registrable domain (tldextract), IDN/punycode decode, brand-in-subdomain, lookalike distance, keywords, domain age (RDAP).
-- AI model on top of engine output (VT verdicts + parsed URL features + RDAP + page capture) = good plan. Use it for the gray zone (30-70%) and for AR/EN reasons; keep the numeric score deterministic so precision/recall are stable and reproducible.
-- Decide by numbers: build a labelled set (incl. fresh UAE-brand phish) and compare VT alone / VT+features / VT+features+LLM before claiming ✅.
-- Own scorer = rules (lookalike, brand-in-subdomain, mixed Arabic/Latin, punycode, scam keywords) + small ML model on URL features (LightGBM / char-CNN; train on PhishTank/OpenPhish/URLhaus vs Tranco).
-- Allowlist of official UAE domains (*.gov.ae, tamm.abudhabi, uaepass.ae, all UAE banks, Tranco top-10k) → keeps false positives low (explicitly judged).
-- Evasion: follow full redirect chain, expand shorteners, normalize IDN/homoglyphs, anti-cloaking (visit as bot AND as Arabic mobile phone, compare).
-- Dead URLs in test set must NOT default to "safe" — URL features + domain age (RDAP) must work without the page.
-- VT free tier ≈ 4 req/min → cache + work without it.
-- Need `POST /score` (batch) + `scamshield eval test.csv` → precision / recall / FPR for the judges.
+- Covers children's tablets and smart TVs with no setup on each device.
+- Doesn't cover mobile data on its own; phones use Private DNS pointing at the same resolver.
+- Compounds, schools and residences for older people are a strong pilot story.
+- Limits: DNS can't show a warning (a blocked HTTPS site shows a certificate error), so it blocks confirmed domains only and warnings stay in the app. It sees only the domain, so it can't block scams hosted on shared services such as Google Sites or GitHub Pages.
 
-### DNS for home router (families, closed communities) — good, keep
-- Covers every device at home incl. kids' tablets / smart TVs with zero setup per device.
-- Does NOT cover mobile data → pair with phone Private DNS (Android DoT hostname / iOS DoH .mobileconfig). Same AdGuard Home resolver.
-- Closed communities (compounds, schools, elderly residences) = strong pilot story for Criterion 5.
-- Limit: DNS can only allow/block. Cannot show a "warning" for 30–70% (HTTPS sinkhole → cert error). So DNS hard-blocks only confirmed domains; warnings live in the app.
-- Domain-only: cannot see the page, cannot block scams on Google Sites / GitHub Pages / shorteners.
+## The default browser
 
-### "Default browser" link interceptor — strong idea, Android-first
-- This is the answer to the DNS gap: it sees FULL URLs from SMS / WhatsApp / email taps — exactly where UAE scams start. Can replace native SMS filtering in the MVP.
-- Android: feasible in 24h. App registers as default browser (VIEW intent for http/https) → fast score (<300 ms) → <30% forward to Chrome via explicit intent; 30–70% interstitial with reasons in AR/EN; >70% block page + "report".
-- iOS: NOT feasible. Default browser needs Apple's managed entitlement (request form) and the app must be a real browser that navigates directly to the destination — a check-and-redirect app is rejected. iOS fallback: share-sheet "Check this link" + Safari Web Extension.
-- Limits: in-app browsers (Instagram, Telegram, TikTok webviews) bypass the default browser; user can untick it. Say this honestly in the pitch.
+- On Android the app registers as the default browser. A safe link goes straight to Chrome; a suspicious one shows a warning with reasons in Arabic and English; a scam is blocked with a "Report" button.
+- On iPhone, Apple only allows a real web browser to be the default, not a check-and-redirect app. The iPhone route is in [docs/apple-development-plan.md](docs/apple-development-plan.md).
+- Limits to state openly: in-app browsers (Instagram, Telegram, TikTok) bypass the default browser, and users can switch the default back.
 
-### Missing pieces (by weight)
-- C2 Early Detection (25%): Certificate Transparency stream (certstream) filtered by UAE brand keywords; daily newly-registered-domain lists; dnstwist permutations of each brand domain; sponsored ads in search results; Maps "fake helpline" check (listing name = bank/TAMM/RTA but phone not in official registry).
-- C3 Explainability (20%): per-feature score contributions, RDAP abuse contacts, one-click takedown pack (PDF + JSON + email to registrar/host + GSB report).
-- C4 UAE & Innovation (15%): UAE brand registry (official domains, logos, reference login screenshots, official phone numbers) → visual page similarity (CLIP / perceptual hash vs reference); campaign graph (domains ↔ phones ↔ IPs ↔ payment endpoints); Arabic queries, Arabic homoglyphs, transliterations (tamm-pay, abudhabi-fines), RTL UI.
-- C5 Feasibility (10%): live demo flow — certstream catches uaepass-verify[.]com → sandbox → 91% visual match to UAE PASS → officer queue → Confirm → blocked on phone via DNS → takedown PDF. Pilot: shadow mode → volunteer families/compounds → TDRA/ISP.
+## What the judging criteria added
 
-### Product surfaces
-1. Detection Engine (intake → fast score → sandbox → verdict → evidence)
-2. Officer Console (ranked queue, screenshot + reasons, confirm/reject, campaign graph, export)
-3. Resident side: Android link-interceptor app + "check this link" + DNS setup (router + phone)
-4. Scoring API / CLI for judges
+| Criterion | Weight | What it added |
+|---|---|---|
+| Early detection | 25% | The Hunter: certificate transparency logs filtered by UAE brand names, newly registered domain lists, look-alike variations of each brand domain, and fake helpline numbers |
+| Explainability | 20% | Per-signal score contributions, abuse contacts from RDAP, and a one-click takedown pack (PDF, JSON and the email to the registrar or host) |
+| UAE relevance and innovation | 15% | A UAE brand registry (official domains, reference screenshots, official phone numbers), visual similarity to the real login pages, a campaign graph linking domains, phones, servers and payment pages, and Arabic look-alikes and transliterations such as `tamm-pay` |
+| Feasibility | 10% | A live end-to-end demo, and a pilot path: shadow mode, then volunteer families and compounds, then TDRA and the internet providers |
 
-### 24h priorities
-- Must: URL scorer + allowlist, /score + eval, sandbox screenshot, evidence PDF, dashboard confirm, check-link.
-- High value: certstream + brand filter, Maps helpline check, visual similarity, Android interceptor.
-- If time: campaign graph, AdGuard Home on a real router/phone, native SMS filter.
+## Product surfaces
 
+1. **Detection engine:** intake, fast score, sandbox, verdict, evidence.
+2. **Officer console:** ranked queue, screenshot and reasons, confirm or reject, campaign graph, takedown packs.
+3. **Resident side:** the Android app, "check this link", and DNS setup for the router and the phone.
+4. **Scoring API and evaluation tool** for the judges.
 
+## The 24-hour priorities, as planned
 
----
-Architecture & integration plan: see ARCHITECTURE.md
+- **Must:** URL scorer and allowlist, batch scoring and evaluation, sandbox screenshot, evidence PDF, officer confirm, "check a link".
+- **High value:** certificate transparency with a brand filter, fake helpline check, visual similarity, the Android app.
+- **If time:** campaign graph, AdGuard Home on a real router or phone, a native SMS filter.
+
+All "must" and "high value" items were built. Of the "if time" items, the campaign graph and DNS Shield were built (DNS Shield runs in the Docker stack, not yet on a real router); the native SMS filter was not.

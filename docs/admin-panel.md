@@ -1,8 +1,8 @@
 # Kartoshka-Police admin panel: proposal
 
-Status: proposal, not built. Written 2026-11-24.
+Status: proposal, written 2026-11-24. It was built through `docs/admin-dashboard.md` (the build contract) and `docs/admin-plan.md` (the build log), both merged into `main`; read those for what exists. This file keeps the reasoning behind the design.
 
-This proposal extends the Officer Console (`console/`, slice 5 in `docs/app-plan.md` on `feat/app`). Code references such as `core/app/fast/score.py` point at the uncommitted `feat/app` work, not at `main`.
+This proposal extends the Officer Console (`console/`, slice 5 in `docs/app-plan.md`). It was written while that work was still on the `feat/app` branch, so a few code paths it names may differ from `main`.
 
 ## Contents
 

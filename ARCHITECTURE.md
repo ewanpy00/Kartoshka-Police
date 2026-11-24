@@ -1,8 +1,12 @@
-# Kartoshka / ScamShield — Architecture
+# Kartoshka-Police: architecture
 
-One core (link analysis), many entry points. Every client — the Gatekeeper browser, DNS, the
-share button, the Hunter, the judges' CLI — calls the same Core API and gets the same verdict
+One core (link analysis), many entry points. Every client (the Gatekeeper browser, DNS Shield, the
+share button, the Hunter, the judges' batch route) calls the same core API and gets the same verdict
 format. Confirmed verdicts flow back out to every client.
+
+This is the design. Most of it is built; parts that are still planned are marked **(planned)**, and
+places where the build chose a simpler method say so. For how to run the system, see the
+[README](README.md); for the build decisions behind each part, see [docs/README.md](docs/README.md).
 
 ```
                         ┌────────────────────── PROACTIVE ──────────────────────┐
@@ -49,7 +53,7 @@ Checks in this order, first decisive hit wins:
    - domain: age (RDAP, cached), registrar, TLD risk, NS / IP / ASN seen in known campaigns;
    - lookups: VirusTotal + Google Safe Browsing (only if cached or answered within budget,
      otherwise async and merged later);
-   - small ML model (LightGBM on the same features) → probability.
+   - small ML model (LightGBM on the same features) → probability (used when a trained model exists).
    Each feature contributes points with a reason code → `score 0–100` + `reasons[]`.
 5. Bands: `<30 allow` · `30–70 warn + deep` · `>70 block + deep (confirm)`.
 
@@ -62,13 +66,16 @@ Checks in this order, first decisive hit wins:
   favicon, external scripts, phone numbers / WhatsApp links / payment endpoints.
 - Signals:
   - **form asks for** card / CVV / OTP / Emirates ID / UAE PASS credentials;
-  - **visual similarity** of the screenshot to brand reference screens (CLIP embedding + pHash);
-    "looks 91% like UAE PASS login but domain is not official" = strong reason;
+  - **visual similarity** of the screenshot to brand reference screens: "looks like the UAE PASS
+    login but the domain is not official" = strong reason. Built with a perceptual hash (pHash) of the
+    phone screenshot; CLIP needs PyTorch, which doesn't fit next to the stack in 4 GB, so it is
+    **(planned)** behind the same interface;
   - **kit fingerprint**: hash of DOM skeleton, favicon hash, script paths → matches known kits;
   - brand/domain mismatch (logo or name of brand X on a non-X domain).
 - **LLM verdict** (no tools, structured JSON): input = features + capture text + screenshot;
   output = label, confidence, reasons in AR + EN. Numeric score stays deterministic
-  (LLM can move a case only inside the 30–70 band or add reasons), so precision/recall are stable.
+  (the LLM can lift a score only inside the 30–70 band and never past 70, or add reasons), so
+  precision/recall are stable.
 - Parked / empty page → NOT safe: put the domain on the **watchlist** (re-check every 6 h for 14 days).
 
 ### 1.4 Verdict
@@ -131,15 +138,15 @@ Checks in this order, first decisive hit wins:
 
 ## 2. HUNTER — proactive discovery (Criterion 2)
 
-| Source | How | Latency |
-|---|---|---|
-| Certificate Transparency | self-hosted `certstream-server-go` (Docker) → Python consumer | minutes after cert |
-| Newly registered domains | WhoisDS / WhoisFreaks free daily list | ~1 day |
-| Search + Ads + Maps | scheduled AR/EN queries ("دفع مخالفات", "tamm fine payment", "emirates id renewal") via SERP API; Maps: listing name = brand but phone not in official registry | hours |
-| Threat feeds | OpenPhish, URLhaus (filter by UAE brands) | hours |
-| DNS Shield | unknown domains resolved by protected devices (anonymised, domain only) | real time |
-| Pivot | from each confirmed scam: same IP / NS / cert SAN / kit hash → new candidates | real time |
-| Watchlist | re-check parked / empty suspicious domains | every 6 h, 14 days |
+| Source | How | Latency | Status |
+|---|---|---|---|
+| Certificate Transparency | self-hosted `certstream-server-go` (Docker) → Python consumer | minutes after cert | Built |
+| Newly registered domains | WhoisDS free daily list | ~1 day | Built |
+| Search + Ads + Maps | scheduled AR/EN queries ("دفع مخالفات", "tamm fine payment", "emirates id renewal") via SERP API; Maps: listing name = brand but phone not in official registry | hours | Planned (fake helpline numbers found on scam pages are collected instead) |
+| Threat feeds | OpenPhish; URLhaus with a free abuse.ch key (filter by UAE brands) | 30 min | Built |
+| DNS Shield | unknown domains resolved by protected devices (anonymised, domain only) | real time | Planned |
+| Pivot | from a campaign: same IP / NS / cert SAN / kit hash → new candidates | on demand | Built as the officer's related-site search on the campaign page |
+| Watchlist | re-check parked / empty suspicious domains | every 6 h, 14 days | Built |
 
 Two filters before Core:
 - **Name filter** — brand keywords (+ transliterations, Arabic), action words, dnstwist permutations,
@@ -194,13 +201,16 @@ Extra entry points in the same app:
 - **Protection setup**: one tap to set Private DNS (DNS Shield) + set as default browser.
 
 Privacy:
-- Fast path first sends only a hash prefix of the domain to match the blocklist (Safe-Browsing style).
-- Full URL is sent only when it's unknown and not allowlisted. No account, no device ID stored
+- The police blocklist is matched on the phone (a Bloom filter synced from `/v1/blocklist`), and
+  official domains are forwarded with no network call.
+- The full URL goes to core only when the domain is not official. No account, no device ID stored
   with checks.
 
 Limits (say them in the pitch):
-- iOS cannot do this: the default-browser entitlement requires a real browser that navigates directly.
-  iOS gets the share extension + Safari Web Extension.
+- iOS cannot do this with a check-and-redirect app: the default-browser entitlement requires a real
+  browser. The iPhone route (a real browser plus extensions) is in
+  [docs/apple-development-plan.md](docs/apple-development-plan.md); until then iPhone users get the
+  resident web app.
 - In-app browsers (Instagram, Telegram, TikTok) bypass the default browser → share button.
 - Users can switch the default back.
 
@@ -262,9 +272,10 @@ even without link interception.
 
 - AdGuard Home (DoH / DoT) — router for the home, Private DNS for phones on mobile data.
 - Pulls `GET /v1/blocklist?since=` every minute: **only confirmed** domains (DNS cannot show warnings).
-- Optional: sends unknown, never-seen domains (no client IP) to Hunter as candidates.
-- Family / community mode: one resolver per household / compound, simple admin page
-  (blocked count, top blocked brands).
+- **(planned)** Send unknown, never-seen domains (no client IP) to the Hunter as candidates.
+- **(planned)** Family / community mode: one resolver per household / compound, simple admin page
+  (blocked count, top blocked brands). Today block counts go back to core and show in My reports and
+  on the console's Impact page.
 
 ---
 
@@ -316,7 +327,9 @@ The console is also the admin dashboard. Build contract: `docs/admin-dashboard.m
 | GET | `/v1/check/{id}` | browser (poll deep result), console |
 | POST | `/v1/batch` `{urls[]}` → CSV/JSON | judges, eval |
 | POST | `/v1/report` `{url, note}` | browser |
-| GET | `/v1/blocklist?since=ts` | DNS Shield, browser Bloom sync |
+| POST | `/v1/sms` `{text}` | resident app: paste an SMS, every link in it is checked |
+| POST | `/v1/hits` | DNS Shield, Gatekeeper: aggregated block counts (no client address) |
+| GET | `/v1/blocklist?since=ts` | DNS Shield, browser Bloom sync (`/v1/blocklist.txt` in adblock syntax) |
 | GET | `/v1/preview/{evidence_id}.png` | resident app: safe preview (image only, rate-limited) |
 | POST | `/v1/preview` `{url}` | resident app: "Show safe preview" for a low-score link |
 | GET | `/v1/reports/{id}` (+ device token) | resident app: My reports timeline |
@@ -326,7 +339,8 @@ The console is also the admin dashboard. Build contract: `docs/admin-dashboard.m
 | WS | `/v1/events` | console live feed |
 | GET/POST | `/v1/admin/*` (queue, cases, hunter feed, campaigns, takedowns, stats, health) | console only, write token on every route; full list in `docs/admin-dashboard.md` |
 
-CLI: `kartoshka eval data/eval/test.csv` → precision, recall, FPR, confusion matrix, per-brand.
+Evaluation: `make eval` → precision, recall, FPR, confusion matrix, per brand, ablation (see the README).
+The full, current route list is at http://127.0.0.1:8000/docs when the stack runs.
 
 ---
 
@@ -368,52 +382,25 @@ Redis: job queue, verdict cache, rate limits. Object storage (local dir for the 
 
 ## 8. Repo layout
 
-```
-kartoshka/
-  core/            FastAPI app: api/, normalize/, fast/, deep/, verdict/, evidence/, graph/
-  sandbox/         Dockerfile + Playwright worker
-  hunter/          certstream_consumer.py, nrd.py, sweep.py, feeds.py, pivot.py, watchlist.py
-  gatekeeper/      Android app (Kotlin): intent handler, interstitial, Bloom sync, share target
-  dns/             AdGuard Home config + blocklist sync
-  console/         web dashboard (RTL); auth/mock UAE PASS sign-in (local session only)
-  resident/        shared web screens: X-ray animation, safe preview, my reports, scam radar
-                   (WebView in Gatekeeper, PWA for iPhone)
-  data/            brands.yaml, allowlist.txt, refs/, eval/
-  eval/            eval.py
-  docker-compose.yml   postgres, redis, core, sandbox workers, certstream-server-go, hunter, adguard
-```
+See the repository layout table in the [README](README.md#repository-layout).
 
 ---
 
-## 9. 24h plan (by team role)
-
-| Hours | Core / ML | Sandbox / Deep | Hunter | Android | Console / Pitch |
-|---|---|---|---|---|---|
-| 0–4 | normalize, allowlist, brands.yaml, /v1/check fast | Playwright container, capture | certstream-server-go up, name filter | intent handler + forward | eval set collection |
-| 4–10 | features + LightGBM, VT/GSB cache, eval CLI, `safe_action` from brands.yaml | form/brand rules, screenshot | infra filter, NRD, queue to Core | interstitial + block page AR/EN + real-service button | console queue + card, mock UAE PASS sign-in |
-| 10–16 | score fusion, reasons AR/EN | visual similarity, LLM verdict | pivot, watchlist, feeds | share target, Bloom sync | evidence PDF, confirm flow |
-| 16–20 | batch API, metrics | kit fingerprint | backtest: % caught + hours earlier | DNS setup screen | campaign graph |
-| 20–24 | freeze, run eval | — | — | demo device | demo rehearsal, limits slide |
-
-Resident screens (section 3.1), ~5–6 h from hour 16 (Android + Console owners): X-ray animation ~1 h,
-safe preview ~1.5 h, my reports ~1.5 h, scam radar ~1 h. If time runs short, cut in reverse order;
-the X-ray animation and safe preview carry the demo.
-
-## 10. Demo script (≈3 min)
+## 9. Demo flow (≈3 min, as planned for the pitch)
 1. Hunter live feed: CT shows `uaepass-verify[.]top` seconds after its cert.
-2. Core: sandbox screenshot, 91% visual match to UAE PASS, form asks for OTP → score 92.
+2. Core: sandbox screenshot, visual match to UAE PASS, form asks for OTP → score 92.
 3. Console: officer is already in through the mock UAE PASS button (no real API) → clicks Confirm → evidence PDF with hashes.
 4. Phone: SMS with a fake fine link → tap → Gatekeeper block page in Arabic ("⚠️ Suspected scam") → **Check your real fines in TAMM** opens the official service. A fake UAE PASS link shows **Continue in the official UAE PASS app** instead.
 5. Hand the phone to a judge: "paste any link" → Link X-ray cards tick in → safe preview shows the page
    and what it asks for → verdict in Arabic. Tap Report → My reports shows the timeline; Scam radar on the
    home screen has just gone up by one.
-6. Same domain on home Wi-Fi → blocked by DNS Shield.
+6. Same domain on home Wi-Fi → blocked by DNS Shield (optional `stretch` profile).
 7. Metrics slide: precision / recall / FPR on eval set; "X% of last month's UAE scams caught N h before first report".
 8. Limits slide: iOS, in-app browsers, geofencing, free-tier APIs.
 
 ---
 
-## 11. AI layer
+## 10. AI layer
 
 Principle: **AI extracts facts and explains; a calibrated model decides; an officer confirms.**
 The LLM never outputs the final score directly → stable precision/recall, auditable verdicts,
@@ -432,16 +419,16 @@ SMS text ──────► A4 Scam-text classifier (AR/EN) ──► URLs ex
 Officer ───────► A6 Copilot (campaign summary, takedown drafts)   A7 labels → nightly retrain
 ```
 
-| # | Component | What it does | Hackathon implementation | Criterion |
-|---|---|---|---|---|
-| A0 | Fusion | Logistic regression (calibrated) over all signals → probability → 30/70 bands. Reasons = top feature contributions mapped to AR/EN templates | sklearn, trained on eval set | C1, C3 |
-| A1 | URL model | Fast score from URL + domain features; tiny ONNX copy runs on-device in Gatekeeper | LightGBM on PhishTank/OpenPhish/URLhaus vs Tranco + UAE brand set | C1 |
-| A2 | Page understanding LLM | Vision LLM reads screenshot + page text → JSON facts: `brand_claimed`, `data_requested[]` (card, CVV, OTP, Emirates ID, UAE PASS login), `payment_requested`, `urgency`, `language`, `official_links_present`, `injection_attempt`, `reasons_ar`, `reasons_en` | Cloud LLM with vision + structured output, no tools | C1, C3, C4 |
-| A3 | Visual brand matcher | Embedding similarity of screenshot / logo crops to reference screens in `brands.yaml` → "looks 91% like UAE PASS" | open CLIP/SigLIP, zero training | C4 |
-| A4 | Scam-text classifier | Classifies pasted SMS / WhatsApp text (AR, EN, mixed): fine, parcel, bank, police, prize; extracts URLs, phones | LLM zero-shot now; small fine-tuned model later (on-device SMS filter) | C2, C4 |
-| A5 | Campaign embeddings | Text + DOM-structure embeddings → HDBSCAN → near-duplicate kits beyond exact hashes | sentence embeddings + hdbscan | C2, C4 |
-| A6 | Officer copilot | Summarises a campaign, drafts takedown letters (AR/EN) from evidence, answers "what else is on this IP?" over Postgres | LLM + SQL tools (read-only), officer-facing only | C3 |
-| A7 | Learning loop | Officer confirm/reject → labels; uncertain cases ranked higher in queue (active learning); nightly retrain of A0/A1; drift alert | cron + eval CLI | C1, C5 |
+| # | Component | What it does | Hackathon implementation | Criterion | Status |
+|---|---|---|---|---|---|
+| A0 | Fusion | Calibrated model over all signals → probability → 30/70 bands. Reasons = top feature contributions mapped to AR/EN templates | Built more simply: the score is the sum of reason weights; the AI adds one reason that can lift a 30–70 score, never past 70 (`core/app/ai/fusion.py`) | C1, C3 | Built (simplified) |
+| A1 | URL model | Fast score from URL + domain features; a tiny copy on the phone | LightGBM on PhishTank/OpenPhish/URLhaus vs Tranco + UAE brand set; `make retrain` adds officer labels. Gatekeeper uses a tiny lexical scorer instead of an on-device model | C1 | Built (on-device copy planned) |
+| A2 | Page understanding LLM | Vision LLM reads screenshot + page text → JSON facts: `brand_claimed`, `data_requested[]` (card, CVV, OTP, Emirates ID, UAE PASS login), `payment_requested`, `urgency`, `language`, `official_links_present`, `injection_attempt`, `reasons_ar`, `reasons_en` | Cloud LLM with vision + structured output, no tools | C1, C3, C4 | Built |
+| A3 | Visual brand matcher | Embedding similarity of screenshot / logo crops to reference screens in `brands.yaml` → "looks 91% like UAE PASS" | pHash against reference screens (CLIP/SigLIP planned) | C4 | Built (pHash) |
+| A4 | Scam-text classifier | Classifies pasted SMS / WhatsApp text (AR, EN, mixed): fine, parcel, bank, police, prize; extracts URLs, phones | LLM zero-shot now; small fine-tuned model later (on-device SMS filter) | C2, C4 | Built (zero-shot) |
+| A5 | Campaign embeddings | Text + DOM-structure embeddings → HDBSCAN → near-duplicate kits beyond exact hashes | sentence embeddings + hdbscan | C2, C4 | Planned (exact kit and favicon hashes are built) |
+| A6 | Officer copilot | Summarises a campaign, drafts takedown letters (AR/EN) from evidence, answers "what else is on this IP?" over Postgres | LLM + SQL tools (read-only), officer-facing only | C3 | Planned |
+| A7 | Learning loop | Officer confirm/reject → labels; uncertain cases ranked higher in queue (active learning); nightly retrain of A0/A1; drift alert | `make retrain` + `make eval` | C1, C5 | Built |
 
 ### LLM safety (the page is written by the attacker)
 - Page text/HTML goes in a delimited data block marked untrusted; the system prompt says it is evidence, not instructions.
@@ -454,7 +441,7 @@ Officer ───────► A6 Copilot (campaign summary, takedown drafts) 
 - LLM runs only on the deep path (30–70 band and >70 confirmation), cached by content hash (same kit → one call).
 - Fast path is pure CPU (A1 + rules) → works offline on the phone.
 
-### Providers (pluggable `core/ai/provider.py`)
+### Providers (pluggable `core/app/ai/provider.py`)
 - Demo: cloud vision LLM (Arabic-strong).
 - Sovereign / police deployment: local open Arabic models made in the UAE — Falcon-H1 Arabic (TII) or Jais 3 (MBZUAI / Inception42) for text + OCR'd screenshots; CLIP stays local. No resident data leaves the country.
 
@@ -463,13 +450,13 @@ Ablation table on the eval set: rules → +A1 → +A3 → +A2 → full fusion: p
 
 ### Files
 ```
-core/ai/
+core/app/ai/
   provider.py        # cloud / local LLM switch
-  url_model.py       # A1 train + predict + ONNX export
+  url_model.py       # A1 train + predict
   page_llm.py        # A2 prompt, schema, injection guard
-  vision_match.py    # A3 brand reference embeddings
-  text_classifier.py # A4
-  clustering.py      # A5
-  fusion.py          # A0 calibrated model + reason templates
-  copilot.py         # A6
+  text_classifier.py # A4 SMS text
+  fusion.py          # A0 how far the AI may move the score
+core/app/deep/
+  visual.py          # A3 pHash brand match
+  kit.py             # kit and favicon hashes
 ```

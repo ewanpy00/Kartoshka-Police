@@ -2,7 +2,7 @@
 
 The Android app: the default browser that checks every tapped link before it opens (ARCHITECTURE.md section 3). It is a separate Gradle build; `docker compose` does not build or start it.
 
-**Status:** the source is written but has not been built as an APK, because the development machine has no Android SDK. The pure-Kotlin logic (`app/src/main/java/ae/kartoshka/gatekeeper/logic/`) is compiled and unit-tested on a plain JVM by `make test`, and it was also checked against the running core. Expect small fixes on the first Android Studio build.
+**Status:** builds and runs from Android Studio (see Build below). `make test` covers only the pure-Kotlin decision logic (`app/src/main/java/ae/kartoshka/gatekeeper/logic/`), compiled and unit-tested on a plain JVM; it was also checked against the running core.
 
 ## What it does
 
@@ -65,6 +65,6 @@ The block page shows **Check your real fines in TAMM** (`https://www.tamm.abudha
 
 ## Limits
 
-- iOS cannot do this: the default-browser entitlement requires a real browser. iPhone users get the resident PWA and the share sheet.
+- iOS cannot do this with a check-and-redirect app: the default-browser entitlement requires a real browser. iPhone users get the resident web app for now; the iPhone plan is in `docs/apple-development-plan.md`.
 - In-app browsers (Instagram, Telegram, TikTok) bypass the default browser; residents use the share button there.
 - Android has no API to set Private DNS for the user. The button copies the resolver hostname (`-PdnsHost=`) and opens the network settings.
