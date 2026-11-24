@@ -37,10 +37,12 @@ class Submitter:
             log.info("submission cap reached, dropped domain=%s", domain)
             return False
         self.sent.append(now)
+        if not self.post(domain):
+            return False
         self.seen[domain] = None
         if len(self.seen) > SEEN_LIMIT:
             self.seen.popitem(last=False)
-        return self.post(domain)
+        return True
 
     def post(self, domain: str) -> bool:
         body = json.dumps({"url": f"https://{domain}/", "source": "hunter", "mode": "deep"}).encode()

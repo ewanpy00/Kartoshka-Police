@@ -67,7 +67,7 @@ def record_poll(row: Watchlist, prefix: str, hit: bool, now: datetime) -> None:
     if hit:
         if getattr(row, f"{prefix}_first_hit_at") is None:
             setattr(row, f"{prefix}_first_hit_at", now)
-    else:
+    elif getattr(row, f"{prefix}_first_hit_at") is None:
         setattr(row, f"{prefix}_last_clean_at", now)
 
 

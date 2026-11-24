@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from app.models import Watchlist
-from app.watch import lead_time
+from app.watch import lead_time, record_poll
 
 FIRST_SEEN = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -35,3 +35,11 @@ def test_hit_after_clean_polls_keeps_the_lead():
         row(gsb_last_clean_at=FIRST_SEEN + timedelta(hours=12), gsb_first_hit_at=FIRST_SEEN + timedelta(hours=18)),
     )
     assert result["gsb"] == {"state": "hit", "at_least_hours": 12}
+
+
+def test_clean_poll_after_a_hit_does_not_move_the_last_clean_time():
+    watched = row()
+    record_poll(watched, "gsb", False, FIRST_SEEN + timedelta(hours=40))
+    record_poll(watched, "gsb", True, FIRST_SEEN + timedelta(hours=41))
+    record_poll(watched, "gsb", False, FIRST_SEEN + timedelta(hours=60))
+    assert lead_time(FIRST_SEEN, watched)["gsb"] == {"state": "hit", "at_least_hours": 40}

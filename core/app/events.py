@@ -7,6 +7,8 @@ from typing import Annotated
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy import event
+from sqlalchemy.orm import Session
 
 from app import queue
 from app.config import Settings, get_settings
@@ -14,6 +16,7 @@ from app.config import Settings, get_settings
 CHANNEL = "kp:events"
 UNAUTHORISED = 4401
 AUTH_TIMEOUT_SECONDS = 5
+PENDING = "pending_events"
 
 logger = logging.getLogger(__name__)
 ws_router = APIRouter(prefix="/v1")
@@ -26,6 +29,22 @@ def publish(type: str, data: dict) -> None:
         queue.get_redis().publish(CHANNEL, message)
     except Exception:
         logger.exception("Could not publish %s event", type)
+
+
+def publish_after_commit(session: Session, type: str, data: dict) -> None:
+    """Hold an event until this session commits; a rollback discards it."""
+    session.info.setdefault(PENDING, []).append((type, data))
+
+
+@event.listens_for(Session, "after_commit")
+def send_pending(session: Session) -> None:
+    for type, data in session.info.pop(PENDING, []):
+        publish(type, data)
+
+
+@event.listens_for(Session, "after_soft_rollback")
+def drop_pending(session: Session, previous_transaction) -> None:
+    session.info.pop(PENDING, None)
 
 
 async def forward(websocket: WebSocket, pubsub) -> None:

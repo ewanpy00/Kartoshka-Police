@@ -109,3 +109,15 @@ def test_transport_error_logs_the_class_name_only(monkeypatch, caplog):
         assert make().submit("pay-tamm.com") is False
     assert "ConnectionRefusedError" in caplog.text
     assert "secret" not in caplog.text
+
+
+def test_a_failed_post_does_not_mark_the_domain_seen(monkeypatch, posts):
+    def down(request, timeout):
+        raise ConnectionRefusedError
+
+    with monkeypatch.context() as broken:
+        broken.setattr(module.urllib.request, "urlopen", down)
+        submitter = make()
+        assert submitter.submit("pay-tamm.com") is False
+    assert submitter.seen == {}
+    assert submitter.submit("pay-tamm.com") is True
