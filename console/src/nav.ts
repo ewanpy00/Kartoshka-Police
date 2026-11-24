@@ -34,7 +34,12 @@ export const navGroups: NavGroup[] = [
     label: 'navGroupDetection',
     items: [{ to: '/feed', label: 'navFeed', icon: 'M1.5 8h3l2-5 3 10 2-5h3' }],
   },
-  { label: 'navGroupInsights', items: [] },
+  {
+    label: 'navGroupInsights',
+    items: [
+      { to: '/impact', label: 'navImpact', icon: 'M2 13.5h12M4 13.5V9M8 13.5V4M12 13.5V7' },
+    ],
+  },
   {
     label: 'navGroupSystem',
     items: [
