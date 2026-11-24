@@ -44,3 +44,11 @@ def test_payment_hosts_are_form_action_hosts_other_than_the_page():
         form(action=""),
     ]
     assert extract.payment_hosts(forms, "shop.example.com") == ["pay.example.net"]
+
+
+def test_malformed_forms_and_links_are_skipped():
+    forms = ["x", None, {"action": 5, "inputs": []}, {"action": "http://[bad", "inputs": [{"type": 1, "name": "pw"}]}, form(("password", "pw"))]
+    assert extract.credential_form(forms)
+    assert extract.payment_hosts(forms, "shop.example.com") == ["pay.example.net"]
+    assert extract.phones("", [None, 5, "tel:+971501234567"]) == ["+971501234567"]
+    assert extract.whatsapp([None, {"a": 1}, "https://wa.me/971501234567"]) == ["+971501234567"]
