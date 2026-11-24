@@ -68,6 +68,7 @@ def render(session: Session, evidence: Evidence) -> bytes:
     infra = p.get("infra") or {}
     registration = infra.get("rdap") or {}
     pdf = EvidencePDF(evidence.id)
+    pdf.set_creation_date(evidence.created_at)  # the same record always renders to the same bytes (takedown packs)
     pdf.add_page()
 
     pdf.section("Identity")

@@ -49,17 +49,26 @@ def due(session: Session, now: datetime | None = None, limit: int = 50) -> list[
 
 
 async def run_due(session: Session, settings: Settings, now: datetime | None = None, limit: int = 50) -> list[str]:
-    """Queue a deep re-check of every due domain. Returns the new check ids."""
+    """Queue a deep re-check of every due domain, or a takedown re-check when one is open. Returns the new check ids."""
+    from app import queue
+    from app.takedown import tracker
     from app.verdict.service import run_check
 
     now = now or datetime.now(UTC)
     rows = due(session, now, limit)
+    takedowns = {row.domain for row in rows if tracker.has_open(session, row.domain)}
     for row in rows:
-        row.next_check_at = now + EVERY
-        row.checks_done += 1
+        # A domain with an open takedown is re-checked every TAKEDOWN_RECHECK_MIN by the takedown job,
+        # which sets the next time itself; this only keeps the ticker from picking it up twice.
+        row.next_check_at = now + (timedelta(minutes=settings.takedown_recheck_min) if row.domain in takedowns else EVERY)
+        if row.domain not in takedowns:
+            row.checks_done += 1
     session.commit()
     ids = []
     for row in rows:
+        if row.domain in takedowns:
+            queue.enqueue("app.jobs.takedown_recheck", row.domain, timeout=400)
+            continue
         check = await run_check(session, row.url or f"https://{row.domain}/", "watchlist", "deep", settings, force_deep=True)
         ids.append(check.id)
     return ids

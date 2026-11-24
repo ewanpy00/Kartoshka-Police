@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
 from app import queue
-from app.api import admin, admin_campaigns, blocklist, check, events, evidence, intel, resident, review
+from app.api import admin, admin_campaigns, admin_takedowns, blocklist, check, events, evidence, intel, resident, review
 from app.deps import SessionDep
 from app.schemas import Health
 
@@ -38,6 +38,6 @@ def healthz(session: SessionDep) -> Response:
     return JSONResponse(health, status_code=503 if failed else 200)
 
 
-for module in (check, blocklist, resident, review, evidence, events, intel, admin, admin_campaigns):
+for module in (check, blocklist, resident, review, evidence, events, intel, admin, admin_campaigns, admin_takedowns):
     v1.include_router(module.router)
 app.include_router(v1)
