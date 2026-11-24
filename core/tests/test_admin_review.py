@@ -1,53 +1,74 @@
+"""Officer decisions and the automatic confirmation (ported from main's test_admin_review)."""
+import pytest
 from admin_factories import AUTH, add_check, add_evidence
-from app.admin.review import auto_confirm
-from app.models import AuditLog, Check, Domain, Report, Review
+from app import events
+from app import review as decisions
+from app.models import AuditLog, Domain, Review
+
+
+@pytest.fixture
+def published(monkeypatch):
+    sent = []
+    monkeypatch.setattr(events, "publish", lambda type, data: sent.append((type, data)))
+    return sent
+
+
+def scam_case(session, domain="uaepass-login.example", brand="UAE PASS"):
+    return add_evidence(session, add_check(session, domain, 85, brand=brand))
 
 
 def decide(client, evidence, **body):
     return client.post(f"/v1/review/{evidence.id}", json={"reviewer": "Sara", **body}, headers=AUTH)
 
 
-def scam_case(session, domain="uaepass-login.example", brand="UAE PASS"):
-    check = add_check(session, domain, 85)
-    return add_evidence(session, check, brand=brand)
-
-
-def blocklisted(client):
-    return {entry["domain"]: entry for entry in client.get("/v1/blocklist").json()["domains"]}
-
-
-def test_confirm_blocks_the_domain_and_audits(client, session, published):
+def test_confirm_marks_the_domain_confirmed_by_the_officer_and_audits(client, session, published):
     evidence = scam_case(session)
     assert decide(client, evidence, decision="confirm").status_code == 200
-    assert blocklisted(client)["uaepass-login.example"]["brand_id"] == "uaepass"
     row = session.get(Domain, "uaepass-login.example")
-    assert (row.status, row.confirmed_by) == ("confirmed", "officer")
-    entry = session.query(AuditLog).filter_by(action="case.confirm").one()
-    assert (entry.actor, entry.before, entry.after["status"]) == ("Sara", None, "confirmed")
+    assert (row.status, row.confirmed_by, row.source) == ("confirmed", "officer", "officer")
+    entry = session.query(AuditLog).filter_by(action="review.confirm", target="uaepass-login.example").one()
+    assert (entry.actor, entry.before["status"], entry.after["status"]) == ("Sara", None, "confirmed")
     assert published == [("case.reviewed", {"domain": "uaepass-login.example", "decision": "confirm", "reviewer": "Sara"})]
-    check = client.post("/v1/check", json={"url": "https://uaepass-login.example/x"}).json()
-    assert (check["verdict"], check["score"]) == ("block", 100)
 
 
-def test_reject_stores_the_reason_and_removes_the_domain_from_the_blocklist(client, session):
+def test_nothing_is_published_before_the_commit(session, published):
+    outcome = decisions.review(session, scam_case(session).id, "confirm", "Sara")
+    session.flush()
+    assert published == []
+    decisions.after_commit(outcome)
+    assert [event[0] for event in published] == ["case.reviewed"]
+
+
+@pytest.mark.parametrize("reason", ["parked_or_empty", "already_offline", "not_enough_evidence", "test_or_internal", "duplicate"])
+def test_a_non_clearing_reject_takes_off_a_confirmation_and_does_not_clear(session, reason):
+    evidence = scam_case(session, domain=f"{reason.replace('_', '-')}.example")
+    decisions.review(session, evidence.id, "confirm", "Sara")
+    outcome = decisions.review(session, evidence.id, "reject", "Sara", reason)
+    assert outcome.status is None and session.get(Domain, outcome.domain) is None
+    assert session.query(Review).filter_by(evidence_id=evidence.id, decision="reject").one().reason == reason
+
+
+@pytest.mark.parametrize("reason", ["legitimate_site", "not_a_scam"])
+def test_only_legitimate_site_and_not_a_scam_clear(session, reason):
+    evidence = scam_case(session, domain=f"clear-{reason.replace('_', '-')}.example")
+    decisions.review(session, evidence.id, "confirm", "Sara")
+    outcome = decisions.review(session, evidence.id, "reject", "Sara", reason)
+    assert outcome.status == "cleared" and session.get(Domain, outcome.domain).status == "cleared"
+    assert session.get(Domain, outcome.domain).confirmed_by is None
+
+
+def test_insufficient_evidence_is_stored_as_not_enough_evidence(session):
     evidence = scam_case(session)
-    decide(client, evidence, decision="confirm")
-    response = decide(client, evidence, decision="reject", reason="legitimate_site")
-    assert response.status_code == 200
-    assert "uaepass-login.example" not in blocklisted(client)
-    review = session.query(Review).filter_by(decision="reject").one()
-    assert (review.reason, review.domain) == ("legitimate_site", "uaepass-login.example")
-    entry = session.query(AuditLog).filter_by(action="case.reject").one()
-    assert (entry.before["status"], entry.after, entry.reason) == ("confirmed", None, "legitimate_site")
-    cases = client.get("/v1/admin/queue", params={"state": "all"}, headers=AUTH).json()["cases"]
-    assert [c["state"] for c in cases] == ["rejected"]
+    decisions.review(session, evidence.id, "reject", "Sara", "insufficient_evidence")
+    assert session.query(Review).filter_by(evidence_id=evidence.id).one().reason == "not_enough_evidence"
 
 
-def test_reject_without_a_valid_reason_is_422(client, session):
+def test_reject_without_a_valid_reason_is_refused(client, session):
     evidence = scam_case(session)
     assert decide(client, evidence, decision="reject").status_code == 422
-    assert decide(client, evidence, decision="reject", reason="because").status_code == 422
-    assert session.query(Review).count() == 0
+    with pytest.raises(decisions.ReviewRefused):
+        decisions.review(session, evidence.id, "reject", "Sara", "because")
+    assert session.query(Review).filter_by(evidence_id=evidence.id).count() == 0
 
 
 def test_confirming_an_allowlisted_domain_is_409(client, session):
@@ -57,57 +78,41 @@ def test_confirming_an_allowlisted_domain_is_409(client, session):
 
 
 def test_review_of_an_unknown_evidence_id_is_404(client):
-    response = client.post("/v1/review/e_missing", json={"decision": "confirm"}, headers=AUTH)
-    assert response.status_code == 404
+    assert client.post("/v1/review/e_missing", json={"decision": "confirm"}, headers=AUTH).status_code == 404
 
 
-def test_report_stores_a_row_and_queues_a_deep_check(client, session, enqueued):
-    response = client.post("/v1/report", json={"url": "https://www.Phish.example/pay", "note": "got an SMS"})
-    assert response.status_code == 202
-    report = session.query(Report).one()
-    assert (report.domain, report.note, report.check_id) == ("phish.example", "got an SMS", response.json()["check_id"])
-    assert enqueued == [report.check_id]
-
-
-def test_hunter_checks_publish_a_candidate_event(client, published):
-    body = client.post(
-        "/v1/check", json={"url": "https://tamm-pay.example/", "source": "hunter"}, headers=AUTH
-    ).json()
-    assert published == [
-        ("hunter.candidate", {"domain": "tamm-pay.example", "url": "https://tamm-pay.example/", "brand": None, "check_id": body["check_id"]})
-    ]
-
-
-def test_reserved_sources_need_the_write_token(client, session, published):
-    for source in ("hunter", "watchlist", "user_report", "officer"):
-        response = client.post("/v1/check", json={"url": "https://forged.example/", "source": source})
-        assert response.status_code == 401
-    assert published == []
-    assert session.query(Check).filter_by(domain="forged.example").count() == 0
-
-
-def test_anonymous_check_with_an_ordinary_source_still_works(client, published):
-    response = client.post("/v1/check", json={"url": "https://other.example/", "source": "gatekeeper"})
-    assert response.status_code == 200
-    assert published == []
-
-
-def test_auto_confirm_respects_an_earlier_officer_reject(client, session):
+def test_auto_confirm_confirms_a_fresh_domain_audits_and_publishes_after_commit(session, published):
     evidence = scam_case(session)
-    decide(client, evidence, decision="reject", reason="legitimate_site")
-    auto_confirm(session, "uaepass-login.example", "uaepass", evidence.id)
-    assert session.get(Domain, "uaepass-login.example") is None
+    decisions.auto_confirm(session, "uaepass-login.example", "uaepass", evidence.id)
+    row = session.get(Domain, "uaepass-login.example")
+    assert (row.status, row.confirmed_by, row.brand_id) == ("confirmed", "auto", "uaepass")
+    entry = session.query(AuditLog).filter_by(action="case.auto_confirm", target="uaepass-login.example").one()
+    assert (entry.actor, entry.after["evidence_id"]) == ("system", evidence.id)
+    assert published == []  # held until the commit
+    assert session.info[events.PENDING] == [
+        ("case.reviewed", {"domain": "uaepass-login.example", "decision": "auto_confirm", "reviewer": "system"})]
+    session.rollback()
+    session.info.pop(events.PENDING, None)
+
+
+def test_auto_confirm_refuses_official_and_allowlisted_sites_silently(session):
+    evidence = scam_case(session, domain="partner.example")
+    for site, status in (("partner.example", "allowlisted"), ("official.example", "official")):
+        session.add(Domain(domain=site, status=status, source="seed"))
+        session.flush()
+        decisions.auto_confirm(session, site, "uaepass", evidence.id)
+        assert session.get(Domain, site).status == status
     assert session.query(AuditLog).filter_by(action="case.auto_confirm").count() == 0
+    assert session.info.get(events.PENDING) is None
 
 
-def test_auto_confirm_confirms_a_fresh_domain(session):
-    evidence = scam_case(session)
-    auto_confirm(session, "uaepass-login.example", "uaepass", evidence.id)
-    assert session.get(Domain, "uaepass-login.example").confirmed_by == "auto"
-
-
-def test_report_and_check_inputs_are_length_limited(client):
-    long_url = "https://a.example/" + "x" * 2000
-    assert client.post("/v1/report", json={"url": long_url}).status_code == 422
-    assert client.post("/v1/report", json={"url": "https://a.example/", "note": "n" * 1001}).status_code == 422
-    assert client.post("/v1/check", json={"url": long_url}).status_code == 422
+def test_auto_confirm_respects_an_earlier_officer_reject_and_an_officer_confirmation(client, session):
+    rejected = scam_case(session)
+    decide(client, rejected, decision="reject", reason="insufficient_evidence")
+    decisions.auto_confirm(session, "uaepass-login.example", "uaepass", rejected.id)
+    assert session.get(Domain, "uaepass-login.example") is None
+    confirmed = scam_case(session, domain="officer-first.example")
+    decisions.review(session, confirmed.id, "confirm", "Sara")
+    decisions.auto_confirm(session, "officer-first.example", "uaepass", confirmed.id)
+    assert session.get(Domain, "officer-first.example").confirmed_by == "officer"
+    assert session.query(AuditLog).filter_by(action="case.auto_confirm").count() == 0

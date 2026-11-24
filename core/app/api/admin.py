@@ -1,7 +1,7 @@
 """Officer console routes, D1 (docs/admin-dashboard.md). Every route needs the write token, reads included:
 they show reason weights and Hunter internals that residents never see."""
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, cache, queue
+from app import review as decisions
 from app.admin import queue as cases
 from app.admin import stats as kpi
 from app.auth import require_write_token
@@ -18,20 +19,23 @@ from app.defang import defang
 from app.deps import SessionDep, SettingsDep
 from app.evidence import store
 from app.fast import intel
+from app.helplines import routes as helplines
 from app.models import Check, Evidence, FeedEntry, ModelState, Watchlist
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_write_token)])
+router.include_router(helplines.router)
 PAGE = 50
 
 
-def latest_check(session: Session, site: str) -> Check | None:
-    return session.scalar(
-        select(Check).where((Check.domain == site) | (Check.host == site)).order_by(Check.created_at.desc()).limit(1)
-    )
+def flagged_check(session: Session, site: str) -> Check | None:
+    """The check an officer re-runs: the case's representative (the flagged URL), not the latest one seen."""
+    case = cases.collect(session, datetime.now(UTC), only=site)[site]
+    return case.latest
 
 
-@router.get("/queue", description="Ranked review queue, one case per site. `auto=true` lists confirmed sites "
-            "nobody has reviewed yet. Cursor-paginated, 50 rows per page.")
+@router.get("/queue", description="Ranked review queue, one case per site, each with its state (open, auto_confirmed, "
+            "confirmed, rejected). `state` is open (default), auto_confirmed or all; `auto=true` is the older spelling of "
+            "auto_confirmed. Cursor-paginated, 50 rows per page.")
 def review_queue(
     session: SessionDep,
     source: str | None = None,
@@ -39,9 +43,11 @@ def review_queue(
     band: Annotated[str | None, Query(pattern="^(allow|warn|block)$")] = None,
     has_reports: bool | None = None,
     auto: bool = False,
+    state: Literal["open", "auto_confirmed", "all"] = "open",
     cursor: str | None = None,
 ) -> dict:
-    return cases.page(session, cursor, source=source, brand=brand, band_filter=band, has_reports=has_reports, auto=auto)
+    return cases.page(session, cursor, source=source, brand=brand, band_filter=band, has_reports=has_reports, auto=auto,
+                      state=state)
 
 
 @router.get("/cases/{domain}", description="The case card: latest check, page, infrastructure, discovery, reports, "
@@ -60,7 +66,7 @@ class OfficerAction(BaseModel):
 
 @router.post("/cases/{domain}/recheck", description="Run a fresh deep check of the latest URL of this case.")
 async def recheck(domain: str, body: OfficerAction, session: SessionDep, settings: SettingsDep) -> dict:
-    check = latest_check(session, domain.lower())
+    check = flagged_check(session, domain.lower())
     if check is None:
         raise HTTPException(404, "Unknown case")
     fresh = await run_officer_check(session, settings, check.url)
@@ -78,7 +84,7 @@ async def run_officer_check(session: Session, settings, url: str) -> Check:
 @router.post("/cases/{domain}/watch", description="Put the site on the watchlist: a deep re-check every 6 hours for 14 days.")
 def watch(domain: str, body: OfficerAction, session: SessionDep) -> dict:
     site = domain.lower()
-    check = latest_check(session, site)
+    check = flagged_check(session, site)
     if check is None:
         raise HTTPException(404, "Unknown case")
     site = intel.site_key(session, check.host or "", check.domain)
@@ -90,6 +96,23 @@ def watch(domain: str, body: OfficerAction, session: SessionDep) -> dict:
     row = session.get(Watchlist, site)
     return {"domain": site, "display": defang(site), "next_check_at": row.next_check_at.isoformat(),
             "expires_at": row.expires_at.isoformat()}
+
+
+@router.post("/cases/{domain}/undo-auto-confirm", description="Take an automatic confirmation off the site; the case "
+             "is open again. Refused for a site an officer confirmed.")
+def undo_auto_confirm(domain: str, body: OfficerAction, session: SessionDep) -> dict:
+    site = domain.lower()
+    try:
+        decisions.undo_auto_confirm(session, site, body.reviewer, body.note or None)
+    except decisions.ReviewRefused as refused:
+        raise HTTPException(409, str(refused)) from None
+    session.commit()
+    return {"domain": site, "state": cases.collect(session, datetime.now(UTC), only=site)[site].state}
+
+
+@router.get("/audit", description="The audit log, newest first, optionally for one target. 100 rows by default, 500 at most.")
+def audit_list(session: SessionDep, target: str | None = None, limit: Annotated[int, Query(ge=1, le=500)] = 100) -> dict:
+    return {"entries": audit.recent(session, target, limit)}
 
 
 @router.get("/hunter/feed", description="Hunter candidates, newest first. Each row carries the site's latest verdict, if checked.")

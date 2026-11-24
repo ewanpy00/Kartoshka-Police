@@ -17,9 +17,10 @@ from app.verdict.service import run_check
 router = APIRouter()
 
 RESIDENT_SOURCES = ("browser", "gatekeeper", "share", "resident", "sms")
-# Sources the core itself assigns to privileged traffic. A caller cannot claim one without the write token,
-# so a forged `source` cannot pass a resident's check off as a hunter find, an officer run or a batch row.
-RESERVED_SOURCES = ("hunter", "watchlist", "user_report", "officer", "batch")
+# The only sources an open caller may claim. Every other value (hunter, watchlist, user_report, officer, batch,
+# preview, pivot, or any made-up name) is assigned by internal code and needs the write token, so a forged
+# `source` cannot pass a check off as something it is not or force a deep run.
+OPEN_SOURCES = (*RESIDENT_SOURCES, "api")
 
 CHECK_NOTE = (
     "Runs the fast score (lists, verdict cache, lexical and domain features, lookups inside "
@@ -28,8 +29,8 @@ CHECK_NOTE = (
     "and `ai` sources say `running` until it finishes. Poll `GET /v1/check/{id}` for the deep result. "
     "`pending` is kept for older clients: it means no verdict yet, never safe; Gatekeeper treats it like the "
     "timeout branch of ARCHITECTURE.md section 3. Resident sources (browser, gatekeeper, share, resident, sms) "
-    "get reasons without their weights. The sources hunter, watchlist, user_report, officer and batch are "
-    "reserved and need the write token."
+    "get reasons without their weights. Any other source "
+    "(hunter, watchlist, user_report, officer, batch, preview, pivot, ...) needs the write token."
 )
 
 
@@ -45,7 +46,7 @@ async def create_check(
     settings: SettingsDep,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
 ):
-    if body.source in RESERVED_SOURCES:
+    if body.source not in OPEN_SOURCES:
         require_write_token(credentials, settings)
     check = await run_check(session, body.url, body.source, body.mode, settings, text=body.text)
     return shape(check, body.source in RESIDENT_SOURCES)

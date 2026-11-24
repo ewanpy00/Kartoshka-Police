@@ -30,11 +30,25 @@ def test_every_admin_route_needs_the_token(client):
         assert client.request(method, url, json={}, headers={"Authorization": "Bearer nope"}).status_code == 401
 
 
-def test_events_socket_needs_the_token(client):
+def test_events_socket_closes_with_4401_without_the_right_first_message(client):
     from starlette.websockets import WebSocketDisconnect
 
-    with pytest.raises(WebSocketDisconnect), client.websocket_connect("/v1/events?token=nope") as socket:
-        socket.receive_json()
+    for first in ({"type": "auth", "token": "nope"}, {"type": "auth"}, {"type": "hello", "token": "test-token"}):
+        with client.websocket_connect("/v1/events") as socket:
+            socket.send_json(first)
+            with pytest.raises(WebSocketDisconnect) as closed:
+                socket.receive_json()
+        assert closed.value.code == 4401
+
+
+def test_events_socket_ignores_a_token_in_the_url(client):
+    from starlette.websockets import WebSocketDisconnect
+
+    with client.websocket_connect("/v1/events?token=test-token") as socket:
+        socket.send_json({"type": "auth", "token": "nope"})
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_json()
+    assert closed.value.code == 4401
 
 
 def test_queue_ranks_by_priority(session):
@@ -56,9 +70,9 @@ def test_queue_ranks_by_priority(session):
 def test_queue_leaves_out_decided_sites_and_shows_auto_confirmed(session):
     for site, status, source in [("q-official.test", "official", "seed"), ("q-allowed.test", "allowlisted", "seed"),
                                  ("q-cleared.test", "cleared", "officer"), ("q-confirmed.test", "confirmed", "officer"),
-                                 ("q-auto.test", "confirmed", "police")]:
+                                 ("q-auto.test", "confirmed", "auto")]:
         make_check(session, site, 80)
-        session.add(Domain(domain=site, status=status, source=source))
+        session.add(Domain(domain=site, status=status, source=source, confirmed_by=source if status == "confirmed" else None))
     make_check(session, "q-open.test", 80)
     session.flush()
     sites = {c.site for c in cases.ranked(session, NOW)}
@@ -105,7 +119,7 @@ def test_confirm_blocks_the_site_and_writes_the_trail(client, session):
     assert body["status"] == "confirmed" and body["domain"] == "confirm-me.test"
     assert body["blocklist_version"] >= before + 1
     row = session.get(Domain, "confirm-me.test")
-    assert row.status == "confirmed" and row.source == "officer"
+    assert row.status == "confirmed" and row.source == "officer" and row.confirmed_by == "officer"
     session.refresh(check)
     assert check.verdict == "block" and check.stage == "officer"
     assert session.scalar(select(Verdict).where(Verdict.check_id == check.id, Verdict.stage == "officer")) is not None
@@ -125,6 +139,7 @@ def test_reject_clears_only_for_a_legitimate_site(client, session):
     keep = with_evidence(session, make_check(session, "unsure.test", 60))
     body = client.post(f"/v1/review/{keep}", headers=AUTH, json={"decision": "reject", "reason": "insufficient_evidence"}).json()
     assert body["status"] is None and session.get(Domain, "unsure.test") is None
+    assert session.scalar(select(Review).where(Review.evidence_id == keep)).reason == "not_enough_evidence"
     clear = with_evidence(session, make_check(session, "fine-shop.test", 60))
     body = client.post(f"/v1/review/{clear}", headers=AUTH, json={"decision": "reject", "reason": "legitimate_site",
                                                                   "note": "their own shop"}).json()

@@ -129,10 +129,21 @@ class ReportResponse(BaseModel):
 class ReviewRequest(BaseModel):
     decision: Literal["confirm", "reject"]
     reviewer: str = Field("Demo Officer", max_length=200)
-    reason: Literal["legitimate_site", "not_a_scam", "insufficient_evidence", "duplicate"] | None = Field(
-        None, description="Required on reject. Shown to the resident as a plain status."
+    reason: str | None = Field(
+        None,
+        description="Required on reject: one of `app.review.REJECT_REASONS`, or the alias `insufficient_evidence` "
+        "(stored as `not_enough_evidence`). Shown to the resident as a plain status.",
     )
     note: str = Field("", max_length=2000, description="Officer-only free text; never leaves the console.")
+
+    @field_validator("reason")
+    @classmethod
+    def known_reason(cls, value: str | None) -> str | None:
+        from app import review  # imported here: app.review imports modules that import this one
+
+        if value is not None and value not in review.REJECT_REASONS and value not in review.REASON_ALIASES:
+            raise ValueError("unknown reject reason")
+        return value
 
 
 class ReviewResponse(BaseModel):

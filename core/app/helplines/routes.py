@@ -1,25 +1,27 @@
+"""Fake helplines: the phone numbers scam pages show, from each case's representative evidence (docs/admin-plan.md).
+
+A number is listed when the case's representative check names a brand and its verdict is warn or block. The
+brand's own numbers (`app.brands.official_phones()`) and the brand's own hosts are left out. The CSV carries
+only the numbers of sites an officer confirmed; every cell goes through `csvsafe.cell`.
+"""
 import csv
 import io
-from datetime import datetime
-from typing import Annotated
+from datetime import UTC, datetime
 
 import phonenumbers
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Response
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.admin.cases import collect
-from app.brands import load_brands
-from app.config import Settings, get_settings
+from app import brands as brand_registry
+from app.admin import queue
+from app.config import Settings
 from app.csvsafe import cell
-from app.db import get_session
-from app.models import Domain
+from app.deps import SessionDep, SettingsDep
+from app.models import Evidence
 
 router = APIRouter()
 
-SessionDep = Annotated[Session, Depends(get_session)]
-SettingsDep = Annotated[Settings, Depends(get_settings)]
 COLUMNS = ("phone", "brand", "source", "domain", "evidence_id", "first_seen")
 
 
@@ -44,38 +46,41 @@ def e164(raw: str) -> str | None:
         return None
 
 
-def is_official_host(domain: str, official_domains: list[str]) -> bool:
-    return any(domain == d or domain.endswith("." + d) for d in official_domains)
+def official_numbers() -> frozenset[str]:
+    """The brands' own numbers, normalised. Empty when `app.brands.official_phones` does not exist (yet)."""
+    found = getattr(brand_registry, "official_phones", None)
+    return frozenset(filter(None, (e164(p) for p in found()))) if found else frozenset()
+
+
+def page_numbers(payload: dict) -> list[str]:
+    """Phones and WhatsApp numbers the page showed. The deep job writes them under `page`; older records under `scam`."""
+    found = []
+    for block in (payload.get("page") or {}, payload.get("scam") or {}):
+        found += [*(block.get("phones") or []), *(block.get("whatsapp") or [])]
+    return found
 
 
 def listed_numbers(session: Session, settings: Settings) -> list[Number]:
-    brands = {name.lower(): b for b in load_brands(settings.data_dir) for name in (b["id"], *b["names"])}
-    officer_confirmed = set(
-        session.scalars(select(Domain.domain).where(Domain.status == "confirmed", Domain.confirmed_by == "officer"))
-    )
-    found: dict[tuple[str, str, str], Number] = {}
-    for case in collect(session):
-        evidence, domain = case.evidence, case.domain
-        if evidence is None or case.check.verdict not in ("warn", "block"):
+    registry = {name.lower(): b for b in brand_registry.load_brands(settings.data_dir) for name in (b["id"], *b["names"])}
+    official = official_numbers()
+    found: dict[tuple[str, str], Number] = {}
+    for case in queue.collect(session, datetime.now(UTC), window=None).values():
+        check = case.latest
+        if case.status in queue.HIDDEN or check is None or not check.evidence_id or check.verdict not in queue.FLAGGED:
             continue
-        scam = evidence.payload.get("scam") or {}
-        brand = brands.get((scam.get("brand") or "").lower())
-        if brand is None or is_official_host(domain, brand["official_domains"]):
+        brand = registry.get((check.brand_id or check.brand or "").lower())
+        evidence = session.get(Evidence, check.evidence_id)
+        if brand is None or evidence is None or brand_registry.is_official(case.site, brand):
             continue
-        official = {e164(p) for p in brand.get("official_phones", [])}
-        for raw in [*scam.get("phones", []), *scam.get("whatsapp", [])]:
+        confirmed = case.status == "confirmed" and case.confirmed_by == "officer"
+        for raw in page_numbers(evidence.payload or {}):
             phone = e164(raw)
             if phone is None or phone in official:
                 continue
-            found.setdefault(
-                (phone, brand["id"], domain),
-                Number(
-                    phone=phone, brand=scam["brand"], source="page", domain=domain,
-                    evidence_id=evidence.id, first_seen=evidence.created_at,
-                    confirmed=domain in officer_confirmed,
-                ),
-            )
-    return list(found.values())
+            found.setdefault((phone, case.site), Number(
+                phone=phone, brand=check.brand or brand["names"][0], source="page", domain=case.site,
+                evidence_id=evidence.id, first_seen=evidence.created_at, confirmed=confirmed))
+    return sorted(found.values(), key=lambda n: (n.first_seen, n.phone))
 
 
 @router.get("/helplines", response_model=NumberList)
@@ -83,7 +88,7 @@ def helplines(session: SessionDep, settings: SettingsDep) -> NumberList:
     return NumberList(numbers=listed_numbers(session, settings))
 
 
-@router.get("/helplines.csv")
+@router.get("/helplines.csv", description="Officer-confirmed fake numbers only, as a download.")
 def helplines_csv(session: SessionDep, settings: SettingsDep) -> Response:
     out = io.StringIO()
     writer = csv.writer(out)

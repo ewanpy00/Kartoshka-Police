@@ -15,7 +15,7 @@ audit row) with the officer's decision, which is the label the retrain loop (A7)
 import statistics
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.defang import defang
@@ -67,7 +67,8 @@ def lead_times(session: Session, now: datetime) -> list[dict]:
     ).all())
     rows = []
     for domain in session.scalars(select(Domain).where(Domain.domain.in_(seen), Domain.status == "confirmed",
-                                                       Domain.source == "officer")):
+                                                       or_(Domain.confirmed_by == "officer",
+                                                           and_(Domain.confirmed_by.is_(None), Domain.source == "officer")))):
         first = seen[domain.domain]
         gsb, vt = domain.gsb_first_hit_at, domain.vt_first_hit_at
         rows.append({

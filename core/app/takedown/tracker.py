@@ -13,6 +13,7 @@
   request is `reopened`.
 - `overdue` is derived (sent longer than `TAKEDOWN_SLA_H` ago and not closed), not stored.
 """
+import logging
 import statistics
 import uuid
 from dataclasses import dataclass, field
@@ -31,11 +32,14 @@ from app.config import Settings, get_settings
 from app.deep import signals
 from app.fast import lookups, rdap
 from app.models import Check, Domain, Evidence, TakedownRequest, Watchlist
+from app.review import confirmer
 from app.takedown import contacts, pack
 
 OPEN = ("sent", "offline_pending", "reopened")
 STATES = ("pack_ready", "sent", "offline_pending", "closed", "reopened")
 KEEP_WATCHING = timedelta(days=30)
+VT_REFRESH = timedelta(hours=24)
+logger = logging.getLogger(__name__)
 GONE_STATUS = (404, 410)
 HOLD = ("client hold", "server hold")
 CF_INTERSTITIAL = ("suspected phishing", "reported for potential phishing", "this website has been reported")
@@ -76,7 +80,7 @@ def create(session: Session, domains: list[str], reviewer: str, now: datetime | 
         if row is None or row.status != "confirmed":
             refused.append({"domain": domain, "why": "not confirmed"})
             continue
-        if row.source != "officer":
+        if confirmer(row) != "officer":
             refused.append({"domain": domain, "why": "auto-confirmed: an officer must review it first"})
             continue
         found = latest_evidence(session, domain)
@@ -244,24 +248,63 @@ def probe(domain: str, url: str | None, settings: Settings) -> Probe | None:
     return Probe(offline, results["phone"] if offline else None, {k: v or "live" for k, v in results.items()})
 
 
+def poll_failed(service: str, domain: str, error: Exception) -> None:
+    """Log the status code or the exception class only: an httpx message carries the request URL, key included."""
+    reason = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else type(error).__name__
+    logger.warning("%s poll failed for %s: %s", service, domain, reason)
+
+
 def first_hits(session: Session, domain: str, url: str | None, settings: Settings, now: datetime) -> None:
-    """Record when GSB or VirusTotal first flag a domain we already found (lead time on the KPI page)."""
+    """The one lead-time poller (takedown re-check and watchlist re-check).
+
+    Safe Browsing, with its key set: a hit stamps `domains.gsb_first_hit_at`, a clean answer stamps the watchlist
+    row's `gsb_last_clean_at`. VirusTotal likewise, but only when the row's `vt_checked_at` is missing or over 24
+    hours old, and it stamps `vt_checked_at`. A service without a key is skipped and nothing is stamped. Once a
+    service has flagged the domain it is not polled again. Without a watchlist row only the first hit is recorded;
+    without a domain row a hit has nowhere to go, so that poll stamps nothing at all.
+    """
     row = session.get(Domain, domain)
-    if row is None:
-        return
+    watched = session.get(Watchlist, domain)
     url = url or f"https://{domain}/"
-    if settings.google_safe_browsing_api_key and row.gsb_first_hit_at is None:
+
+    def record(prefix: str, hit: bool) -> None:
+        if hit and row is not None:
+            setattr(row, f"{prefix}_first_hit_at", now)
+        elif not hit and watched is not None:
+            setattr(watched, f"{prefix}_last_clean_at", now)
+
+    if settings.google_safe_browsing_api_key and not (row and row.gsb_first_hit_at):
         try:
-            if lookups.gsb_sync(url, settings.google_safe_browsing_api_key).get("hit"):
-                row.gsb_first_hit_at = now
-        except Exception:
-            pass
-    if settings.virustotal_api_key and row.vt_first_hit_at is None:
+            record("gsb", bool(lookups.gsb_sync(url, settings.google_safe_browsing_api_key).get("hit")))
+        except Exception as error:
+            poll_failed("Safe Browsing", domain, error)
+    vt_due = watched is None or watched.vt_checked_at is None or now - watched.vt_checked_at > VT_REFRESH
+    if settings.virustotal_api_key and vt_due and not (row and row.vt_first_hit_at):
         try:
-            if lookups.virustotal_sync(url, settings.virustotal_api_key, submit=False).get("positives", 0) > 0:
-                row.vt_first_hit_at = now
-        except Exception:
-            pass
+            record("vt", lookups.virustotal_sync(url, settings.virustotal_api_key, submit=False).get("positives", 0) > 0)
+            if watched is not None:
+                watched.vt_checked_at = now
+        except Exception as error:
+            poll_failed("VirusTotal", domain, error)
+
+
+def lead_time_of(first_seen: datetime, first_hit_at: datetime | None, last_clean_at: datetime | None) -> dict:
+    """Hours between the first check on the domain and the last clean poll. A lower bound, in whole hours."""
+    clean = last_clean_at if last_clean_at and (first_hit_at is None or last_clean_at < first_hit_at) else None
+    hours = max(int((clean - first_seen).total_seconds() // 3600), 0) if clean else None
+    if first_hit_at:
+        return {"state": "hit", "at_least_hours": hours or 0}
+    if clean:
+        return {"state": "ahead", "at_least_hours": hours}
+    return {"state": "not_polled", "at_least_hours": None}
+
+
+def lead_time(first_seen: datetime, domain: Domain | None, watched: Watchlist | None) -> dict:
+    """How long the domain was watched before each service listed it: first hits from `domains`, clean polls from the watchlist."""
+    return {
+        "gsb": lead_time_of(first_seen, domain.gsb_first_hit_at if domain else None, watched.gsb_last_clean_at if watched else None),
+        "vt": lead_time_of(first_seen, domain.vt_first_hit_at if domain else None, watched.vt_last_clean_at if watched else None),
+    }
 
 
 def apply(session: Session, request: TakedownRequest, result: Probe, now: datetime, settings: Settings) -> str | None:

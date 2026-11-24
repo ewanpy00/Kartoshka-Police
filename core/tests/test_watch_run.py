@@ -1,151 +1,128 @@
+"""`first_hits`, the one lead-time poller (takedown re-check and watchlist re-check), with the lookups stubbed."""
+import logging
 from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
-from admin_factories import AUTH
 
-from app import watch
-from app.models import Check, Watchlist
+from app.config import Settings
+from app.fast import lookups
+from app.models import Domain, Watchlist
+from app.takedown import tracker
+
+NOW = datetime(2026, 3, 1, 12, tzinfo=UTC)
 
 
-class Calls:
-    def __init__(self, gsb_hit=False, vt_malicious=0):
-        self.gsb = []
-        self.vt = []
-        self.gsb_hit = gsb_hit
-        self.vt_malicious = vt_malicious
+class Lookups:
+    def __init__(self):
+        self.gsb, self.vt = [], []
+        self.gsb_hit, self.vt_positives = False, 0
 
-    def post(self, url, **kwargs):
-        self.gsb.append((url, kwargs))
-        body = {"matches": [{"threatType": "SOCIAL_ENGINEERING"}]} if self.gsb_hit else {}
-        return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+    def gsb_sync(self, url, key, *args, **kwargs):
+        self.gsb.append((url, key))
+        return {"hit": self.gsb_hit}
 
-    def get(self, url, **kwargs):
-        self.vt.append((url, kwargs))
-        body = {"data": {"attributes": {"last_analysis_stats": {"malicious": self.vt_malicious}}}}
-        return httpx.Response(200, json=body, request=httpx.Request("GET", url))
+    def virustotal_sync(self, url, key, *args, **kwargs):
+        self.vt.append((url, key, kwargs))
+        return {"known": True, "positives": self.vt_positives, "total": 70}
 
 
 @pytest.fixture
 def calls(monkeypatch):
-    recorded = Calls()
-    monkeypatch.setattr(watch.httpx, "post", recorded.post)
-    monkeypatch.setattr(watch.httpx, "get", recorded.get)
-    return recorded
+    stub = Lookups()
+    monkeypatch.setattr(lookups, "gsb_sync", stub.gsb_sync)
+    monkeypatch.setattr(lookups, "virustotal_sync", stub.virustotal_sync)
+    return stub
 
 
 @pytest.fixture
-def keys(settings):
-    settings.google_safe_browsing_api_key = "gsb-key"
-    settings.virustotal_api_key = "vt-key"
+def keys():
+    return Settings(google_safe_browsing_api_key="gsb-key", virustotal_api_key="vt-key")
 
 
-def add_watch(session, domain="tamm-pay.xyz", due=True, expired=False, **columns):
-    now = datetime.now(UTC)
-    row = Watchlist(
-        domain=domain,
-        next_check_at=now - timedelta(minutes=1) if due else now + timedelta(hours=1),
-        expires_at=now - timedelta(days=1) if expired else now + timedelta(days=1),
-        **columns,
-    )
-    session.add(row)
-    session.commit()
-    return row
+def setup(session, watched=True, **watch_columns):
+    domain = Domain(domain="tamm-pay.xyz", status="confirmed", source="officer", confirmed_by="officer")
+    session.add(domain)
+    row = None
+    if watched:
+        row = Watchlist(domain="tamm-pay.xyz", next_check_at=NOW, expires_at=NOW + timedelta(days=1), **watch_columns)
+        session.add(row)
+    session.flush()
+    return domain, row
 
 
-def run(client):
-    response = client.post("/v1/admin/watchlist/run", headers=AUTH)
-    assert response.status_code == 202
-    return response.json()["queued"]
+def test_clean_answers_stamp_the_watchlist_row_and_vt_checked_at(session, keys, calls):
+    domain, row = setup(session)
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW)
+    assert calls.gsb == [("https://tamm-pay.xyz/", "gsb-key")] and len(calls.vt) == 1
+    assert calls.vt[0][2] == {"submit": False}
+    assert (row.gsb_last_clean_at, row.vt_last_clean_at, row.vt_checked_at) == (NOW, NOW, NOW)
+    assert domain.gsb_first_hit_at is None and domain.vt_first_hit_at is None
 
 
-def test_run_queues_a_deep_check_and_polls_each_service_once(client, session, keys, calls, enqueued):
-    row = add_watch(session)
-    assert run(client) == 1
-    check = session.query(Check).filter_by(source="watchlist").one()
-    assert (check.domain, check.mode) == ("tamm-pay.xyz", "deep")
-    assert enqueued == [check.id]
-    assert len(calls.gsb) == 1
-    assert calls.gsb[0][1]["params"] == {"key": "gsb-key"}
-    assert calls.vt[0][0].endswith("/domains/tamm-pay.xyz")
-    assert calls.vt[0][1]["headers"] == {"x-apikey": "vt-key"}
-    assert len(calls.vt) == 1
-    assert row.gsb_last_clean_at and row.vt_last_clean_at and row.vt_checked_at
-    assert row.gsb_first_hit_at is None and row.vt_first_hit_at is None
-    assert row.next_check_at > datetime.now(UTC) + timedelta(hours=5)
+def test_hits_stamp_the_domain_once_and_stop_that_service_being_polled(session, keys, calls):
+    calls.gsb_hit, calls.vt_positives = True, 3
+    domain, row = setup(session)
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW)
+    assert domain.gsb_first_hit_at == NOW and domain.vt_first_hit_at == NOW
+    assert row.gsb_last_clean_at is None and row.vt_checked_at == NOW
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW + timedelta(days=2))
+    assert domain.gsb_first_hit_at == NOW and len(calls.gsb) == 1 and len(calls.vt) == 1
 
 
-def test_second_run_within_a_day_skips_virustotal(client, session, keys, calls):
-    row = add_watch(session)
-    run(client)
-    row.next_check_at = datetime.now(UTC) - timedelta(minutes=1)
-    session.commit()
-    run(client)
-    assert len(calls.gsb) == 2
-    assert len(calls.vt) == 1
+def test_virustotal_is_throttled_to_once_a_day_but_safe_browsing_is_not(session, keys, calls):
+    _, row = setup(session)
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW)
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW + timedelta(hours=6))
+    assert len(calls.gsb) == 2 and len(calls.vt) == 1
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW + timedelta(hours=25))
+    assert len(calls.vt) == 2 and row.vt_checked_at == NOW + timedelta(hours=25)
 
 
-def test_virustotal_is_polled_again_after_a_day(client, session, keys, calls):
-    add_watch(session, vt_checked_at=datetime.now(UTC) - timedelta(hours=25))
-    run(client)
+def test_virustotal_polls_again_when_checked_over_a_day_ago(session, keys, calls):
+    setup(session, vt_checked_at=NOW - timedelta(hours=25))
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW)
     assert len(calls.vt) == 1
 
 
-def test_empty_keys_call_nothing_and_change_no_column(client, session, calls):
-    row = add_watch(session)
-    assert run(client) == 1
+def test_a_service_without_a_key_is_skipped_and_nothing_is_stamped(session, calls):
+    _, row = setup(session)
+    tracker.first_hits(session, "tamm-pay.xyz", None, Settings(google_safe_browsing_api_key="", virustotal_api_key=""), NOW)
     assert calls.gsb == [] and calls.vt == []
     assert (row.gsb_last_clean_at, row.vt_last_clean_at, row.vt_checked_at) == (None, None, None)
+    tracker.first_hits(session, "tamm-pay.xyz", None, Settings(google_safe_browsing_api_key="", virustotal_api_key="vt-key"), NOW)
+    assert calls.gsb == [] and len(calls.vt) == 1 and row.gsb_last_clean_at is None
 
 
-def test_hits_set_first_hit_once(client, session, keys, calls):
-    calls.gsb_hit, calls.vt_malicious = True, 3
-    row = add_watch(session)
-    run(client)
-    first = row.gsb_first_hit_at
-    assert first and row.vt_first_hit_at and row.vt_checked_at
-    row.next_check_at = datetime.now(UTC) - timedelta(minutes=1)
-    session.commit()
-    run(client)
-    assert row.gsb_first_hit_at == first
+def test_without_a_watchlist_row_only_the_first_hit_is_recorded(session, keys, calls):
+    domain, _ = setup(session, watched=False)
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW)
+    assert domain.gsb_first_hit_at is None and session.get(Watchlist, "tamm-pay.xyz") is None
+    calls.gsb_hit = True
+    tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW)
+    assert domain.gsb_first_hit_at == NOW
 
 
-def test_failed_poll_leaves_columns_unchanged(client, session, keys, monkeypatch):
-    def fail(url, **kwargs):
-        raise httpx.ConnectTimeout("slow")
+def test_failed_polls_change_nothing_and_never_log_the_key(session, keys, monkeypatch, caplog):
+    def fail(url, key, *args, **kwargs):
+        raise httpx.ConnectTimeout(f"timed out for {url}?key={key}")
 
-    monkeypatch.setattr(watch.httpx, "post", fail)
-    monkeypatch.setattr(watch.httpx, "get", fail)
-    row = add_watch(session)
-    assert run(client) == 1
-    assert (row.gsb_last_clean_at, row.vt_last_clean_at, row.vt_checked_at) == (None, None, None)
-
-
-def test_rows_not_due_or_expired_are_left_alone(client, session, keys, calls):
-    add_watch(session, "later.example", due=False)
-    add_watch(session, "gone.example", expired=True)
-    assert run(client) == 0
-    assert calls.gsb == [] and calls.vt == []
-    assert session.query(Check).filter_by(source="watchlist").count() == 0
+    monkeypatch.setattr(lookups, "gsb_sync", fail)
+    monkeypatch.setattr(lookups, "virustotal_sync", fail)
+    domain, row = setup(session)
+    with caplog.at_level(logging.WARNING, logger="app.takedown.tracker"):
+        tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW)
+    assert (row.gsb_last_clean_at, row.vt_last_clean_at, row.vt_checked_at, domain.gsb_first_hit_at) == (None,) * 4
+    assert "ConnectTimeout" in caplog.text and "gsb-key" not in caplog.text and "vt-key" not in caplog.text
 
 
-def test_failed_poll_logs_neither_the_key_nor_a_query_string(monkeypatch, caplog):
-    def fail(url, **kwargs):
-        raise httpx.ConnectTimeout(f"timed out for {url}?key=gsb-key")
+def test_failed_poll_logs_the_status_code(session, keys, monkeypatch, caplog):
+    def refuse(url, key, *args, **kwargs):
+        raise httpx.HTTPStatusError("403", request=httpx.Request("POST", f"{url}?key={key}"),
+                                    response=httpx.Response(403, request=httpx.Request("POST", url)))
 
-    monkeypatch.setattr(watch.httpx, "post", fail)
-    with caplog.at_level("WARNING", logger="app.watch"):
-        assert watch.poll_safe_browsing("gsb-key", "tamm-pay.xyz") is None
-    assert "tamm-pay.xyz" in caplog.text and "ConnectTimeout" in caplog.text
-    assert "gsb-key" not in caplog.text and "key=" not in caplog.text
-    assert all(record.exc_info is None for record in caplog.records)
-
-
-def test_failed_poll_logs_the_status_code(monkeypatch, caplog):
-    def refuse(url, **kwargs):
-        return httpx.Response(403, request=httpx.Request("POST", f"{url}?key=gsb-key"))
-
-    monkeypatch.setattr(watch.httpx, "post", refuse)
-    with caplog.at_level("WARNING", logger="app.watch"):
-        assert watch.poll_safe_browsing("gsb-key", "tamm-pay.xyz") is None
+    monkeypatch.setattr(lookups, "gsb_sync", refuse)
+    setup(session)
+    with caplog.at_level(logging.WARNING, logger="app.takedown.tracker"):
+        tracker.first_hits(session, "tamm-pay.xyz", None, keys, NOW)
     assert "403" in caplog.text and "gsb-key" not in caplog.text
