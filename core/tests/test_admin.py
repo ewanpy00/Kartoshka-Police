@@ -109,15 +109,16 @@ def test_queue_and_case_routes(client, session):
     assert client.get("/v1/admin/cases/nothing-here.test", headers=AUTH).status_code == 404
 
 
-def test_confirm_blocks_the_site_and_writes_the_trail(client, session):
+def test_confirm_blocks_the_site_and_writes_the_trail(client, session, monkeypatch):
+    bumps = []
+    monkeypatch.setattr(cache, "bump_blocklist_version", lambda: bumps.append(1))  # conftest stubs it out
     check = make_check(session, "confirm-me.test", 80)
     evidence_id = with_evidence(session, check)
-    before = cache.blocklist_version()
     response = client.post(f"/v1/review/{evidence_id}", headers=AUTH, json={"decision": "confirm", "reviewer": "Officer A"})
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "confirmed" and body["domain"] == "confirm-me.test"
-    assert body["blocklist_version"] >= before + 1
+    assert bumps == [1]
     row = session.get(Domain, "confirm-me.test")
     assert row.status == "confirmed" and row.source == "officer" and row.confirmed_by == "officer"
     session.refresh(check)
@@ -213,7 +214,8 @@ def test_hits_are_counted(client, session):
 
 def test_verify_chain_route(client):
     body = client.get("/v1/admin/evidence/verify", headers=AUTH).json()
-    assert body["ok"] is True and body["rows"] >= 0
+    assert body["intact"] is True and body["count"] >= 0 and body["first_broken"] is None
+    assert body["message"] == "chain intact"
 
 
 def test_health_route(client):

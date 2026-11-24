@@ -17,7 +17,6 @@ from app.deep import watchlist
 from app.deep.visual import REFS_KEY
 from app.defang import defang
 from app.deps import SessionDep, SettingsDep
-from app.evidence import store
 from app.fast import intel
 from app.helplines import routes as helplines
 from app.models import Check, Evidence, FeedEntry, ModelState, Watchlist
@@ -170,11 +169,6 @@ def watched(session: SessionDep, cursor: int = 0) -> dict:
         } for row in rows],
         "next_cursor": cursor + PAGE if cursor + PAGE < total else None,
     }
-
-
-@router.get("/evidence/verify", description="Recompute the whole evidence hash chain from the first record.")
-def verify_chain(session: SessionDep) -> dict:
-    return {**store.verify(session), "checked_at": datetime.now(UTC).isoformat()}
 
 
 @router.get("/stats", description="Impact KPIs for 24 hours or 7 days (volumes, a time series for the chart, lead time "

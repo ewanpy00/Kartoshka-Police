@@ -18,7 +18,7 @@ from app import audit, cache
 from app.fast import intel
 from app.graph import build as graph
 from app.models import Check, Domain, Evidence, Review, Verdict
-from app.verdict.bands import total
+from app.verdict.bands import band, total
 from app.verdict.reasons import reason
 
 REJECT_REASONS = ("legitimate_site", "not_a_scam", "parked_or_empty", "already_offline", "not_enough_evidence",
@@ -135,6 +135,7 @@ def review(session: Session, evidence_id: str, decision: str, reviewer: str, rea
         check.score, check.verdict = 0, "allow"
     else:
         check.score = total(officer_reasons)
+        check.verdict = band(check.score)  # a confirmation's `block` must not outlive it
         if row is not None and row.status == "confirmed":  # every reject takes the confirmation off the site
             session.delete(row)
             changed = True

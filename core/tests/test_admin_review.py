@@ -3,7 +3,8 @@ import pytest
 from admin_factories import AUTH, add_check, add_evidence
 from app import events
 from app import review as decisions
-from app.models import AuditLog, Domain, Review
+from app.models import AuditLog, Domain, Review, Verdict
+from app.verdict.bands import band
 
 
 @pytest.fixture
@@ -116,3 +117,33 @@ def test_auto_confirm_respects_an_earlier_officer_reject_and_an_officer_confirma
     decisions.auto_confirm(session, "officer-first.example", "uaepass", confirmed.id)
     assert session.get(Domain, "officer-first.example").confirmed_by == "officer"
     assert session.query(AuditLog).filter_by(action="case.auto_confirm").count() == 0
+
+
+def test_a_non_clearing_reject_after_a_confirm_returns_the_verdict_to_the_band_of_its_score(session):
+    check = add_check(session, "undone.example", 70, brand="UAE PASS")
+    evidence = add_evidence(session, check)
+    decisions.review(session, evidence.id, "confirm", "Sara")
+    assert (check.score, check.verdict) == (100, "block")
+    decisions.review(session, evidence.id, "reject", "Sara", "test_or_internal")
+    assert check.verdict == band(check.score) != "block"
+    row = session.query(Verdict).filter_by(check_id=check.id).order_by(Verdict.id.desc()).first()
+    assert (row.verdict, row.score) == (band(check.score), check.score)
+    entry = session.query(AuditLog).filter_by(action="review.reject", target="undone.example").one()
+    assert (entry.after["verdict"], entry.after["score"]) == (check.verdict, check.score)
+
+
+def test_a_clearing_reject_after_a_confirm_is_allow_zero(session):
+    check = add_check(session, "cleared-after.example", 85)
+    evidence = add_evidence(session, check)
+    decisions.review(session, evidence.id, "confirm", "Sara")
+    decisions.review(session, evidence.id, "reject", "Sara", "legitimate_site")
+    assert (check.verdict, check.score) == ("allow", 0)
+
+
+def test_undoing_an_auto_confirm_leaves_the_check_and_its_verdict_consistent(session):
+    check = add_check(session, "auto-undo.example", 95)
+    evidence = add_evidence(session, check)
+    decisions.auto_confirm(session, "auto-undo.example", None, evidence.id)
+    decisions.undo_auto_confirm(session, "auto-undo.example", "Sara")
+    assert session.get(Domain, "auto-undo.example") is None
+    assert check.verdict == band(check.score) == "block"
