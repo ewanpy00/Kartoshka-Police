@@ -3,11 +3,11 @@
     <string name="app_name">الحارس</string>
     <string name="hero_subtitle">حماية من روابط الاحتيال</string>
     <string name="share_label">افحص مع كرتوشكا</string>
+    <string name="tour_label">جولة في التطبيق</string>
     <string name="demo_banner">نسخة تجريبية · ليست تطبيقًا رسميًا للشرطة</string>
     <string name="channel_alerts">تنبيهات الاحتيال</string>
 
     <string name="tab_home">الرئيسية</string>
-    <string name="tab_check">افحص</string>
     <string name="tab_reports">بلاغاتي</string>
     <string name="tab_radar">الرادار</string>
 
@@ -75,4 +75,12 @@
     <string name="language_ar">العربية</string>
     <string name="theme_light">فاتح</string>
     <string name="theme_dark">داكن</string>
+    <string name="recent_title">عمليات الفحص الأخيرة</string>
+    <string name="recent_clear">مسح</string>
+    <string name="recent_allow">لا توجد علامات تحذير</string>
+    <string name="recent_warn">انتبه</string>
+    <string name="recent_block">احتيال مشتبه به</string>
+    <string name="dns_soon">قريبًا: حظر مواقع الاحتيال في كل التطبيقات</string>
+    <string name="dns_soon_title">نظام DNS الخاص قادم</string>
+    <string name="dns_soon_body">سيحظر نظام DNS الخاص مواقع الاحتيال التي أكدتها الشرطة في كل تطبيقات هذا الهاتف، وليس فقط في الروابط التي تفتحها عبر الحارس. يحتاج ذلك إلى خادم DNS من كارتوشكا بعنوان مشفّر (DNS-over-TLS)، وهذه النسخة لا تملكه بعد.\n\nحتى ذلك الحين، يحمي الحارس الروابط التي تفتحها به، لذا اجعله متصفحك الافتراضي.</string>
 </resources>

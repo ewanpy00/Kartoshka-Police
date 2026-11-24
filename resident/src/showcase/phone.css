@@ -1,0 +1,44 @@
+/* The phone in the showcase: the resident app's palette and pieces, scoped to .ph so the stage around it
+   stays dark whatever the screen inside shows. Sizes are in px: the phone is drawn at 375 x 790 and scaled. */
+.ph {
+  --bg: #0b1320; --surface: #111a2b; --line: #1e2a40; --text: #e8edf5; --muted: #93a0b5;
+  --accent: #d7b14e; --on-accent: #151925; --hero: #151925; --hero-2: #232a3b;
+  --allow: #5fd19a; --allow-soft: #11271f; --warn: #f0b35a; --warn-soft: #2a2010;
+  --block: #ff9483; --block-soft: #2a1518; --grey-soft: #16233a; --dot: #2c3a52;
+  position: absolute; inset: 0; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Arabic', 'Geeza Pro', sans-serif; font-size: 15px; line-height: 1.4;
+}
+.ph.light {
+  --bg: #f5f6f8; --surface: #ffffff; --line: #e4e7ec; --text: #101727; --muted: #5b6475;
+  --accent: #151925; --on-accent: #ffffff; --allow: #18794e; --allow-soft: #e6f4ec; --warn: #b4530a; --warn-soft: #fdf1e3;
+  --block: #b32416; --block-soft: #fdecea; --grey-soft: #eef1f6; --dot: #c2c8d0;
+}
+.ph * { box-sizing: border-box; }
+.ph p { margin: 0; }
+.ph .status { height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-size: 13px; font-weight: 600; direction: ltr; }
+.ph .status i { display: inline-block; width: 16px; height: 9px; margin-inline-start: 4px; border-radius: 2px; border: 1.5px solid currentColor; opacity: 0.8; }
+.ph .pad { padding: 0 16px; }
+.ph .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.ph .muted { color: var(--muted); }
+.ph .small { font-size: 12.5px; }
+.ph .mono { font-family: ui-monospace, Menlo, monospace; direction: ltr; unicode-bidi: isolate; }
+.ph .btn { display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border-radius: 12px; font-weight: 700; font-size: 14.5px;
+  background: var(--accent); color: var(--on-accent); }
+.ph .btn.safe { background: var(--allow); color: var(--bg); }
+.ph .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.ph svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ph .appbar { display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 16px; font-size: 18px; font-weight: 600; border-bottom: 1px solid var(--line); }
+.ph .tabs { position: absolute; inset-inline: 0; bottom: 0; height: 70px; display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface);
+  border-top: 1px solid var(--line); padding-bottom: 8px; }
+.ph .tabs span { display: grid; justify-items: center; align-content: center; gap: 3px; font-size: 11.5px; color: var(--muted); }
+.ph .tabs span.on { color: var(--accent); font-weight: 700; }
+.ph .tabs span.on svg { background: color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 999px; padding: 3px 14px; width: 50px; height: 28px; }
+.ph .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+.ph .badge.block { background: var(--block-soft); color: var(--block); }
+.ph .badge.allow { background: var(--allow-soft); color: var(--allow); }
+.ph .badge.warn { background: var(--warn-soft); color: var(--warn); }
+
+/* A finger tap: a ring that shrinks onto the point, then a ripple. Placed with left/top in phone px. */
+.tap { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; pointer-events: none; z-index: 30;
+  background: rgb(255 255 255 / 0.28); border: 2px solid rgb(255 255 255 / 0.85); box-shadow: 0 0 0 0 rgb(255 255 255 / 0.5); }
+.ph.light .tap { background: rgb(21 25 37 / 0.18); border-color: rgb(21 25 37 / 0.6); }

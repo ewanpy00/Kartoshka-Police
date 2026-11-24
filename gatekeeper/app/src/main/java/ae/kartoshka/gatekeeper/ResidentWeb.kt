@@ -5,6 +5,7 @@ import android.app.Activity
 import android.graphics.Bitmap
 import android.net.Uri
 import android.view.View
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -23,7 +24,8 @@ object ResidentWeb {
     fun url(context: android.content.Context, path: String): String {
         val join = if (path.contains('?')) "&" else "?"
         return BuildConfig.RESIDENT_URL.trimEnd('/') + path + join +
-            "lang=" + Appearance.webLanguage(context) + "&theme=" + Appearance.webTheme(context)
+            "lang=" + Appearance.webLanguage(context) + "&theme=" + Appearance.webTheme(context) +
+            (if (BuildConfig.DEMO) "&demo=1" else "")
     }
 
     fun checkPath(url: String) = "/check?source=gatekeeper&url=" + Uri.encode(url)
@@ -36,6 +38,9 @@ object ResidentWeb {
         web.settings.allowFileAccess = false
         web.settings.userAgentString = web.settings.userAgentString + " KartoshkaGatekeeper/" + BuildConfig.VERSION_NAME
         web.setBackgroundColor(activity.getColor(R.color.page))
+        // The only call the pages can make into the app. Only the resident origin ever loads in this WebView
+        // (other links go to the real browser), and the bridge just appends to the Home list after validation.
+        web.addJavascriptInterface(Bridge((activity.application as GatekeeperApp).store), "KartoshkaApp")
         var failed = false
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -68,6 +73,16 @@ object ResidentWeb {
         retry.setOnClickListener {
             error.visibility = View.GONE
             web.reload()
+        }
+    }
+
+    private class Bridge(private val store: Store) {
+        /** Check.vue calls this when a link check has a verdict, so Home can list it under Recent checks. */
+        @JavascriptInterface
+        fun recordCheck(url: String?, verdict: String?, brand: String?) {
+            val u = url?.trim() ?: return
+            if (!(u.startsWith("https://") || u.startsWith("http://"))) return
+            store.addCheck(u, verdict ?: return, brand?.takeIf { it.isNotBlank() })
         }
     }
 

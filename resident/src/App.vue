@@ -1,7 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { demo } from './demo'
 import { embedded } from './embedded'
 import { lang, tr } from './i18n'
 import { theme, type Theme } from './theme'
+
+const route = useRoute()
+// /showcase draws its own full-screen stage.
+const bare = computed(() => route.meta.bare === true)
 
 const THEMES: [Theme, string, string, string][] = [
   ['system', 'Phone setting', 'إعداد الهاتف', 'M5 2h6a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM7 12h2'],
@@ -19,7 +26,7 @@ const ICONS = {
 </script>
 
 <template>
-  <header v-if="!embedded" class="top">
+  <header v-if="!embedded && !bare" class="top">
     <RouterLink to="/" class="brand">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5z" /><path d="m8.5 12 2.5 2.5 4.5-5" /></svg>
       {{ tr('Kartoshka link check', 'كارتوشكا · فحص الروابط') }}
@@ -37,8 +44,11 @@ const ICONS = {
       </div>
     </div>
   </header>
+  <p v-if="demo && !bare" class="demo-pill" :title="tr('Sample data, not real reports. Open with ?demo=0 to turn it off.', 'بيانات تجريبية وليست بلاغات حقيقية. افتح بـ ?demo=0 لإيقافها.')">
+    {{ tr('Demo data', 'بيانات تجريبية') }}
+  </p>
   <RouterView />
-  <nav v-if="!embedded" class="tabs">
+  <nav v-if="!embedded && !bare" class="tabs">
     <RouterLink v-for="[to, icon, en, ar] in ([['/', 'home', 'Home', 'الرئيسية'], ['/sms', 'sms', 'Paste SMS', 'لصق رسالة'], ['/reports', 'reports', 'My reports', 'بلاغاتي'], ['/radar', 'radar', 'Scam radar', 'رادار الاحتيال']] as const)" :key="to" :to="to">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="ICONS[icon]" /></svg>
       <span>{{ tr(en, ar) }}</span>
@@ -58,6 +68,8 @@ svg { width: 1.35rem; height: 1.35rem; fill: none; stroke: currentColor; stroke-
 .controls .seg button + button { border-color: rgb(255 255 255 / 0.3); }
 .controls .seg button[aria-pressed='true'] { background: rgb(255 255 255 / 0.16); color: var(--on-header); }
 .controls .icon { padding-inline: 0.5rem; }
+.demo-pill { margin: 0; padding: 0.2rem 1rem; background: var(--header-gold); color: #1b1f29; font-size: 0.72rem; font-weight: 700;
+  text-align: center; letter-spacing: 0.02em; }
 .controls .icon svg { width: 1rem; height: 1rem; stroke-width: 1.5; }
 .tabs { position: fixed; inset-inline: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface);
   border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }

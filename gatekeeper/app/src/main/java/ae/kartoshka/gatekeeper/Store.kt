@@ -46,6 +46,20 @@ class Store(context: Context) {
 
     fun countBlock() = prefs.edit().putInt("blocked_count", blockedCount + 1).apply()
 
+    /** Demo build only: sample counters so Home is not all zeros on a fresh install. */
+    fun seedDemo() {
+        if (!prefs.contains("demo_seeded")) {
+            prefs.edit().putBoolean("demo_seeded", true).putInt("blocked_count", 17)
+                .putInt("listed_count", maxOf(listedCount, 1284)).putLong("synced_at", System.currentTimeMillis() - 4 * 60_000).apply()
+        }
+        if (!prefs.contains("demo_checks_seeded")) {
+            prefs.edit().putBoolean("demo_checks_seeded", true).apply()
+            addCheck("https://www.tamm.abudhabi/", "allow", null)
+            addCheck("https://secure-update.online/", "warn", null)
+            addCheck("https://rta-fine-ae.xyz/payment", "block", "RTA")
+        }
+    }
+
     /** True when the host or one of its parents is on the confirmed list (a Bloom filter hit). */
     fun listed(host: String): Boolean = Links.parents(host).any { bloom.mightContain(it) }
 
@@ -73,4 +87,35 @@ class Store(context: Context) {
     }
 
     fun reportsJson(): String = prefs.getString("reports", "[]") ?: "[]"
+
+    /**
+     * Recent checks for Home: links the user checked on purpose, plus links that Gatekeeper warned about or
+     * blocked. Plain safe link taps are not kept, so this never becomes a browsing history. Newest first, 8 at most.
+     */
+    data class RecentCheck(val url: String, val verdict: String, val brand: String?, val at: Long)
+
+    fun recentChecks(): List<RecentCheck> = runCatching {
+        val all = JSONArray(prefs.getString("recent_checks", "[]"))
+        (0 until all.length()).map { i ->
+            val o = all.getJSONObject(i)
+            RecentCheck(o.getString("url"), o.getString("verdict"), o.optString("brand").ifBlank { null }, o.getLong("at"))
+        }
+    }.getOrDefault(emptyList())
+
+    @Synchronized
+    fun addCheck(url: String, verdict: String, brand: String?) {
+        if (verdict !in VERDICTS || url.isBlank() || url.length > 2048) return
+        val kept = recentChecks().filter { it.url != url }.take(RECENT_MAX - 1)
+        val all = JSONArray()
+        all.put(JSONObject().put("url", url).put("verdict", verdict).put("brand", brand?.take(60) ?: "").put("at", System.currentTimeMillis()))
+        kept.forEach { all.put(JSONObject().put("url", it.url).put("verdict", it.verdict).put("brand", it.brand ?: "").put("at", it.at)) }
+        prefs.edit().putString("recent_checks", all.toString()).apply()
+    }
+
+    fun clearChecks() = prefs.edit().remove("recent_checks").apply()
+
+    companion object {
+        val VERDICTS = setOf("allow", "warn", "block")
+        const val RECENT_MAX = 8
+    }
 }

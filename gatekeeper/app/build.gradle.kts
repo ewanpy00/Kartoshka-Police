@@ -7,6 +7,8 @@ val coreUrl: String = (project.findProperty("coreUrl") as String?) ?: "http://10
 val residentUrl: String = (project.findProperty("residentUrl") as String?) ?: "http://10.0.2.2:5174"
 // Private DNS hostname of the DNS Shield resolver (DoT); empty in the demo build, where DNS Shield runs on a laptop.
 val dnsHost: String = (project.findProperty("dnsHost") as String?) ?: ""
+// -Pdemo=true: the resident pages answer from their built-in sample data (?demo=1) and Home shows sample counters.
+val demo: Boolean = (project.findProperty("demo") as String?) == "true"
 
 android {
     namespace = "ae.kartoshka.gatekeeper"
@@ -21,6 +23,7 @@ android {
         buildConfigField("String", "CORE_URL", "\"$coreUrl\"")
         buildConfigField("String", "RESIDENT_URL", "\"$residentUrl\"")
         buildConfigField("String", "DNS_HOST", "\"$dnsHost\"")
+        buildConfigField("boolean", "DEMO", demo.toString())
     }
 
     buildFeatures {

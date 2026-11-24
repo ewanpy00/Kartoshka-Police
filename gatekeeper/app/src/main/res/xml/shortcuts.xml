@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long press on the app icon: the product tour for screen recording (TourActivity). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shield"
+        android:shortcutId="tour"
+        android:shortcutShortLabel="@string/tour_label">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="ae.kartoshka.gatekeeper.TourActivity"
+            android:targetPackage="ae.kartoshka.gatekeeper" />
+    </shortcut>
+</shortcuts>

@@ -19,3 +19,6 @@ resident/dist/
 # DNS config is generated at runtime; keep only the placeholder
 dns/conf/*
 !dns/conf/.gitkeep
+
+# Product tour built into the APK by make tour (resident/vite.tour.config.ts)
+gatekeeper/app/src/main/assets/tour/

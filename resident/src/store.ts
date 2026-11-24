@@ -1,6 +1,10 @@
 // Reports live on this device only: the id and the secret token. No account, no identity.
+import { DEMO_REPORTS_KEY, demo, seedReports } from './demo'
+
 export interface SavedReport { id: string; token: string; url: string; at: string }
-const KEY = 'kp.reports'
+// Demo mode keeps its own list, so the device's real reports are never mixed with the fixtures.
+const KEY = demo ? DEMO_REPORTS_KEY : 'kp.reports'
+if (demo) seedReports()
 
 export function savedReports(): SavedReport[] {
   try {

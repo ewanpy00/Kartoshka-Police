@@ -10,7 +10,7 @@ The Android app: the default browser that checks every tapped link before it ope
 |---|---|
 | Tapped link (default browser) | Local check, then `POST /v1/check` with a 400 ms budget, then one of: forward to the real browser, warn, block, or "Checking link…" for up to 3 s. |
 | Share "Check with Kartoshka" | One link goes through the same flow. Text with none or several links opens the resident SMS check. |
-| Home | Set as default browser (`RoleManager.ROLE_BROWSER`), Private DNS, choose the browser for safe links; then Check a link, Paste an SMS, My reports, Scam radar. |
+| Home | A link box (with paste) whose result opens as its own screen; Recent checks (links checked on purpose, plus links Gatekeeper warned about or blocked, never plain safe taps); set as default browser (`RoleManager.ROLE_BROWSER`), Private DNS, the browser for safe links, language and theme. Tabs: Home, My reports, Scam radar. |
 
 The local check:
 - Official domains of a brand are forwarded with no network call.
@@ -76,4 +76,14 @@ The block page shows **Check your real fines in TAMM** (`https://www.tamm.abudha
 
 - iOS cannot do this: the default-browser entitlement requires a real browser. iPhone users get the resident PWA and the share sheet.
 - In-app browsers (Instagram, Telegram, TikTok) bypass the default browser; residents use the share button there.
-- Android has no API to set Private DNS for the user. The button copies the resolver hostname (`-PdnsHost=`) and opens the network settings.
+- Android has no API to set Private DNS for the user. With `-PdnsHost=` the button copies the resolver hostname and opens the network settings. Without it (every build today: AdGuard in `dns/` serves plain DNS on 5335, not DNS-over-TLS on 853) the row is marked "coming soon" and explains why.
+- `-Pdemo=true` (`make android-demo`) builds with sample data: the resident pages answer from `resident/src/demo.ts` and Home gets sample counters and recent checks.
+
+## Product tour (screen recording)
+
+`TourActivity` plays the 24 s product tour from the web `/showcase` (sample data, no network) full screen, with the system bars hidden and the screen kept on. Tap pauses; back exits.
+
+- Open it with a long press on the app icon (Product tour), a long press on the Home header, or `adb shell am start -n ae.kartoshka.gatekeeper/.TourActivity --es lang ar`.
+- The tour is built into the APK by `make tour`; `make android` and `make android-demo` do this when `resident/node_modules` exists. Without it (for example `make apk` in Docker) the screen opens `/showcase?phone` on the resident server instead.
+- `make record-tour lang=en` records it with `adb screenrecord`: the tour waits on its first frame, the recording starts, a tap starts the tour, and it plays once and holds the end card. On a phone you can also use the built-in screen recorder.
+

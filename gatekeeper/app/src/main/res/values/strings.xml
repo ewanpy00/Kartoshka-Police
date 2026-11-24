@@ -3,12 +3,12 @@
     <string name="app_name">Gatekeeper</string>
     <string name="hero_subtitle">Scam link protection</string>
     <string name="share_label">Check with Kartoshka</string>
+    <string name="tour_label">Product tour</string>
     <string name="demo_banner">Demo build · not an official police app</string>
     <string name="channel_alerts">Scam alerts</string>
 
     <!-- Tabs -->
     <string name="tab_home">Home</string>
-    <string name="tab_check">Check</string>
     <string name="tab_reports">Reports</string>
     <string name="tab_radar">Radar</string>
 
@@ -84,4 +84,12 @@
     <string name="language_ar">العربية</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="recent_title">Recent checks</string>
+    <string name="recent_clear">Clear</string>
+    <string name="recent_allow">No warning signs</string>
+    <string name="recent_warn">Be careful</string>
+    <string name="recent_block">Suspected scam</string>
+    <string name="dns_soon">Coming soon: block scam sites in every app</string>
+    <string name="dns_soon_title">Private DNS is coming</string>
+    <string name="dns_soon_body">Private DNS will block police-confirmed scam sites in every app on this phone, not only in links you open through Gatekeeper. It needs a Kartoshka DNS server with an encrypted (DNS-over-TLS) address, and this build does not have one yet.\n\nUntil then, Gatekeeper protects the links you open with it, so make it your default browser.</string>
 </resources>

@@ -80,11 +80,13 @@ class LinkActivity : AppCompatActivity() {
         when (action) {
             is Action.Forward -> if (!Browsers.open(this, url)) Toast.makeText(this, R.string.no_browser, Toast.LENGTH_LONG).show()
             is Action.Warn -> {
+                app.store.addCheck(url, "warn", action.page.brandId?.let { app.catalog.brand(it)?.nameEn })
                 startActivity(VerdictActivity.intent(this, action.page, blocked = false))
                 if (action.page.deepRunning) action.page.checkId?.let { DeepWatchWorker.start(this, it) }
             }
             is Action.Block -> {
                 app.store.countBlock()
+                app.store.addCheck(url, "block", action.page.brandId?.let { app.catalog.brand(it)?.nameEn })
                 startActivity(VerdictActivity.intent(this, action.page, blocked = true))
             }
             is Action.Checking -> Unit
