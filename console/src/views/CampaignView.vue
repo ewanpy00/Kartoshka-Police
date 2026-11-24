@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { apiJson, postJson, errorText } from '../api'
 import CampaignGraph from '../components/CampaignGraph.vue'
 import LocationLines from '../components/LocationLines.vue'
+import { band, isHigh } from '../bands'
 import { defang } from '../defang'
 import { t } from '../i18n'
 import { officerName } from '../session'
@@ -23,7 +24,7 @@ async function load() {
     graph.value = loadedGraph
     ticked.clear()
     for (const row of loadedDetail.domains) {
-      if (!row.excluded && (row.tick ?? (row.score !== null && row.score >= 70))) ticked.add(row.domain)
+      if (!row.excluded && (row.tick ?? (row.score !== null && isHigh(row.score)))) ticked.add(row.domain)
     }
   } catch (e) {
     error.value = t('failed', { error: errorText(e) })
@@ -91,7 +92,7 @@ onMounted(load)
               <td :data-label="t('domain')" class="mono">{{ defang(row.domain) }}</td>
               <td :data-label="t('state')">{{ row.state }}</td>
               <td :data-label="t('score')">
-                <span v-if="row.score !== null" class="q-score" :class="row.score >= 70 ? 'high' : row.score >= 30 ? 'mid' : 'low'">{{ row.score }}</span>
+                <span v-if="row.score !== null" class="q-score" :class="band(row.score)">{{ row.score }}</span>
                 <template v-else>—</template>
               </td>
               <td :data-label="t('reasons')">

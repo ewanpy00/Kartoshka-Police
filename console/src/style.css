@@ -15,7 +15,7 @@ Queue list
   .q-head           column header row of the queue list
   .q-row            a queue row (button/div); .selected current case; .dim auto-confirmed row
   .q-domain         domain text, mono semibold;  .q-sub muted 12-13px second line
-  .q-score          tabular score with a leading dot; modifiers .high (>=70 red) .mid (30-69 amber) .low
+  .q-score          tabular score with a leading dot; modifiers .high (above 70, red) .mid (30 to 70, amber) .low
   .q-age            muted compact age on the row end
 Case card
   .tag              small neutral pill

@@ -147,6 +147,21 @@ describe('QueueView', () => {
     wrapper.unmount()
   })
 
+  it('a score of exactly 70 is a warn: mid class, not counted or listed as high risk', async () => {
+    openRows = [row('edge.example', { score: 70 }), row('over.example', { score: 71 })]
+    autoRows = []
+    const { wrapper } = await setup()
+    const rows = wrapper.findAll('.q-row')
+    expect(rows[0].find('.q-score').classes()).toContain('mid')
+    expect(rows[0].find('.q-score').classes()).not.toContain('high')
+    expect(rows[1].find('.q-score').classes()).toContain('high')
+    const high = wrapper.findAll('.chip').find((c) => c.text().startsWith('High risk'))!
+    expect(high.find('.count').text()).toBe('1')
+    await high.trigger('click')
+    expect(wrapper.findAll('.q-row').map((r) => r.find('.q-domain').text())).toEqual(['over[.]example'])
+    wrapper.unmount()
+  })
+
   it('auto-confirmed row shows Undo that posts', async () => {
     const { wrapper } = await setup()
     const dim = wrapper.find('.q-row.dim')

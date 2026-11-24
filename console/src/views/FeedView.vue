@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { adaptEvent } from '../adapt'
 import { apiJson, apiToken, errorText } from '../api'
+import { band } from '../bands'
 import { defang } from '../defang'
 import { formatTime, t } from '../i18n'
 import type { FeedRow } from '../types'
@@ -99,7 +100,7 @@ onBeforeUnmount(() => {
             <td :data-label="t('brand')">{{ row.brand ?? '' }}</td>
             <td :data-label="t('verdict')">{{ row.verdict ?? '' }}</td>
             <td :data-label="t('score')">
-              <span v-if="row.score !== null" :class="['q-score', row.score >= 70 ? 'high' : row.score >= 30 ? 'mid' : 'low']">{{ row.score }}</span>
+              <span v-if="row.score !== null" :class="['q-score', band(row.score)]">{{ row.score }}</span>
             </td>
           </tr>
         </tbody>

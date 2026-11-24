@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { apiJson, errorText, postJson } from '../api'
 import CaseCard from '../components/CaseCard.vue'
 import StatStrip from '../components/StatStrip.vue'
+import { band, isHigh } from '../bands'
 import { defang } from '../defang'
 import { formatAge, t } from '../i18n'
 import { rowTagText } from '../rowTag'
@@ -61,13 +62,13 @@ const brands = computed(() => {
 watch(brands, (list) => {
   if (chip.value.startsWith('brand:') && !list.some((b) => 'brand:' + b.name === chip.value)) chip.value = 'all'
 })
-const highCount = computed(() => open.value.filter((r) => r.score >= 70).length)
+const highCount = computed(() => open.value.filter((r) => isHigh(r.score)).length)
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   return [...open.value, ...auto.value].filter((r) => {
     if (q && !r.domain.toLowerCase().includes(q) && !(r.brand ?? '').toLowerCase().includes(q)) return false
-    if (chip.value === 'high') return r.score >= 70
+    if (chip.value === 'high') return isHigh(r.score)
     if (chip.value.startsWith('brand:')) return r.brand === chip.value.slice(6)
     return true
   })
@@ -77,10 +78,6 @@ const visible = computed(() => filtered.value.slice(0, limit.value))
 watch([search, chip], () => {
   limit.value = PAGE
 })
-
-function band(score: number): string {
-  return score >= 70 ? 'high' : score >= 30 ? 'mid' : 'low'
-}
 
 function select(domain: string) {
   void router.push('/queue/' + encodeURIComponent(domain))

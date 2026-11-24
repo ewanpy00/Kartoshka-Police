@@ -28,7 +28,7 @@ vi.mock('../api', () => ({
 }))
 
 describe('CampaignView confirm-all table', () => {
-  it('ticks only unexcluded rows scoring 70 or more and disables excluded rows', async () => {
+  it('ticks only unexcluded rows scoring above 70 and disables excluded rows', async () => {
     const wrapper = mount(CampaignView, {
       props: { id: 'camp_1' },
       global: { stubs: { RouterLink: true, CampaignGraph: true } },
