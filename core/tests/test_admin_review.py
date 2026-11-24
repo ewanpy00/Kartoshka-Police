@@ -1,5 +1,5 @@
 from admin_factories import AUTH, add_check, add_evidence
-from app.models import AuditLog, Domain, Report, Review
+from app.models import AuditLog, Check, Domain, Report, Review
 
 
 def decide(client, evidence, **body):
@@ -69,9 +69,23 @@ def test_report_stores_a_row_and_queues_a_deep_check(client, session, enqueued):
 
 
 def test_hunter_checks_publish_a_candidate_event(client, published):
-    body = client.post("/v1/check", json={"url": "https://tamm-pay.example/", "source": "hunter"}).json()
+    body = client.post(
+        "/v1/check", json={"url": "https://tamm-pay.example/", "source": "hunter"}, headers=AUTH
+    ).json()
     assert published == [
         ("hunter.candidate", {"domain": "tamm-pay.example", "url": "https://tamm-pay.example/", "brand": None, "check_id": body["check_id"]})
     ]
-    client.post("/v1/check", json={"url": "https://other.example/"})
-    assert len(published) == 1
+
+
+def test_reserved_sources_need_the_write_token(client, session, published):
+    for source in ("hunter", "watchlist", "user_report"):
+        response = client.post("/v1/check", json={"url": "https://forged.example/", "source": source})
+        assert response.status_code == 401
+    assert published == []
+    assert session.query(Check).filter_by(domain="forged.example").count() == 0
+
+
+def test_anonymous_check_with_an_ordinary_source_still_works(client, published):
+    response = client.post("/v1/check", json={"url": "https://other.example/", "source": "gatekeeper"})
+    assert response.status_code == 200
+    assert published == []

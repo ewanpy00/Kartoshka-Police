@@ -6,12 +6,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app import events, queue
 from app.admin.router import router as admin_router
-from app.auth import require_write_token
+from app.auth import bearer, require_write_token
 from app.admin import review as review_service
 from app.checks import domain_of, run_check
 from app.config import Settings, get_settings
@@ -35,6 +36,8 @@ from app.schemas import (
 
 app = FastAPI(title="Kartoshka Core", version="0.1.0")
 v1 = APIRouter(prefix="/v1")
+
+RESERVED_SOURCES = ("hunter", "watchlist", "user_report")
 
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -65,8 +68,18 @@ def healthz(session: SessionDep) -> Response:
 
 @v1.post("/check", response_model=Verdict, description="Check one URL against the domains table. Official and confirmed domains match the host or any "
     f"parent domain; allowlisted domains match only the exact host or its www form.\n\n{PENDING_NOTE}")
-def create_check(body: CheckRequest, session: SessionDep, settings: SettingsDep) -> Verdict:
-    """Official and confirmed domains match the host or any parent; allowlisted ones only the host or its www form."""
+def create_check(
+    body: CheckRequest,
+    session: SessionDep,
+    settings: SettingsDep,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+) -> Verdict:
+    """Official and confirmed domains match the host or any parent; allowlisted ones only the host or its www form.
+
+    The sources `hunter`, `watchlist` and `user_report` are reserved: they need the write token.
+    """
+    if body.source in RESERVED_SOURCES:
+        require_write_token(credentials, settings)
     check = run_check(session, body.url, body.source, body.mode, settings.data_dir)
     if body.source == "hunter":
         events.publish(
