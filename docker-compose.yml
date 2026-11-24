@@ -11,6 +11,7 @@ x-core: &core
     - ./core:/srv/core
     - ./data:/srv/data:ro
     - ./eval:/srv/eval:ro
+    - captures:/captures:ro
 
 services:
   postgres:
@@ -60,11 +61,6 @@ services:
   worker:
     <<: *core
     command: ["watchfiles", "--filter", "python", "rq worker ${RQ_QUEUE:-deep} --url ${REDIS_URL:-redis://redis:6379/0}", "app"]
-    volumes:
-      - ./core:/srv/core
-      - ./data:/srv/data:ro
-      - ./eval:/srv/eval:ro
-      - captures:/captures:ro
     networks: [internal, sandbox_net]
     depends_on:
       core:

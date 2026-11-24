@@ -1,7 +1,20 @@
-# Seed allowlist. Official brand domains come from data/brands.yaml and need not be repeated here.
-# The Tranco top-10k import replaces this list later.
-# Each entry matches that exact host and its www. form only, never other subdomains (google.com allows www.google.com, not sites.google.com).
+# Curated allowlist. Official brand domains come from data/brands.yaml and need not be repeated here,
+# and data/tranco_top10k.txt adds the Tranco top sites.
+# Each entry matches that exact host and its www. form only, never other subdomains
+# (google.com allows www.google.com, not sites.google.com).
 google.com
 apple.com
 microsoft.com
 wikipedia.org
+whatsapp.com
+gulfnews.com
+khaleejtimes.com
+thenationalnews.com
+wam.ae
+noon.com
+amazon.ae
+careem.com
+talabat.com
+dubizzle.com
+emaratalyoum.com
+alkhaleej.ae

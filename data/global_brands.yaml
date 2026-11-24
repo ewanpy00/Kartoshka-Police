@@ -1,0 +1,147 @@
+# Global brands that phishing kits imitate, used by the scorer only (brand-in-domain, look-alike tests).
+# They are not on the scam radar and have no service catalog; safe_action falls back to the homepage.
+#
+# official_domains lists the sites people sign in to, not CDN hosts: those are allowlisted through
+# Tranco, and a CDN host as a look-alike target only produces false matches (ebxcdn.com vs rbxcdn.com).
+#
+# country_domains lists labels the brand registers under every country code (google.com.et, google.co.ck).
+# Only for brands that really do; roblox.com.et is a phishing site.
+#
+# whole_word: true means a token matches only as a whole word inside a domain (apple-id-verify.com
+# matches, applebees.com does not). Use it for brands whose name is an ordinary word.
+
+- id: paypal
+  names: [PayPal]
+  official_domains: [paypal.com, paypal.me]
+- id: netflix
+  names: [Netflix]
+  official_domains: [netflix.com]
+- id: facebook
+  names: [Facebook, Meta]
+  match_tokens: [facebook, fbook]
+  official_domains: [facebook.com, fb.com, meta.com]
+- id: instagram
+  names: [Instagram]
+  official_domains: [instagram.com]
+- id: whatsapp
+  names: [WhatsApp]
+  official_domains: [whatsapp.com, whatsapp.net, wa.me]
+- id: microsoft
+  names: [Microsoft]
+  match_tokens: [microsoft, outlook, office365, onedrive, sharepoint, hotmail, msonline]
+  official_domains: [microsoft.com, live.com, office.com, outlook.com, microsoftonline.com, office365.com, sharepoint.com, hotmail.com, onedrive.com]
+- id: apple
+  names: [Apple, iCloud]
+  match_tokens: [apple, icloud, appleid, itunes]
+  whole_word: true
+  official_domains: [apple.com, icloud.com, me.com]
+- id: google
+  names: [Google, Gmail]
+  match_tokens: [google, gmail]
+  whole_word: true
+  official_domains: [google.com, gmail.com, google.ae]
+  country_domains: [google]
+- id: amazon
+  names: [Amazon]
+  whole_word: true
+  official_domains: [amazon.com, amazon.ae, amazon.co.uk, amazon.de]
+- id: roblox
+  names: [Roblox]
+  official_domains: [roblox.com]
+- id: steam
+  names: [Steam]
+  match_tokens: [steamcommunity, steampowered, steam]
+  whole_word: true
+  official_domains: [steamcommunity.com, steampowered.com]
+- id: metamask
+  names: [MetaMask]
+  official_domains: [metamask.io]
+- id: coinbase
+  names: [Coinbase]
+  official_domains: [coinbase.com]
+- id: binance
+  names: [Binance]
+  official_domains: [binance.com]
+- id: trezor
+  names: [Trezor]
+  official_domains: [trezor.io]
+- id: ledger
+  names: [Ledger]
+  match_tokens: [ledgerlive, ledger]
+  whole_word: true
+  official_domains: [ledger.com]
+- id: docusign
+  names: [DocuSign]
+  official_domains: [docusign.com, docusign.net]
+- id: dropbox
+  names: [Dropbox]
+  official_domains: [dropbox.com]
+- id: linkedin
+  names: [LinkedIn]
+  official_domains: [linkedin.com]
+- id: telegram
+  names: [Telegram]
+  official_domains: [telegram.org, t.me]
+- id: dhl
+  names: [DHL]
+  official_domains: [dhl.com]
+- id: fedex
+  names: [FedEx]
+  official_domains: [fedex.com]
+- id: ups
+  names: [UPS]
+  match_tokens: [ups]
+  whole_word: true
+  official_domains: [ups.com]
+- id: usps
+  names: [USPS]
+  official_domains: [usps.com]
+- id: aramex
+  names: [Aramex]
+  official_domains: [aramex.com]
+- id: chase
+  names: [Chase]
+  whole_word: true
+  official_domains: [chase.com]
+- id: wellsfargo
+  names: [Wells Fargo]
+  official_domains: [wellsfargo.com]
+- id: bankofamerica
+  names: [Bank of America]
+  official_domains: [bankofamerica.com]
+- id: allegro
+  names: [Allegro]
+  whole_word: true
+  official_domains: [allegro.pl]
+- id: shopee
+  names: [Shopee]
+  official_domains: [shopee.com, shopee.co.id, shopee.com.my, shopee.ph, shopee.sg, shopee.vn, shopee.co.th]
+- id: adobe
+  names: [Adobe]
+  official_domains: [adobe.com]
+- id: att
+  names: [AT&T]
+  match_tokens: [att]
+  whole_word: true
+  official_domains: [att.com]
+- id: optus
+  names: [Optus]
+  official_domains: [optus.com.au]
+- id: irs
+  names: [IRS]
+  match_tokens: [irs]
+  whole_word: true
+  official_domains: [irs.gov]
+- id: tiktok
+  names: [TikTok]
+  official_domains: [tiktok.com]
+- id: discord
+  names: [Discord]
+  official_domains: [discord.com, discord.gg]
+- id: bradesco
+  names: [Bradesco]
+  official_domains: [bradesco.com.br]
+- id: emirates_airline
+  names: [Emirates Airline]
+  match_tokens: [flyemirates, emiratesairline]
+  official_domains: [emirates.com]

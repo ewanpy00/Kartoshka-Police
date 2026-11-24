@@ -31,5 +31,5 @@ reset: ## Delete all containers and volumes (asks first)
 test: ## Run every test suite
 	./scripts/test.sh
 
-eval: ## Run the evaluation on data/eval/sample.csv
+eval: ## Run the evaluation on data/eval/test.csv and holdout.csv
 	./scripts/eval.sh

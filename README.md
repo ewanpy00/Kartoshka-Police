@@ -57,7 +57,7 @@ Nothing else is published to the host. Postgres and redis are reachable only fro
 | `make migrate` | Apply database migrations in core |
 | `make seed` | Reload `data/` into the `domains` table |
 | `make test` | Run pytest in core, sandbox and hunter, and the console type check and build |
-| `make eval` | Run the evaluation on `data/eval/sample.csv` |
+| `make eval` | Run the evaluation on `data/eval/test.csv` (development set) and `data/eval/holdout.csv` (hold-out) |
 | `make reset` | Delete all containers and volumes, after a typed `yes` |
 
 ### Tests and evaluation
@@ -67,7 +67,7 @@ make test
 make eval
 ```
 
-`make eval` posts the sample URLs to `/v1/batch` and prints a confusion matrix with precision, recall and false positive rate. The stack must be running.
+`make eval` posts the development set and the hold-out set to `/v1/batch?explain=true`. For each set it prints a confusion matrix with precision, recall and false positive rate, rows per origin and per UAE brand, an ablation by signal group and a cutoff sweep. The stack must be running. `python eval/build_set.py <feeds_dir>` rebuilds both sets and the URL-model training lists from feed snapshots.
 
 ### API keys
 
