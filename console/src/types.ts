@@ -225,6 +225,12 @@ export interface Watchlist {
   rows: WatchRow[]
 }
 
+export interface Budget {
+  used: number
+  limit: number | null
+  reached: boolean
+}
+
 export interface Health {
   checked_at: string
   redis_ok: boolean
@@ -235,6 +241,7 @@ export interface Health {
   evidence_records: number
   blocklist_version: string | null
   ai_key_set: boolean
+  budget: { ai: Budget; deep: Budget }
 }
 
 export type TakedownStatus = 'pack_ready' | 'sent' | 'offline_pending' | 'closed' | 'reopened'

@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_CORE_WRITE_TOKEN?: string
+  readonly VITE_SAME_ORIGIN_API?: string
+  readonly VITE_DEMO_BANNER?: string
 }
 
 interface ImportMeta {

@@ -1,4 +1,6 @@
 import { adaptRequest, adaptResponse, pagedKey } from './adapt'
+import { API_PREFIX } from './apiPrefix'
+import { accessCode, signOut } from './session'
 
 export class ApiError extends Error {
   constructor(
@@ -10,16 +12,18 @@ export class ApiError extends Error {
 }
 
 export function apiToken(): string {
-  return import.meta.env.VITE_CORE_WRITE_TOKEN ?? ''
+  return accessCode()
 }
 
-export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers)
   const token = apiToken()
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
-  return fetch(`/api${path}`, { ...init, headers })
+  const response = await fetch(`${API_PREFIX}${path}`, { ...init, headers })
+  if (response.status === 401 && token) signOut()
+  return response
 }
 
 async function failure(response: Response): Promise<ApiError> {

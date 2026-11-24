@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { adaptEvent } from '../adapt'
 import { apiJson, apiToken, errorText } from '../api'
+import { API_PREFIX } from '../apiPrefix'
 import { band } from '../bands'
 import WatchlistPanel from '../components/WatchlistPanel.vue'
 import { defang } from '../defang'
@@ -29,7 +30,7 @@ function push(row: FeedRow) {
 
 function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-  socket = new WebSocket(`${scheme}://${location.host}/api/v1/events`)
+  socket = new WebSocket(`${scheme}://${location.host}${API_PREFIX}/v1/events`)
   socket.onopen = () => {
     socket?.send(JSON.stringify({ type: 'auth', token: apiToken() }))
   }
