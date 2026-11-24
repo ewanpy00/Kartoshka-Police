@@ -9,8 +9,9 @@
 - After `sent` the domain is re-checked every `TAKEDOWN_RECHECK_MIN` minutes. A check is offline only
   when the phone and the bot profile both find the site gone, so geofencing or cloaking cannot fake a
   takedown. `TAKEDOWN_OFFLINE_CHECKS` offline results in a row, at least one interval apart, close it.
-- A capture whose page facts could not be read says nothing about the page. Such a check is no result: it
-  neither counts toward the offline checks nor resets them, and it is written to the request's audit trail.
+- A capture whose page facts could not be read says nothing about the page. Unless the other profile read a
+  live page, such a check is no result: it neither counts toward the offline checks nor resets them, and it
+  is written to the request's audit trail.
 - A closed domain stays on the blocklist and on the watchlist for 30 more days; if it comes back the
   request is `reopened`.
 - `overdue` is derived (sent longer than `TAKEDOWN_SLA_H` ago and not closed), not stored.
@@ -247,8 +248,9 @@ def capture(url: str, profile: str, settings: Settings) -> tuple[dict | None, st
 def probe(domain: str, url: str | None, settings: Settings) -> Probe | None:
     """None when the check could not run (sandbox down); otherwise both profiles' results.
 
-    When either profile could not read the page the probe is returned with `readable` false: it is not offline
-    and not live, and `recheck` treats it as no result.
+    A profile that could not read the page proves nothing. If the other profile read a live page the site is
+    live, and the probe says so. Otherwise the probe is returned with `readable` false: it is neither offline
+    nor live, and `recheck` treats it as no result.
     """
     url = url or f"https://{domain}/"
     host = (httpx.URL(url).host or domain).lower()
@@ -264,11 +266,11 @@ def probe(domain: str, url: str | None, settings: Settings) -> Probe | None:
             results[profile] = failure if cap is None else page_state(cap, host)
         except Unreadable:
             unread.add(profile)
+    profiles = {p: "unreadable" if p in unread else results[p] or "live" for p in ("phone", "bot")}
     if unread:
-        profiles = {p: "unreadable" if p in unread else results[p] or "live" for p in ("phone", "bot")}
-        return Probe(False, None, profiles, readable=False)
+        return Probe(False, None, profiles, readable="live" in profiles.values())
     offline = all(results.values())
-    return Probe(offline, results["phone"] if offline else None, {k: v or "live" for k, v in results.items()})
+    return Probe(offline, results["phone"] if offline else None, profiles)
 
 
 def poll_failed(service: str, domain: str, error: Exception) -> None:

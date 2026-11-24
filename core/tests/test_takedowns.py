@@ -210,6 +210,18 @@ def test_two_unreadable_checks_neither_close_nor_reset_a_request(session, monkey
     assert rows[0]["profiles"] == {"phone": "unreadable", "bot": "unreadable"}
 
 
+def test_a_live_profile_beside_an_unreadable_one_is_a_live_result(session, monkeypatch):
+    """Hiding the page from one profile must not keep a request pending or closed while the other sees it live."""
+    request = make_sent(session, "lu.top")
+    run(session, "lu.top", True, NOW - timedelta(hours=2))
+    run(session, "lu.top", True, NOW - timedelta(minutes=55))
+    assert request.status == "closed"
+    sandbox(monkeypatch, {"phone": UNREADABLE_PAGE, "bot": LIVE_PAGE})
+    result = tracker.recheck(session, "lu.top", SETTINGS, now=NOW)
+    assert result["profiles"] == {"phone": "unreadable", "bot": "live"} and not result["offline"]
+    assert request.status == "reopened" and request.checks_offline == 0
+
+
 def test_a_readable_page_that_lost_its_form_still_reads_form_removed(session, monkeypatch):
     request = make_sent(session, "fr.top")
     pages = sandbox(monkeypatch, {"phone": LIVE_PAGE, "bot": LIVE_PAGE})
