@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/demo_banner"
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <TextView
+            style="@style/TextAppearance.AppCompat.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/protection" />
+
+        <TextView
+            android:id="@+id/default_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/set_default"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/set_default"
+            android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/set_dns"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/set_dns"
+            android:textAllCaps="false" />
+
+        <TextView
+            android:id="@+id/browser_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/pick_browser"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pick_browser"
+            android:textAllCaps="false" />
+
+        <TextView
+            android:id="@+id/list_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/muted"
+            android:textSize="13sp" />
+
+        <TextView
+            style="@style/TextAppearance.AppCompat.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/tools" />
+
+        <Button
+            android:id="@+id/open_check"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/open_check"
+            android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/open_sms"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/open_sms"
+            android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/open_reports"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/open_reports"
+            android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/open_radar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/open_radar"
+            android:textAllCaps="false" />
+    </LinearLayout>
+</ScrollView>

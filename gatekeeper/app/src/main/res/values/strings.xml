@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Gatekeeper</string>
+    <string name="share_label">Check with Kartoshka</string>
+    <string name="demo_banner">Demo build for the hackathon. Not an official police app.</string>
+    <string name="channel_alerts">Scam alerts</string>
+
+    <string name="checking">Checking link…</string>
+    <string name="no_browser">No other browser is installed to open this link.</string>
+
+    <!-- The block and warn pages keep the Arabic title first in every locale. -->
+    <string name="block_title_ar" translatable="false">⚠️ احتيال مشتبه به</string>
+    <string name="block_title_en" translatable="false">Suspected scam: this link was blocked</string>
+    <string name="warn_title_ar" translatable="false">انتبه قبل المتابعة</string>
+    <string name="warn_title_en" translatable="false">Be careful: this link looks suspicious</string>
+    <string name="imitates">Imitates: %1$s · %2$s</string>
+    <string name="offline_note">Checked on this phone only: the police server could not be reached.</string>
+    <string name="go_back">Go back</string>
+    <string name="report">Report to police</string>
+    <string name="details">Details: what the page looks like and every check</string>
+    <string name="open_anyway">Open anyway</string>
+    <string name="report_sent">Report sent. Follow it in My reports.</string>
+    <string name="report_failed">Could not send the report. Try again.</string>
+
+    <string name="notify_blocked_title">A link you opened is a scam</string>
+    <string name="notify_blocked_text">Analysis finished: %1$s is now blocked. Do not enter any details there.</string>
+
+    <string name="protection">Protection</string>
+    <string name="default_on">Gatekeeper checks every link you tap.</string>
+    <string name="default_off">Gatekeeper is not your default browser yet, so tapped links are not checked.</string>
+    <string name="set_default">Check every link (set as default browser)</string>
+    <string name="set_dns">Block scam sites in every app (Private DNS)</string>
+    <string name="dns_copied">Copied %1$s. Open Private DNS and paste it.</string>
+    <string name="dns_not_configured">This demo build has no Private DNS resolver configured.</string>
+    <string name="forward_to">Safe links open in: %1$s</string>
+    <string name="pick_browser">Choose the browser for safe links</string>
+    <string name="none">none</string>
+    <string name="never">never</string>
+    <string name="list_state">Blocked on this phone: %1$d · Police list updated %2$s</string>
+
+    <string name="tools">Check and report</string>
+    <string name="open_check">Check a link</string>
+    <string name="open_sms">Paste an SMS</string>
+    <string name="open_reports">My reports</string>
+    <string name="open_radar">Scam radar</string>
+</resources>
