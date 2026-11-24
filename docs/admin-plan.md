@@ -1,0 +1,219 @@
+# Officer Console (admin panel) plan
+
+On approval this file is copied to `docs/admin-plan.md` on the new branch and kept up to date as the progress log.
+
+## Context
+
+The Officer Console lets a police officer review suspected scam domains, confirm or reject them, see campaigns, and prepare takedown packs. Code freeze is 06:00 tomorrow.
+
+The brief assumed a `feat/app` branch. It does not exist (not local, not on origin), so the work branches from `main`, which is the devops skeleton. Three consequences:
+
+- **Nothing produces a verdict yet.** A deep check calls the sandbox, discards the title and screenshot, and stays `pending`. No evidence row is ever written. A new package P (deep pipeline) is needed before the queue can show a case.
+- **The migration is `0002`, not `0003`**, and it creates every table the admin panel needs.
+- **The proposal is only on `origin/docs`.** `docs/admin-panel.md` is copied onto the branch in the first commit. `docs/app-plan.md` does not exist and is not used.
+
+Branch: `feat/admin-console`, created from `main`. No push, no rename.
+
+## Decisions taken where the docs were silent or disagreed
+
+| Topic | Decision |
+|---|---|
+| Score of exactly 70 | Block. `>= 70` block, `30..69` warn, `< 30` allow (matches `BATCH_CUTOFF`). |
+| Case key | `checks.domain` = normalised host with a leading `www.` removed. No public-suffix handling tonight. |
+| Queue membership | A domain with a warn or block check, or at least one resident report. Official and allowlisted domains never appear. Hunter candidates that score allow show in the live feed only. |
+| Ranking | `score × ln(1 + reports + hits) × freshness × boost`. `hits` = number of checks on the domain. `freshness = 1 / (1 + days since last seen)`. `boost = 1.5` when score is 30 to 69. Computed in Python. |
+| Reject reasons | `legitimate_site`, `parked_or_empty`, `already_offline`, `not_enough_evidence`, `test_or_internal`. The server validates the code; AR/EN labels live in the console. |
+| Auto-confirm | Deep score above 90 and a credential form. Sets `domains.confirmed_by='auto'`. Undo deletes that row and writes an audit entry; the case returns to the open queue. |
+| Reject | Writes the review with its reason and removes any `confirmed` row for the domain. |
+| Hash chain | `hash = sha256(prev_hash + "\n" + canonical_json({id, check_id, created_at, payload}))`. Canonical JSON: sorted keys, `(",", ":")` separators, UTF-8, no floats in payloads. Genesis `prev_hash` is 64 zeros. Order is a new `evidence.seq` identity column. Appends take a Postgres advisory lock. |
+| Review and the chain | The officer decision is not part of the hashed payload. It is joined from `reviews` at export time, so evidence rows are never updated. |
+| PDF library | WeasyPrint (BSD) with Jinja2 autoescape. Its `url_fetcher` hook is what fix 1 asks for. |
+| Evidence exports | `/v1/evidence/{id}.pdf` and `.json` both go behind the write token. |
+| WS auth | `WS /v1/events?token=…`, because a browser cannot set a header on a WebSocket. |
+| Top-site list | `data/allowlist.txt` is the stand-in, as the code already says. Tranco import is a next step. |
+| Takedown tables | Two tables (`takedown_packs`, `takedown_requests`) instead of the proposal's one, so the zip and its hash are stored once per recipient. The zip is stored in Postgres. |
+| Takedown recipients | Registrar abuse, host abuse, Cloudflare. aeDA and the Safe Browsing report are next steps. |
+| Watchlist checks | No scheduler tonight. `POST /v1/admin/watchlist/run` runs the due ones. |
+| Clustering | Union-find in plain Python. No graph library. |
+| Console i18n | A small dictionary module. No i18n library. |
+
+## Work packages
+
+All implementation is delegated to Sonnet subagents. The main session plans, verifies by running commands, and makes one commit per package. Subagents do not commit. All agents share one working tree (the containers bind-mount it), so file ownership below is strict.
+
+| Pkg | Phase | Owns | Builds |
+|---|---|---|---|
+| B0 | 0 | `core/alembic/versions/0002_*.py`, `core/app/models.py`, `core/app/admin/router.py`, `core/app/events.py`, `core/app/main.py`, `core/requirements.txt`, `core/Dockerfile`, `docker-compose.yml`, `scripts/*.sh`, `core/tests/test_admin_auth.py` | Migration 0002 (all columns below). Admin router that includes each package's sub-router. `events.publish()`. New deps and system libraries, then one image rebuild. `-p kartoshka-police` in the scripts. Test that walks every `/v1/admin` route and expects 401. |
+| A | 1 | `core/app/evidence/`, `core/tests/test_evidence_*.py` | Step 1 and fix 1. |
+| B | 1 | `core/app/admin/{cases,review,audit}.py`, `core/app/checks.py`, `core/app/schemas.py`, `core/app/seed.py`, `/v1/report` and `/v1/review` in `main.py`, `core/tests/test_admin_*.py` | Step 2. |
+| P | 1 | `sandbox/`, `core/app/jobs.py`, `core/app/deep/`, `data/cloudflare_ips.txt`, `core/tests/test_deep_*.py` | Deep pipeline: capture, RDAP, score, evidence record, auto-confirm. |
+| C | 2 | `core/app/graph/`, one call added in `jobs.py`, `core/tests/test_graph_*.py` | Step 4. |
+| D | 2 | `core/app/takedown/`, `core/app/helplines/`, `core/app/csvsafe.py`, the CSV branch of `/v1/batch`, `data/brands.yaml` phones, tests | Steps 5 and 6, fix 2. |
+| E | 2 | `console/` only, console line of `scripts/test.sh` | Console, fixes 3 and 4. |
+| F | 2 | `core/app/events.py` (WS side), `core/app/watch.py`, `core/app/infra.py`, `hunter/`, the `location` and `lead_time` fields in `admin/cases.py`, compose env pass-through, tests | Steps 3 and 7, fix 5. |
+| R | 3 | none | Review by a Sonnet agent that wrote none of it: plan plus diff in, ranked defects out. |
+
+Order: B0, then A, B and P in parallel, then C, D, E and F in parallel, then R, fixes and verification.
+
+Reused as is: `require_write_token` (`core/app/auth.py`), `get_session` and `SessionDep` (`core/app/db.py`, `main.py`), `load_brands` and `find_brand` (`core/app/brands.py`), `enqueue_deep_check` (`core/app/queue.py`), the `session`, `client`, `settings` and `enqueued` fixtures (`core/tests/conftest.py`), `apiFetch` (`console/src/api.ts`), the sandbox request guard, and the hunter matcher.
+
+## Fixed interfaces
+
+### Migration 0002
+
+| Table | Change |
+|---|---|
+| `checks` | add `domain` (string, indexed, nullable) |
+| `evidence` | add `seq` (bigint identity, unique) |
+| `domains` | add `confirmed_by` (`officer`, `auto`, or null for seeded rows) |
+| `reviews` | add `domain` (indexed), `reason` (nullable) |
+| `reports` (new) | `id`, `domain` (indexed), `url`, `note`, `check_id`, `created_at` |
+| `audit_log` (new) | `id`, `actor`, `action`, `target`, `before` (JSON), `after` (JSON), `reason`, `created_at` |
+| `entities` | add `domain_count` (int, default 0), `campaign_id` (nullable FK, set on `domain` entities) |
+| `edges` | add `strength` (`strong` or `weak`) |
+| `campaigns` | add `name`, `last_activity_at` |
+| `watchlist` | add `gsb_first_hit_at`, `vt_first_hit_at`, `gsb_last_clean_at`, `vt_last_clean_at`, `vt_checked_at` |
+| `takedown_packs` (new) | `id` (`tp_…`), `recipient_kind`, `recipient`, `sha256`, `zip` (bytes), `generated_at`, `generated_by`, `sent_at`, `sent_by` |
+| `takedown_requests` (new) | `id`, `pack_id` (FK), `domain`, `evidence_id` |
+
+Audit actions: `case.confirm`, `case.reject`, `case.auto_confirm`, `case.undo_auto_confirm`, `case.recheck`, `watchlist.add`, `campaign.merge`, `takedown.pack_built`, `takedown.sent`.
+
+### Evidence payload, schema 1 (written by P, read by everyone else)
+
+```json
+{
+  "schema": 1,
+  "identity": {"url": "", "final_url": "", "domain": "", "captured_at": "ISO-8601"},
+  "capture": {"title": "", "text": "up to 20000 chars",
+              "forms": [{"action": "", "inputs": [{"type": "", "name": ""}]}],
+              "screenshot": {"file": "<uuid>.png", "sha256": ""},
+              "internal_requests_blocked": 0, "navigation_blocked": false},
+  "risk": {"score": 0, "verdict": "allow|warn|block", "credential_form": false,
+           "reasons": [{"code": "", "weight": 0, "source": "", "en": "", "ar": ""}]},
+  "infrastructure": {"rdap_status": "ok|failed", "registrar": null, "registered_at": null,
+                     "abuse_emails": [], "name_servers": [], "ip": null, "ip_network": null,
+                     "ip_owner": null, "ip_country": null, "ip_abuse_emails": [], "proxy": null},
+  "scam": {"brand": null, "phones": [], "whatsapp": [], "payment_hosts": []},
+  "discovery": {"source": "", "check_id": ""}
+}
+```
+
+`screenshot` is null when the capture failed. `proxy` is `"cloudflare"` or null. Phones are E.164, normalised with the `phonenumbers` library (default region AE).
+
+### Python interfaces between packages
+
+| Function | Owner | Callers |
+|---|---|---|
+| `evidence.store.append_evidence(session, check_id, payload, screenshot_file=None) -> Evidence` | A | P |
+| `evidence.store.verify_chain(session) -> {"count", "intact", "first_broken"}` | A | A's route |
+| `evidence.export.render_pdf(session, evidence_id) -> bytes`, `export_json(session, evidence_id) -> dict` | A | A's routes, D |
+| `evidence.store.screenshot_path(evidence) -> Path or None` (inside the captures directory only) | A | A, D |
+| `admin.review.apply_decision(session, domain, evidence_id, decision, reason, reviewer) -> Review` | B | B's route, C |
+| `admin.review.auto_confirm(session, domain, brand_id, evidence_id)` | B | P |
+| `admin.audit.record(session, actor, action, target, before=None, after=None, reason=None)` | B | all |
+| `events.publish(type, data)` to Redis channel `kp:events` | B0 | B, P, C, F |
+| `graph.cluster.ingest_evidence(session, evidence_id)` | C | `jobs.py` |
+| `infra.location(infrastructure) -> {"hosted_in", "registered_through", "network_owner", "behind_proxy"}` | F | B's case route, C |
+| `csvsafe.cell(value) -> str` | D | D, `/v1/batch` CSV |
+
+`apply_decision` refuses (409) to confirm an official or allowlisted domain.
+
+### Routes
+
+All under `/v1/admin` require the write token unless marked.
+
+| Route | Pkg | Response |
+|---|---|---|
+| `GET /evidence/verify` | A | `{count, intact, first_broken: {id, seq, reason} or null, message}` where reason is `payload_hash_mismatch` or `prev_hash_mismatch` |
+| `GET /evidence/{id}/screenshot.png` | A | PNG, `nosniff`, checked for the PNG signature |
+| `GET /v1/evidence/{id}.pdf`, `.json` (token) | A | file |
+| `GET /queue?state=&source=&brand=&band=` | B | `{cases: [CaseSummary]}`; `state` is `open` (default), `auto_confirmed` or `all` |
+| `GET /cases/{domain}` | B | `CaseDetail` |
+| `POST /v1/review/{evidence_id}` (token, exists) | B | body `{decision, reason, reviewer}`; now updates the blocklist and audit log |
+| `POST /cases/{domain}/recheck` | B | 202 `{check_id}` |
+| `POST /cases/{domain}/watch` | B | 201 `{domain, next_check_at, expires_at}` |
+| `POST /cases/{domain}/undo-auto-confirm` | B | `{domain, state}` |
+| `GET /audit?target=&limit=` | B | `{entries: [...]}` |
+| `GET /campaigns` | C | `{campaigns: [{id, name, brand, status, domains: {total, confirmed}, first_seen, last_activity_at, active}]}` |
+| `GET /campaigns/{id}` | C | `{…header, domains: [{domain, state, score, evidence_id, excluded}], shared: [{kind, value, strength, domain_count}], locations: [{…location, domains}]}` |
+| `GET /campaigns/{id}/graph` | C | `{nodes: [{data: {id, label, kind}}], edges: [{data: {id, source, target, strength}}]}` |
+| `POST /campaigns/{id}/confirm` | C | body `{domains[], reviewer}`; `{confirmed[], skipped: [{domain, reason}]}` |
+| `POST /takedowns` | D | body `{domains[], generated_by}`; 201 `{packs: [Pack]}`, or 409 `{refused: [{domain, reason}]}` and nothing built |
+| `GET /takedowns` | D | `{packs: [Pack]}` where Pack is `{id, recipient_kind, recipient, domains[], sha256, generated_at, sent_at, sent_by}` |
+| `GET /takedowns/{id}/pack.zip` | D | zip |
+| `POST /takedowns/{id}/sent` | D | body `{sent_by}`; Pack |
+| `GET /helplines`, `GET /helplines.csv` | D | `{numbers: [{phone, brand, source, domain, evidence_id, first_seen}]}` |
+| `GET /feed?limit=` | F | `{items: [{check_id, domain, url, brand, verdict, score, created_at}]}` |
+| `POST /watchlist/run` | F | 202 `{queued}` |
+| `WS /v1/events?token=` | F | stream of events |
+
+`CaseSummary`: `{domain, state, score, verdict, brand, sources[], reports, hits, first_seen, last_seen, evidence_id, campaign_id, rank}`. `state` is `open`, `auto_confirmed`, `confirmed` or `rejected`.
+
+`CaseDetail` adds: `url, final_url, title, reasons[], infrastructure, location, lead_time, report_notes: [{id, note, created_at}], checks[], reviews[], has_screenshot`.
+
+`lead_time`: `{gsb: {state: "not_polled"|"ahead"|"hit", at_least_hours}, vt: {…}}`. `at_least_hours` runs from the first check on the domain to the last clean poll.
+
+### Events
+
+Envelope `{type, at, data}` on Redis channel `kp:events`.
+
+| Type | Data | Published by |
+|---|---|---|
+| `hunter.candidate` | `{domain, url, brand, check_id}` | core, when a check arrives with source `hunter` |
+| `check.completed` | `{check_id, domain, verdict, score, source, evidence_id}` | P |
+| `case.reviewed` | `{domain, decision, reviewer}` | B |
+| `campaign.new_domain` | `{campaign_id, domain}` | C |
+
+## Package notes
+
+**P, deep pipeline.** The sandbox additionally returns page text, form fields, and `tel:` and WhatsApp links. Reasons and weights: brand name in a non-official domain 40, credential form 30, brand named in the page 20, registered under 30 days ago 15; a brand lookalike with a credential form scores at least 70. RDAP comes from `rdap.org` for the domain and the resolved IP. Cloudflare is detected from its published IP ranges or `*.ns.cloudflare.com` name servers. If RDAP fails the record says `rdap_status: failed` and the fields stay null. `/v1/report` also queues a deep check.
+
+**A, evidence, fix 1.** The Jinja2 environment uses autoescape. The WeasyPrint URL fetcher refuses every URL except the `data:` URI our own code builds from the local screenshot file. The agent must confirm against the installed WeasyPrint version how `data:` URIs reach the fetcher. Tests: a title of `<script>` and `<img src="http://169.254.169.254/…">` renders as text and the fetcher records zero outside requests; altering one stored row makes verify name that row.
+
+**C, campaigns.** Entity kinds tonight: `domain`, `ip`, `ns`, `registrar`, `phone`, `whatsapp`, `payment`. Strong: phone, whatsapp, payment, and an IP that is not behind a proxy. Weak: ns, registrar, proxied IPs, and any entity with `domain_count > 50` (the hub rule). Only strong links merge; on a merge the oldest campaign id wins and the merge is audited. `country` is not an entity kind, and a test asserts it. "Confirm all" calls `apply_decision` once per domain and skips official and allowlisted domains.
+
+**D, takedown and helplines.** Packs are built only for domains with `confirmed_by='officer'` and an evidence record. Each zip holds one folder per domain (`evidence.pdf`, `evidence.json`, `screenshot.png`), one `email.txt` in Arabic and English, and `manifest.sha256`. Report notes are never read by this package. Helpline numbers come from captured pages only, because no Maps source exists and adding one needs a paid key.
+
+**E, console.** Adds `vue-router`, `cytoscape` and `vitest`. Pages: sign-in, queue with filters, case card, campaigns, campaign detail, takedowns, helpline numbers, live feed, chain check. No `v-html` anywhere. A `defang()` helper renders every domain and URL as plain text (`tamm-pay[.]xyz`). Screenshots and downloads are fetched with the token and shown from blob URLs. Arabic sets `dir="rtl"`; CSS uses logical properties. No sample data in `src/`; empty states instead.
+
+**F, events, location, fix 5.** Hunter posts matches to `/v1/check` with source `hunter`, deduplicated and capped per minute. Safe Browsing is polled only inside a watchlist run; VirusTotal only when `vt_checked_at` is over 24 hours old. Both are skipped when the key is empty. `location()` returns "behind a proxy, true host unknown" in place of a country when `proxy` is set.
+
+## Docker safety
+
+Every compose command uses `-p kartoshka-police`, including the scripts after B0. No prune commands, no `down -v`. Nothing outside this project is stopped or changed. If port 8000 or 5173 is taken, `CORE_PORT` or `CONSOLE_PORT` changes in `.env`.
+
+## Verification
+
+Run by the main session; only failing output is read.
+
+1. `make up` healthy, `make test` green.
+2. Report `https://example.com` through `/v1/report`, wait for the deep check, see the case in `/v1/admin/queue`.
+3. Confirm it: `/v1/blocklist` lists it, `audit_log` has `case.confirm`, `/v1/check` returns block.
+4. Report and reject `https://example.org` with a reason: not on the blocklist, reason stored. Then reject `example.com` too, so the dev blocklist is left clean.
+5. `GET /v1/admin/evidence/verify` returns intact; the tamper test passes.
+6. Download the evidence PDF; the hostile-title and internal-image test passes.
+7. Graph tests: shared phone gives one campaign; shared large-provider name servers do not; hub rule test.
+8. Build a pack for the confirmed domain and check `manifest.sha256` with `shasum -c`; an unconfirmed domain gets 409.
+9. Helpline CSV formula test passes.
+10. Console through Playwright: AR/EN flips `dir`, an HTML title shows as text, domains are defanged, no console errors.
+11. `test_admin_auth.py`: every `/v1/admin` route returns 401 without the token.
+
+## Known limits
+
+- The console is bound to 127.0.0.1 and the shared write token ships in its bundle. It is not officer authentication.
+- The WebSocket token travels in the URL.
+- One case per host; no public-suffix grouping.
+- Evidence is append-only by convention and detected by verify; there is no database trigger.
+- No scheduler: watchlist checks run on demand.
+- Arabic email and label text is machine-written and needs a native proofread.
+- Helpline numbers come from captured pages only.
+
+## Open items for you (none block the build)
+
+- **Official phone numbers.** `data/brands.yaml` has a placeholder for UAE PASS. No number will be invented. I will look the numbers up on the official sites and list them with their source URLs in the report for you to confirm.
+- **Test URL.** If the team has its own lookalike test domain, give it to me and verification steps 2 to 4 use it instead of `example.com`.
+- **Optional, yours to write.** The scoring weights in `core/app/deep/score.py` and the ranking function in `core/app/admin/cases.py` are short and are product decisions. Say so if you want to write either; otherwise the agents use the values above.
+
+## Next steps (out of scope tonight)
+
+Campaign merge, exclude and rebuild job; campaign PDF; pivot search; takedown state machine, kanban, SLA and offline detection; aeDA and Safe Browsing recipients; registrar ranking; KPI, model-quality and system-health pages; list editing and appeals; alerts; officer copilot; AI origin indicators; Tranco import; Maps listings source; favicon, kit and certificate entities; watchlist scheduler; real officer sign-in.
