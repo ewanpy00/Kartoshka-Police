@@ -17,7 +17,11 @@ def test_list_reports_status_and_counts(client, session):
     campaign = make_campaign(session)
     [item] = client.get("/v1/admin/campaigns", headers=AUTH).json()["campaigns"]
     assert (item["id"], item["status"], item["domains"], item["active"]) == (campaign.id, "suspected", {"total": 3, "confirmed": 0}, True)
-    session.add(Domain(domain="a.example", status="confirmed"))
+    session.add(Domain(domain="a.example", status="confirmed", confirmed_by="auto"))
+    session.flush()
+    [item] = client.get("/v1/admin/campaigns", headers=AUTH).json()["campaigns"]
+    assert (item["status"], item["domains"]["confirmed"]) == ("suspected", 0)
+    session.get(Domain, "a.example").confirmed_by = "officer"
     session.flush()
     [item] = client.get("/v1/admin/campaigns", headers=AUTH).json()["campaigns"]
     assert (item["status"], item["domains"]["confirmed"]) == ("campaign", 1)

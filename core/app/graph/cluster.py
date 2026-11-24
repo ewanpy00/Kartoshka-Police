@@ -1,15 +1,39 @@
 import uuid
 from datetime import UTC, datetime
 
+import phonenumbers
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app import events
 from app.admin import audit
-from app.admin.review import resolve_brand_id
+from app.admin.review import PROTECTED, resolve_brand_id
+from app.brands import load_brands
 from app.config import get_settings
 from app.graph.entities import edge_strength, entities_of
-from app.models import Campaign, Check, Edge, Entity, Evidence
+from app.models import Campaign, Check, Domain, Edge, Entity, Evidence
+
+
+def e164(raw: str) -> str:
+    try:
+        return phonenumbers.format_number(phonenumbers.parse(raw, "AE"), phonenumbers.PhoneNumberFormat.E164)
+    except phonenumbers.NumberParseException:
+        return raw
+
+
+def official_contact(session: Session):
+    """A predicate for brand hotlines and for payment hosts that are official or allowlisted."""
+    brands = load_brands(get_settings().data_dir)
+    phones = {e164(phone) for brand in brands for phone in brand.get("official_phones", [])}
+    hosts = {host for brand in brands for host in brand["official_domains"]}
+    hosts |= set(session.scalars(select(Domain.domain).where(Domain.status.in_(PROTECTED))))
+
+    def is_official(kind: str, value: str) -> bool:
+        if kind in ("phone", "whatsapp"):
+            return e164(value) in phones
+        return kind == "payment" and any(value == host or value.endswith(f".{host}") for host in hosts)
+
+    return is_official
 
 
 def upsert_entity(session: Session, kind: str, value: str) -> Entity:
@@ -62,7 +86,7 @@ def ingest_evidence(session: Session, evidence_id: str, hub_threshold: int | Non
     hub_threshold = get_settings().hub_threshold if hub_threshold is None else hub_threshold
     payload = session.get(Evidence, evidence_id).payload
     domain = None
-    for kind, value in entities_of(payload):
+    for kind, value in entities_of(payload, official_contact(session)):
         entity = upsert_entity(session, kind, value)
         if kind == "domain":
             domain = entity
@@ -89,4 +113,4 @@ def ingest_evidence(session: Session, evidence_id: str, hub_threshold: int | Non
     session.flush()
     session.execute(update(Edge).where(Edge.src_id.in_([m.id for m in members])).values(campaign_id=campaign.id))
     session.execute(update(Check).where(Check.domain.in_([m.value for m in members])).values(campaign_id=campaign.id))
-    events.publish("campaign.new_domain", {"campaign_id": campaign.id, "domain": domain.value})
+    events.publish_after_commit(session, "campaign.new_domain", {"campaign_id": campaign.id, "domain": domain.value})

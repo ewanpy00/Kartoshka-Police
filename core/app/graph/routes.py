@@ -63,7 +63,9 @@ def header(campaign: Campaign, confirmed: int) -> dict:
 
 
 def confirmed_among(session: Session, domains: list[str]) -> set[str]:
-    return set(session.scalars(select(Domain.domain).where(Domain.domain.in_(domains), Domain.status == "confirmed")))
+    """Domains an officer has confirmed; an auto-confirm does not turn a suspicion into a campaign."""
+    query = select(Domain.domain).where(Domain.domain.in_(domains), Domain.status == "confirmed", Domain.confirmed_by == "officer")
+    return set(session.scalars(query))
 
 
 @router.get("/campaigns", response_model=CampaignList)
@@ -106,7 +108,7 @@ def campaign_detail(campaign_id: str, session: SessionDep) -> CampaignDetail:
         .order_by(Edge.strength.desc(), Entity.kind, Entity.value)
     )
     return CampaignDetail(
-        **header(campaign, sum(d.state in ("confirmed", "auto_confirmed") for d in domains)),
+        **header(campaign, sum(d.state == "confirmed" for d in domains)),
         domains=domains,
         shared=[SharedEntity(kind=k, value=v, strength=s, domain_count=n) for k, v, s, n in shared],
         locations=[CampaignLocation(**dict(place), domains=count) for place, count in places.items()],

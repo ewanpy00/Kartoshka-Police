@@ -21,6 +21,8 @@ def test_shared_phone_forms_one_campaign(session, published):
     assert campaign.name.startswith("UAE PASS · a.example · ")
     assert campaign.last_activity_at is not None
     assert {c.campaign_id for c in session.scalars(select(Check).where(Check.domain.in_(["a.example", "b.example"])))} == {campaign.id}
+    assert published == []
+    session.commit()
     assert published == [("campaign.new_domain", {"campaign_id": campaign.id, "domain": "b.example"})]
 
 
@@ -87,3 +89,19 @@ def test_country_is_never_an_entity(session):
     ingest(session, "a.example", ip="203.0.113.9", ip_country="AE")
     assert session.scalars(select(Entity).where(Entity.kind == "country")).all() == []
     assert "AE" not in session.scalars(select(Entity.value)).all()
+
+
+def test_official_hotline_does_not_cluster(session):
+    ingest(session, "a.example", phones=["+971600561111"])
+    ingest(session, "b.example", phones=["+971600561111"])
+    assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
+    ingest(session, "c.example", phones=["+971600561111", PHONE])
+    ingest(session, "d.example", phones=[PHONE])
+    assert len(set(campaign_ids(session, "c.example", "d.example").values())) == 1
+    assert campaign_ids(session, "c.example")["c.example"] is not None
+
+
+def test_official_payment_host_does_not_cluster(session):
+    ingest(session, "a.example", payment_hosts=["pay.uaepass.ae"])
+    ingest(session, "b.example", payment_hosts=["pay.uaepass.ae"])
+    assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
