@@ -173,7 +173,12 @@ Package details that are not obvious from the table:
    - Postgres, redis and certstream, which publish no host port, are unreachable by name and by container IP.
    - Core and console, which publish a host port, are reachable from the sandbox both by container IP and through `host.docker.internal`. Docker's bridge isolation does not apply to published ports.
    - So for core the protection is the browser-level guard, which blocks both paths for pages, plus the write token, which returns 401 to the sandbox. A compromised browser process can still call core's open routes (`/healthz`, `/v1/check`, `/v1/batch`, `/v1/report`). The egress proxy in the follow-ups is the fix.
-3. **Known limits of the guard.** It runs in the browser's control channel, so a compromised browser process bypasses it. Resolve-then-check has a DNS rebinding race, because Chromium resolves the name again itself. WebRTC and other UDP traffic are not intercepted. Closing these needs an egress proxy with `sandbox_net` set to internal; that is a follow-up, not part of this skeleton.
+3. **Known limits of the guard.** The guard has two layers: a CDP `Fetch` session per page, which sees every redirect hop, and Playwright's `context.route`, which covers workers, cross-site iframes and popups but only the first hop. Chromium runs with site isolation off so iframes stay under the page's CDP session. A host that fails to resolve is blocked. What it does not cover:
+   - A compromised browser process bypasses it, because it runs in the browser's control channel.
+   - Redirect hops inside a dedicated or shared worker: a worker fetch to an allowed URL that redirects to an internal host is only checked at the first hop. Expected from the redirect experiment, not tested.
+   - Resolve-then-check has a DNS rebinding race, because Chromium resolves the name again itself. Allowed hosts are re-resolved on every request, which narrows it.
+   - WebRTC and other non-HTTP traffic are not intercepted.
+   - Closing these needs an egress proxy with `sandbox_net` set to internal; that is a follow-up, not part of this skeleton.
 4. **The write token is a shared dev token, not officer auth.** It ships in the console's client bundle, so anyone who can open the console can read it. The console login is a mock in the docs; real auth replaces this.
 5. **Unknown URLs return `pending` from `/v1/check`, and a definite answer from `/v1/batch`.**
 6. **`BATCH_CUTOFF` is 70**, the brief's block band. The eval owner tunes it. In the skeleton nothing resolves a pending check, so every unknown URL in a batch uses its full budget and comes back `allow` with `timed_out` true. This is skeleton-only and is replaced by the fast score in slice 1.

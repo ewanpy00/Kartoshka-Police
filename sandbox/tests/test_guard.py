@@ -44,9 +44,23 @@ async def test_public_name_resolving_to_public_address_is_not_internal(monkeypat
     assert not await is_internal("example.com")
 
 
-async def test_unresolvable_name_is_not_internal(monkeypatch):
+def fail_to_resolve(monkeypatch):
     def fail(host):
         raise guard.socket.gaierror("no such host")
 
     monkeypatch.setattr(guard, "_resolve", fail)
-    assert not await is_internal("does-not-exist.example.com")
+
+
+async def test_unresolvable_name_raises(monkeypatch):
+    fail_to_resolve(monkeypatch)
+    with pytest.raises(guard.Unresolvable):
+        await is_internal("does-not-exist.example.com")
+
+
+async def test_unresolvable_request_is_aborted_but_not_counted(monkeypatch):
+    fail_to_resolve(monkeypatch)
+    job = guard.Guard("https://start.example.com/")
+
+    assert await job.aborts("https://dead.example.com/x") == (True, False)
+    assert job.blocked_count == 0
+    assert job.blocked_hosts == []

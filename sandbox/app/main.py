@@ -4,13 +4,13 @@ from fastapi import FastAPI, HTTPException, Request
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from app.capture import CaptureResponse, InternalHost, InvalidUrl, NavigationFailed, capture
+from app.capture import BROWSER_ARGS, CaptureResponse, InternalHost, InvalidUrl, NavigationFailed, capture
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with async_playwright() as playwright:
-        app.state.browser = await playwright.chromium.launch()
+        app.state.browser = await playwright.chromium.launch(args=BROWSER_ARGS)
         yield
         await app.state.browser.close()
 

@@ -22,3 +22,7 @@ def test_non_http_url_is_rejected(client, url):
 @pytest.mark.parametrize("url", ["http://host.docker.internal:8000/", "http://169.254.169.254/", "http://core:8000/"])
 def test_internal_start_url_is_rejected(client, url):
     assert client.post("/capture", json={"url": url}).status_code == 422
+
+
+def test_unresolvable_start_host_is_a_navigation_failure(client):
+    assert client.post("/capture", json={"url": "http://no-such-host.invalid/"}).status_code == 502

@@ -1,15 +1,19 @@
 import os
 import uuid
+from collections.abc import Collection
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from playwright.async_api import Browser, Error as PlaywrightError
 from pydantic import BaseModel
 
-from app.guard import Guard
+from app.guard import Guard, Unresolvable
 
 CAPTURES_DIR = Path(os.environ.get("CAPTURES_DIR", "/captures"))
 CAPTURE_TIMEOUT_MS = int(os.environ.get("CAPTURE_TIMEOUT_MS", "15000"))
+
+
+BROWSER_ARGS = ["--disable-site-isolation-trials"]
 
 
 class InvalidUrl(Exception):
@@ -43,11 +47,14 @@ def validate_url(url: str) -> None:
         raise InvalidUrl("url must be http or https with a host")
 
 
-async def capture(browser: Browser, url: str, allowed_origin: str | None = None) -> CaptureResponse:
+async def capture(browser: Browser, url: str, allowed_origins: Collection[str] = ()) -> CaptureResponse:
     validate_url(url)
-    guard = Guard(url, allowed_origin)
-    if await guard.blocks(url):
-        raise InternalHost("host is internal")
+    guard = Guard(url, allowed_origins)
+    try:
+        if await guard.blocks(url):
+            raise InternalHost("host is internal")
+    except Unresolvable as exc:
+        raise NavigationFailed(f"host does not resolve: {exc}") from exc
 
     context = await browser.new_context(service_workers="block")
     try:
