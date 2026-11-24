@@ -1,3 +1,0 @@
-# Demo entries on the reserved .example TLD. Format: domain brand_id
-uaepass-verify.example uaepass
-tamm-fines-pay.example tamm
