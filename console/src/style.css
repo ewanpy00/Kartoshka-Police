@@ -246,6 +246,18 @@ body {
   stroke-linejoin: round;
 }
 
+.nav-label {
+  margin-block: var(--space-4) var(--space-2);
+  padding-inline: var(--space-3);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  color: var(--c-muted);
+}
+
+.nav-label:first-child {
+  margin-block-start: 0;
+}
+
 .count-badge {
   margin-inline-start: auto;
   padding: 1px 8px;
@@ -314,6 +326,17 @@ body {
 
   .sidenav a {
     flex: none;
+    white-space: nowrap;
+  }
+
+  .nav-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
     white-space: nowrap;
   }
 

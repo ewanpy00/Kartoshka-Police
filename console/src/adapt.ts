@@ -9,17 +9,30 @@ import type {
   CaseDetail,
   CaseState,
   CaseSummary,
+  EntityCard,
   EvidenceExport,
+  ExcludeResult,
   FeedEventType,
   FeedRow,
   Graph,
+  Health,
   Helpline,
   Infrastructure,
   LeadSide,
   Location,
+  MergeResult,
   Pack,
+  Pivot,
+  QualityStats,
   Reason,
+  Stats,
+  TakedownDetail,
+  TakedownRequest,
+  TakedownStats,
+  TakedownStatus,
+  UrlModel,
   Verify,
+  Watchlist,
 } from './types'
 
 type Raw = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -124,6 +137,7 @@ export function adaptCase(raw: Raw): CaseDetail {
     infrastructure: adaptInfra(raw.infra, location),
     location,
     lead_time: raw.lead_time ? { gsb: adaptLead(raw.lead_time.gsb), vt: adaptLead(raw.lead_time.vt) } : null,
+    asks_for: (list(raw.page?.asks_for ?? latest.preview?.asks_for) as unknown[]).filter((kind): kind is string => typeof kind === 'string'),
     // The backend has no bilingual page summary yet: null keeps the summary section hidden.
     summary: null,
     checks: list(raw.history).map((c) => ({
@@ -297,8 +311,62 @@ export function adaptPacks(requests: Raw[]): Pack[] {
   return [...packs.values()]
 }
 
-export function adaptTakedownList(body: Raw): { packs: Pack[] } {
-  return { packs: adaptPacks(list(body.requests)) }
+const TAKEDOWN_STATUSES: readonly TakedownStatus[] = ['pack_ready', 'sent', 'offline_pending', 'closed', 'reopened']
+
+export function adaptTakedownRequest(r: Raw): TakedownRequest {
+  return {
+    id: r.id,
+    domain: r.domain,
+    campaign_id: str(r.campaign_id),
+    recipient_kind: r.recipient_kind,
+    recipient: r.recipient,
+    form: r.form === true,
+    status: TAKEDOWN_STATUSES.includes(r.status) ? r.status : 'unknown',
+    overdue: r.overdue === true,
+    pack_sha256: r.pack_sha256,
+    generated_at: r.generated_at,
+    sent_at: str(r.sent_at),
+    sent_by: str(r.sent_by),
+    offline_at: str(r.offline_at),
+    offline_reason: str(r.offline_reason),
+    checks_offline: num(r.checks_offline),
+  }
+}
+
+export function adaptTakedownList(body: Raw): { packs: Pack[]; requests: TakedownRequest[] } {
+  const requests = list(body.requests)
+  return { packs: adaptPacks(requests), requests: requests.map(adaptTakedownRequest) }
+}
+
+export function adaptTakedownDetail(raw: Raw): TakedownDetail {
+  return { ...adaptTakedownRequest(raw), pack: list(raw.pack).map(adaptTakedownRequest) }
+}
+
+export function adaptTakedownStats(raw: Raw): TakedownStats {
+  const by: Raw = raw.by_status ?? {}
+  const recipients: Raw = raw.recipients ?? {}
+  return {
+    by_status: {
+      pack_ready: num(by.pack_ready),
+      sent: num(by.sent),
+      offline_pending: num(by.offline_pending),
+      closed: num(by.closed),
+      reopened: num(by.reopened),
+    },
+    overdue: num(raw.overdue),
+    median_hours_to_offline: typeof raw.median_hours_to_offline === 'number' ? raw.median_hours_to_offline : null,
+    recipients: Object.entries(recipients).map(([kind, r]: [string, Raw]) => ({
+      kind,
+      requests: num(r.requests),
+      closed: num(r.closed),
+      median_hours: typeof r.median_hours === 'number' ? r.median_hours : null,
+    })),
+    sla_hours: num(raw.sla_hours),
+  }
+}
+
+export function adaptRecheck(raw: Raw): { queued: boolean } {
+  return { queued: raw.queued === true }
 }
 
 export function adaptTakedownCreated(body: Raw): { packs: Pack[]; without_recipient: string[]; refused: { domain: string; reason: string }[] } {
@@ -314,6 +382,176 @@ export function adaptRefused(body: unknown): { domain: string; reason: string }[
   const detail = (body as Raw | null)?.detail
   const refused = list(detail?.refused ?? (body as Raw | null)?.refused)
   return refused.map((r) => ({ domain: r.domain, reason: r.why ?? r.reason ?? '' }))
+}
+
+// ---------- stats ----------
+
+const nullableNum = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+
+const counts = (value: unknown): Record<string, number> =>
+  Object.fromEntries(Object.entries((value ?? {}) as Raw).map(([key, n]) => [key, num(n)]))
+
+function adaptUrlModel(model: Raw | null | undefined): UrlModel | null {
+  if (!model) return null
+  const m: Raw = model.metrics ?? {}
+  return {
+    updated_at: str(model.updated_at),
+    train_rows: nullableNum(m.train_rows),
+    holdout_rows: nullableNum(m.holdout_rows),
+    officer_phish: nullableNum(m.officer_phish),
+    officer_benign: nullableNum(m.officer_benign),
+    dataset_name: str(m.dataset_name),
+    dataset_date: str(m.dataset_date),
+    held_out: typeof m.held_out === 'boolean' ? m.held_out : null,
+    metrics: Object.entries(m)
+      .filter(([name, value]) => /^(precision|recall)@/.test(name) && typeof value === 'number' && Number.isFinite(value))
+      .map(([name, value]) => ({ name, value: value as number })),
+    top_features: list(m.top_features).filter((f) => typeof f === 'string') as unknown as string[],
+  }
+}
+
+function adaptQuality(q: Raw): QualityStats {
+  const bands: Raw = q.by_band ?? {}
+  return {
+    days: num(q.days),
+    reviews: num(q.reviews),
+    by_band: (['block', 'warn', 'allow'] as const).map((band) => ({
+      band,
+      confirmed: num(bands[band]?.confirmed),
+      cleared: num(bands[band]?.cleared),
+      other_reject: num(bands[band]?.other_reject),
+    })),
+    block_precision: nullableNum(q.block_precision),
+    warn_confirm_rate: nullableNum(q.warn_confirm_rate),
+    false_blocks: num(q.false_blocks),
+    labels_for_retrain: num(q.labels_for_retrain),
+    url_model: adaptUrlModel(q.url_model),
+  }
+}
+
+/** The backend's lead medians and lead_vs_* numbers are dropped: they count domains that were never looked up. */
+export function adaptStats(raw: Raw): Stats {
+  const totals: Raw = raw.totals ?? {}
+  const series: Raw = raw.series ?? {}
+  const buckets = list(series.buckets) as unknown as string[]
+  const at = (name: string, index: number) => num(list(series[name])[index])
+  return {
+    impact: {
+      range: str(raw.range) ?? '',
+      totals: {
+        checks: num(totals.checks),
+        warn: num(totals.warn),
+        block: num(totals.block),
+        candidates: num(totals.candidates),
+        candidates_by_source: counts(totals.candidates_by_source),
+        reports: num(totals.reports),
+        confirmed: num(totals.confirmed),
+        rejected: num(totals.rejected),
+        blocked_hits: counts(totals.blocked_hits),
+        blocklist_size: num(totals.blocklist_size),
+        taken_down: num(totals.taken_down),
+      },
+      series: buckets.map((bucket, i) => ({ bucket, checks: at('checks', i), candidates: at('candidates', i), confirmed: at('confirmed', i) })),
+      lead_domains: list(raw.lead_time?.domains).map((d) => ({
+        domain: d.domain,
+        seen: str(d.seen),
+        confirmed: str(d.confirmed),
+        hours_to_confirm: nullableNum(d.hours_to_confirm),
+      })),
+    },
+    quality: adaptQuality(raw.quality ?? {}),
+  }
+}
+
+// ---------- watchlist and health ----------
+
+export function adaptWatchlist(body: Raw): Watchlist {
+  return {
+    total: num(body.total),
+    rows: list(body.entries).map((e) => ({
+      domain: e.domain,
+      reason: str(e.reason) ?? '',
+      brand: str(e.brand_id),
+      last_status: str(e.last_status) ?? '',
+      last_checked_at: str(e.last_checked_at),
+      checks_done: num(e.checks_done),
+      next_check_at: str(e.next_check_at),
+      expires_at: str(e.expires_at),
+    })),
+  }
+}
+
+/** Built field by field: nothing the backend might add (a key, a token) can reach a view. */
+export function adaptHealth(raw: Raw): Health {
+  const queue: Raw | null = raw.deep_queue ?? null
+  const checks: Raw = raw.checks ?? {}
+  const version = raw.blocklist_version
+  return {
+    checked_at: raw.checked_at,
+    redis_ok: raw.redis === 'ok',
+    deep_queue: queue ? { waiting: num(queue.waiting), failed: num(queue.failed), workers: num(queue.workers) } : null,
+    hunter: Object.entries((raw.hunter ?? {}) as Raw).map(([source, h]: [string, Raw]) => ({
+      source,
+      last: str(h?.last),
+      last_24h: num(h?.last_24h),
+    })),
+    checks: {
+      last: str(checks.last),
+      last_hour: num(checks.last_hour),
+      deep_running: num(checks.deep_running),
+      deep_stale: num(checks.deep_stale),
+    },
+    models: Object.entries((raw.models ?? {}) as Raw).map(([name, m]: [string, Raw | null]) => ({
+      name,
+      updated_at: str(m?.updated_at),
+      score: nullableNum(m?.score),
+    })),
+    evidence_records: num(raw.evidence?.records),
+    blocklist_version: typeof version === 'string' || typeof version === 'number' ? String(version) : null,
+    ai_key_set: raw.ai === 'configured',
+  }
+}
+
+// ---------- campaign actions ----------
+
+export function adaptExclude(raw: Raw): ExcludeResult {
+  return { domain: raw.domain, domain_count: num(raw.domain_count) }
+}
+
+export function adaptMerge(raw: Raw): MergeResult {
+  return { id: raw.id, merged: list(raw.merged).filter((m) => typeof m === 'string') as unknown as string[] }
+}
+
+export function adaptPivot(raw: Raw): Pivot {
+  return {
+    total: num(raw.total),
+    leads: list(raw.leads).map((l) => ({
+      domain: l.domain,
+      via: list(l.via).map((v) => ({ kind: v.kind, label: v.label, strong: v.strong === true })),
+      status: str(l.status),
+      score: nullableNum(l.score),
+      campaign: str(l.campaign),
+    })),
+  }
+}
+
+export function adaptEntity(raw: Raw): EntityCard {
+  return {
+    kind: raw.kind,
+    value: raw.value,
+    label: str(raw.label) ?? raw.value,
+    first_seen: str(raw.first_seen),
+    domain_count: num(raw.domain_count),
+    hub: raw.hub === true,
+    domains: list(raw.domains).map((d) => ({
+      domain: d.domain,
+      status: str(d.status),
+      strength: d.strength === 'strong' ? 'strong' : 'weak',
+      excluded: d.excluded === true,
+      campaign: str(d.campaign),
+      score: nullableNum(d.score),
+    })),
+  }
 }
 
 // ---------- hunter feed and live events ----------
@@ -384,10 +622,20 @@ export function adaptResponse(url: string, body: unknown, method: 'GET' | 'POST'
     if (/^\/v1\/admin\/campaigns\/[^/]+\/graph$/.test(p)) return adaptGraph(raw)
     if (/^\/v1\/admin\/campaigns\/[^/]+$/.test(p)) return adaptCampaign(raw)
     if (p === '/v1/admin/takedowns') return adaptTakedownList(raw)
+    if (p === '/v1/admin/takedowns/stats') return adaptTakedownStats(raw)
+    if (/^\/v1\/admin\/takedowns\/[^/]+$/.test(p)) return adaptTakedownDetail(raw)
+    if (p === '/v1/admin/stats') return adaptStats(raw)
+    if (p === '/v1/admin/watchlist') return adaptWatchlist(raw)
+    if (p === '/v1/admin/health') return adaptHealth(raw)
+    if (/^\/v1\/admin\/entities\/[^/]+\/.+$/.test(p)) return adaptEntity(raw)
     return body
   }
   if (p === '/v1/admin/takedowns') return adaptTakedownCreated(raw)
   if (/^\/v1\/admin\/campaigns\/[^/]+\/confirm$/.test(p)) return adaptConfirmResult(raw)
+  if (/^\/v1\/admin\/campaigns\/[^/]+\/exclude$/.test(p)) return adaptExclude(raw)
+  if (p === '/v1/admin/campaigns/merge') return adaptMerge(raw)
+  if (/^\/v1\/admin\/campaigns\/[^/]+\/pivot$/.test(p)) return adaptPivot(raw)
+  if (/^\/v1\/admin\/takedowns\/[^/]+\/recheck$/.test(p)) return adaptRecheck(raw)
   return body
 }
 
@@ -407,10 +655,11 @@ export function adaptRequest(url: string, body: object): object {
 }
 
 /** Routes that answer one page at a time with `next_cursor`, and the key that holds their rows. */
-export function pagedKey(url: string): 'cases' | 'campaigns' | 'requests' | null {
+export function pagedKey(url: string): 'cases' | 'campaigns' | 'requests' | 'entries' | null {
   const p = path(url)
   if (p === '/v1/admin/queue') return 'cases'
   if (p === '/v1/admin/campaigns') return 'campaigns'
   if (p === '/v1/admin/takedowns') return 'requests'
+  if (p === '/v1/admin/watchlist') return 'entries'
   return null
 }
