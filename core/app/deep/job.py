@@ -15,7 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import cache, queue
-from app.brands import arabic_name, display_name, find_brand, safe_action, scoring_brands
+from app.ai import fusion, page_llm, provider
+from app.brands import arabic_name, display_name, find_brand, is_official, safe_action, scoring_brands
 from app.config import Settings, get_settings
 from app.db import get_engine
 from app.deep import infra, kit, signals, visual, watchlist
@@ -82,6 +83,7 @@ class Finding:
     capture: dict | None = None
     visual: dict | None = None
     events: list[dict] = field(default_factory=list)
+    ai: dict | None = None
 
 
 def graph_nodes(session: Session, cap: dict | None, found: signals.Signals, infra_data: dict,
@@ -175,11 +177,37 @@ def infra_reasons(infra_data: dict, fast_codes: set[str], finding: Finding) -> N
         finding.sources["ct"] = source("ct", "hit" if hours < 72 else "clean", f"first certificate {ago_en(hours)}")
 
 
-def apply(check: Check, finding: Finding, brands: list[dict]) -> None:
-    reasons = [item for item in merge(check.reasons or [], finding.reasons) if item["code"] != "BRAND_CREDENTIALS"]
+def deterministic(check: Check, finding: Finding) -> list[dict]:
+    """Fast and deep reasons with the hard floor, without the AI: the score the AI is gated and bounded by."""
+    reasons = [item for item in merge(check.reasons or [], finding.reasons)
+               if item["code"] not in ("BRAND_CREDENTIALS", "AI_ASSESSMENT")]
     floor = signals.credential_floor(reasons, finding.page, finding.host or check.host or "")
     if floor:
         reasons.append(floor)
+    return reasons
+
+
+def run_ai(check: Check, finding: Finding, cap: dict | None, brands: list[dict], settings: Settings) -> dict:
+    """A2 on pages worth a look: a loaded, non-parked page whose deterministic score is 30 or more
+    (the warn band, and confirmation of blocks). Everything else keeps the AI source `skipped`."""
+    if not settings.ai_enabled:
+        return source("ai", "skipped", "AI layer not configured")
+    if cap is None or cap.get("navigation_blocked") or finding.page.parked:
+        return source("ai", "skipped", "no page to read")
+    if total(deterministic(check, finding)) < fusion.BAND[0]:
+        return source("ai", "skipped", "score below the warn band")
+    try:
+        finding.ai = page_llm.assess(cap, finding.host or check.host or "", brands)
+    except provider.AIUnavailable as error:
+        return source("ai", "unknown", f"AI unavailable: {error}")
+    status, detail = fusion.source_status(finding.ai)
+    return source("ai", status, detail)
+
+
+def apply(check: Check, finding: Finding, brands: list[dict]) -> None:
+    reasons = deterministic(check, finding)
+    if finding.ai:
+        reasons.append(fusion.ai_reason(total(reasons), finding.ai))
     check.reasons = reasons
     check.score = total(reasons)
     check.verdict = band(check.score)
@@ -188,6 +216,10 @@ def apply(check: Check, finding: Finding, brands: list[dict]) -> None:
     sources.update({key: value for key, value in finding.sources.items() if key in DEEP_SOURCE_IDS})
     check.sources = ordered(sources)
     brand = finding.page.brand
+    if brand is None and finding.ai and check.brand_id is None:
+        seen = find_brand(brands, finding.ai["brand_claimed"])  # the AI read a logo the rules could not
+        if seen is not None and not is_official(finding.host or check.host or "", seen):
+            brand = seen
     if brand is not None and check.brand_id is None:
         check.brand, check.brand_id = display_name(brand), brand["id"]
     if check.brand_id and check.verdict != "allow" and not check.safe_action:
@@ -232,6 +264,7 @@ def payload(check: Check, finding: Finding, infra_data: dict, kit_hash: str | No
         "kit": {"kit_hash": kit_hash, "kit_sim": f"{kit_sim:016x}" if kit_sim is not None else None,
                 "favicon_sha256": (cap.get("favicon") or {}).get("sha256")},
         "infra": infra_data,
+        "ai": finding.ai,
         "sandbox": {
             "profile": "Android phone, ar-AE, Asia/Dubai", "exit": "sandbox_net (no UAE exit IP)",
             "internal_requests_blocked": cap.get("internal_requests_blocked"),
@@ -298,7 +331,7 @@ def analyse(session: Session, check: Check, settings: Settings) -> list[Check]:
         kind, value, campaign = links[0]
         finding.reasons.append(reason("CAMPAIGN_LINK", kind=kind, kind_ar=KIND_AR.get(kind, kind), value=value, campaign=campaign.id))
         finding.sources["campaign"] = source("campaign", "hit", f"{campaign.id}, {campaign.domain_count} domains")
-    finding.sources["ai"] = source("ai", "skipped", "AI layer not configured" if not settings.ai_enabled else "not run")
+    finding.sources["ai"] = run_ai(check, finding, cap, brands, settings)
 
     apply(check, finding, brands)
     evidence = store.append(session, check.id, check.domain, payload(check, finding, infra_data, kit_hash, kit_sim, failure),

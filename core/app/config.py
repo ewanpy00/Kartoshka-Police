@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     ai_model: str = "claude-opus-5-5"
     ai_timeout_s: float = 60.0
+    ai_effort: str = "low"  # output_config.effort for page understanding: low | medium | high
+    ai_sms_timeout_s: float = 20.0  # the resident waits for the SMS answer; the rules reading is the fallback
 
     @property
     def ai_enabled(self) -> bool:

@@ -139,6 +139,40 @@ def train(phish: list[str], benign: list[str]) -> dict:
     return metrics
 
 
+LABEL_WEIGHT = 3  # an officer label counts as this many feed rows
+
+
+def officer_labels(session) -> tuple[list[str], list[str]]:
+    """A7: every officer decision is a label. Confirm marks the checked URLs phishing; a reject for
+    `legitimate_site` or `not_a_scam` marks them benign. Other rejects say nothing about the URL."""
+    from sqlalchemy import select
+
+    from app.models import Check, Evidence, Review
+    from app.review import CLEARING
+
+    phish, benign = [], []
+    rows = session.execute(
+        select(Review.decision, Review.reason, Check.url, Check.final_url)
+        .join(Evidence, Evidence.id == Review.evidence_id).join(Check, Check.id == Evidence.check_id)
+    ).all()
+    for decision, reason_code, url, final_url in rows:
+        target = phish if decision == "confirm" else benign if reason_code in CLEARING else None
+        if target is not None:
+            target.extend(dict.fromkeys(u for u in (url, final_url) if u))
+    return phish, benign
+
+
+def retrain(phish_path: str, benign_path: str) -> dict:
+    from sqlalchemy.orm import Session
+
+    from app.db import get_engine
+
+    with Session(get_engine()) as session:
+        phish, benign = officer_labels(session)
+    metrics = train(read_urls(phish_path) + phish * LABEL_WEIGHT, read_urls(benign_path) + benign * LABEL_WEIGHT)
+    return {**metrics, "officer_phish": len(phish), "officer_benign": len(benign)}
+
+
 def read_urls(path: str) -> list[str]:
     with open(path, encoding="utf-8") as handle:
         return [line.strip() for line in handle if line.strip() and not line.startswith("#")]
@@ -150,8 +184,14 @@ def main(argv: list[str]) -> int:
     train_cmd = sub.add_parser("train")
     train_cmd.add_argument("phish")
     train_cmd.add_argument("benign")
+    retrain_cmd = sub.add_parser("retrain", help="train again with officer decisions added as labels (A7)")
+    retrain_cmd.add_argument("phish")
+    retrain_cmd.add_argument("benign")
     args = parser.parse_args(argv)
-    print(train(read_urls(args.phish), read_urls(args.benign)))
+    if args.command == "retrain":
+        print(retrain(args.phish, args.benign))
+    else:
+        print(train(read_urls(args.phish), read_urls(args.benign)))
     return 0
 
 

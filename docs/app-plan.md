@@ -74,3 +74,11 @@ Each slice is verified in the running stack and committed on its own.
   - Hunter intake: `POST /v1/intel/feeds`, `POST /v1/watchlist/run`, `POST /v1/hits`.
   - Live run: the queue went from 496 cases to 8 once batch checks were left out; the live report of a TAMM look-alike showed "in police review" with one DNS block; the PDF and the preview image served; a wrong WebSocket token was refused.
   - Health shows `deep_stale`: three checks queued before the deep job existed are still `queued`.
+- 2026-11-24: slice 4 (AI layer) done in code, not yet run against the live API: no `ANTHROPIC_API_KEY` is set here, so the tests use a fake client. `make test`: core 133 passed.
+  - `core/app/ai/provider.py`: Claude (`AI_MODEL`, default `claude-opus-5-5`) through the official SDK, JSON-schema output, `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`), refusal and truncation raise `AIUnavailable`, answers cached in Redis by input hash for 7 days.
+  - A2 `page_llm.py`: the phone screenshot plus page text in an untrusted block; facts go into the evidence (`ai`). It runs on the deep path only when the deterministic score is 30 or more.
+  - A0 `fusion.py`: one `AI_ASSESSMENT` reason; it lifts a score already in 30-70 by up to 15 (+5 for an injection attempt) and never past 70, so the AI re-ranks but never changes the band. The hard floors stay deterministic.
+  - A3 stays the pHash match; A2 can also name a brand from the logo when the rules found none (display and safe action only).
+  - A4 `text_classifier.py`: an AI reading of a pasted SMS, shown with weight 0; the rules still decide `SMS_SCAM_TEXT`.
+  - A7: `make retrain` retrains the URL model with officer decisions as labels (confirm = phishing; `legitimate_site` or `not_a_scam` = benign; each counts 3x).
+  - A5 and A6 stay deferred, per `docs/admin-dashboard.md`.

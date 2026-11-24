@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs
+.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs retrain
 
 help: ## Show this help
 	@awk -F ':.*## ' '/^[a-z-]+:.*## /{printf "  make %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -36,3 +36,6 @@ eval: ## Run the evaluation on data/eval/test.csv and holdout.csv
 
 refs: ## Capture the brands' official pages and store their visual hashes (needs internet)
 	docker compose exec -T worker python -m app.deep.visual refs
+
+retrain: ## Retrain the URL model with officer decisions added as labels (A7)
+	docker compose exec -T core python -m app.ai.url_model retrain /srv/data/train/phish.txt /srv/data/train/benign.txt

@@ -3,6 +3,7 @@
 Residents never see reason weights, Hunter internals or other people's reports. Every route is
 rate-limited per device (`X-Device-Id`, a random value the app generates; not an identity).
 """
+import asyncio
 from pathlib import Path
 from typing import Annotated
 
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from app import cache, radar, reports
+from app.ai import provider, text_classifier
 from app.api.check import shape
 from app.deps import SessionDep, SettingsDep, client_key
 from app.fast import sms
@@ -100,9 +102,22 @@ async def paste_sms(body: SmsRequest, request: Request, session: SessionDep, set
     extra = []
     if reading["category"] and (reading["urgent"] or reading["links"]):
         extra = [reason("SMS_SCAM_TEXT", category=reading["category_en"], category_ar=reading["category_ar"])]
+    ai_reading = None
+    if settings.ai_enabled:
+        try:
+            ai_reading = await asyncio.to_thread(text_classifier.classify, body.text)
+        except provider.AIUnavailable:
+            ai_reading = None
+    if ai_reading and ai_reading["reasons_en"]:
+        extra.append(reason("AI_ASSESSMENT", weight=0, text_en=" ".join(ai_reading["reasons_en"]),
+                            text_ar=" ".join(ai_reading["reasons_ar"]) or " ".join(ai_reading["reasons_en"])))
     checks = []
     for url in reading["links"]:
         check = await run_check(session, url, "sms", "fast", settings, text=body.text, extra_reasons=extra)
         checks.append(shape(check, resident=True))
-    return {"links": checks, "text": {key: reading[key] for key in ("category", "category_en", "category_ar", "urgent")},
-            "found_links": len(reading["links"])}
+    text = {key: reading[key] for key in ("category", "category_en", "category_ar", "urgent")}
+    text["by"] = "rules"
+    if ai_reading:
+        text.update({"by": "rules+ai", "ai": {key: ai_reading[key] for key in (
+            "category", "claimed_sender", "asks_to", "urgency", "scam_likelihood", "reasons_en", "reasons_ar")}})
+    return {"links": checks, "text": text, "found_links": len(reading["links"])}
