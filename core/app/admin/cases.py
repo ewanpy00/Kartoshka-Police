@@ -204,7 +204,7 @@ def case_detail(domain: str, session: SessionDep) -> CaseDetail:
 @router.post("/cases/{domain}/recheck", response_model=RecheckResponse, status_code=202)
 def recheck(domain: str, body: OfficerAction, session: SessionDep) -> RecheckResponse:
     case = require_case(session, domain)
-    check = run_check(session, case.checks[0].url, "officer", "deep", get_settings().data_dir)
+    check = run_check(session, case.check.url, "officer", "deep", get_settings().data_dir)
     audit.record(session, body.reviewer, "case.recheck", domain, after={"check_id": check.id})
     session.commit()
     queue.enqueue_deep_check(check.id)

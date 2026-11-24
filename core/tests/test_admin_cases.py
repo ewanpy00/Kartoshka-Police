@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from admin_factories import AUTH, add_check, add_evidence
 from app.admin.cases import rank_case
-from app.models import AuditLog, Domain, Report, Watchlist
+from app.models import AuditLog, Check, Domain, Report, Watchlist
 
 NOW = datetime(2026, 1, 10, tzinfo=UTC)
 
@@ -156,6 +156,14 @@ def test_recheck_queues_a_deep_check_and_audits(client, session, enqueued):
     assert response.status_code == 202
     assert enqueued == [response.json()["check_id"]]
     assert session.query(AuditLog).filter_by(action="case.recheck", actor="Sara").count() == 1
+
+
+def test_recheck_reruns_the_flagged_url_not_the_latest_one(client, session, enqueued):
+    older = datetime.now(UTC) - timedelta(days=1)
+    add_evidence(session, add_check(session, "d.example", 85, created_at=older, path="login"))
+    add_check(session, "d.example", 0, verdict="allow", path="robots.txt")
+    response = client.post("/v1/admin/cases/d.example/recheck", json={}, headers=AUTH)
+    assert session.get(Check, response.json()["check_id"]).url == "https://d.example/login"
 
 
 def test_watch_upserts_the_watchlist_and_audits(client, session):

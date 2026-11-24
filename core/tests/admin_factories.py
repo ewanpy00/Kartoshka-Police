@@ -31,10 +31,10 @@ def payload(brand=None, title="Fake login", credential_form=True, screenshot=Tru
     }
 
 
-def add_check(session, domain, score=80, verdict=None, source="api", created_at=None, brand=None):
+def add_check(session, domain, score=80, verdict=None, source="api", created_at=None, brand=None, path=""):
     verdict = verdict or ("block" if score >= 70 else "warn" if score >= 30 else "allow")
     check = Check(
-        id=f"c_{uuid.uuid4().hex}", url=f"https://{domain}/", source=source, mode="deep", verdict=verdict,
+        id=f"c_{uuid.uuid4().hex}", url=f"https://{domain}/{path}", source=source, mode="deep", verdict=verdict,
         score=score, stage="deep", reasons=[], domain=domain, brand=brand,
         created_at=created_at or datetime.now(UTC),
     )
