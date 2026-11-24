@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+./scripts/env.sh
+
 read -r -p "This deletes all containers and volumes, including the database. Type yes to continue: " answer
 if [ "$answer" != "yes" ]; then
   echo "Aborted"

@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+./scripts/env.sh
+
 failed=0
 
 run() {
@@ -13,7 +15,7 @@ run() {
 run core docker compose exec -T core pytest -q
 run sandbox docker compose exec -T -w /srv/sandbox sandbox pytest -q -p no:cacheprovider
 run hunter docker compose exec -T hunter pytest -q
-run console docker compose exec -T console npm run build
+run console docker compose exec -T console npm run build -- --outDir /tmp/console-dist --emptyOutDir
 
 if [ "$failed" -ne 0 ]; then
   echo "Some suites failed"
