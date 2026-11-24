@@ -1,0 +1,17 @@
+{
+  "ldhName": "tamm-pay.example",
+  "events": [
+    {"eventAction": "registration", "eventDate": "2026-11-20T10:00:00Z"},
+    {"eventAction": "expiration", "eventDate": "2027-11-20T10:00:00Z"}
+  ],
+  "nameservers": [{"ldhName": "NS1.EXAMPLE-DNS.NET"}, {"ldhName": "ns2.example-dns.net"}],
+  "entities": [
+    {
+      "roles": ["registrar"],
+      "vcardArray": ["vcard", [["version", {}, "text", "4.0"], ["fn", {}, "text", "Example Registrar LLC"]]],
+      "entities": [
+        {"roles": ["abuse"], "vcardArray": ["vcard", [["email", {}, "text", "abuse@registrar.example"]]]}
+      ]
+    }
+  ]
+}

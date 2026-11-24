@@ -18,6 +18,18 @@ BLOCK_POPUPS_FLAG = "--block-new-web-contents"
 BROWSER_ARGS = [SITE_ISOLATION_FLAG, BLOCK_POPUPS_FLAG]
 
 
+TEXT_LIMIT = 20000
+LINK_PREFIXES = ("tel:", "https://wa.me/", "https://api.whatsapp.com/")
+PAGE_FACTS_SCRIPT = """() => ({
+  text: document.body ? document.body.innerText : "",
+  forms: [...document.forms].map(form => ({
+    action: form.action,
+    inputs: [...form.elements].filter(el => el.tagName === "INPUT").map(el => ({type: el.type, name: el.name})),
+  })),
+  links: [...document.querySelectorAll("a[href]")].map(a => a.href),
+})"""
+
+
 class InvalidUrl(Exception):
     pass
 
@@ -33,6 +45,9 @@ class NavigationFailed(Exception):
 class CaptureResponse(BaseModel):
     final_url: str
     title: str
+    text: str
+    forms: list[dict]
+    links: list[str]
     screenshot_path: str | None
     navigation_blocked: bool
     internal_requests_blocked: int
@@ -73,8 +88,10 @@ async def capture(browser: Browser, url: str, allowed_origins: Collection[str] =
             raise NavigationFailed(str(navigation_error)) from navigation_error
         if blocked_url is not None:
             final_url, title, screenshot_path = blocked_url, "", None
+            facts = {"text": "", "forms": [], "links": []}
         else:
             final_url, title = page.url, await page.title()
+            facts = await page.evaluate(PAGE_FACTS_SCRIPT)
             screenshot_path = str(CAPTURES_DIR / f"{uuid.uuid4().hex}.png")
             await page.screenshot(path=screenshot_path)
     finally:
@@ -83,6 +100,9 @@ async def capture(browser: Browser, url: str, allowed_origins: Collection[str] =
     return CaptureResponse(
         final_url=final_url,
         title=title,
+        text=facts["text"][:TEXT_LIMIT],
+        forms=facts["forms"],
+        links=sorted({link for link in facts["links"] if link.startswith(LINK_PREFIXES)}),
         screenshot_path=screenshot_path,
         navigation_blocked=blocked_url is not None,
         internal_requests_blocked=guard.blocked_count,
