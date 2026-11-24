@@ -29,6 +29,7 @@ const entity = ref<{ kind: string; value: string } | null>(null)
 const pivot = ref<Pivot | null>(null)
 
 const base = computed(() => `/v1/admin/campaigns/${encodeURIComponent(props.id)}`)
+const mergeTarget = computed(() => others.value.find((c) => c.id === mergeWith.value) ?? null)
 const confirmedShown = computed(() => {
   const refused = new Set(result.value?.skipped.map((skip) => skip.domain))
   return (result.value?.confirmed ?? []).filter((domain) => !refused.has(domain))
@@ -40,12 +41,16 @@ function refusedText(why: string): string {
   return why
 }
 
+let generation = 0
+
 async function load() {
+  const mine = ++generation
   try {
     const [loadedDetail, loadedGraph] = await Promise.all([
       apiJson<CampaignDetail>(base.value),
       apiJson<Graph>(`${base.value}/graph`),
     ])
+    if (mine !== generation) return
     detail.value = loadedDetail
     graph.value = loadedGraph
     ticked.clear()
@@ -53,7 +58,7 @@ async function load() {
       if (!row.excluded && (row.tick ?? (row.score !== null && isHigh(row.score)))) ticked.add(row.domain)
     }
   } catch (e) {
-    error.value = t('failed', { error: errorText(e) })
+    if (mine === generation) error.value = t('failed', { error: errorText(e) })
   }
 }
 
@@ -102,7 +107,7 @@ function exclude(reason: string) {
 }
 
 function merge(reason: string) {
-  const other = mergeWith.value
+  const other = mergeTarget.value?.id
   if (!other) return
   void act(async () => {
     const merged = await postJson<MergeResult>('/v1/admin/campaigns/merge', {
@@ -244,9 +249,10 @@ watch(
         </label>
         <p class="muted">{{ t('campMergeNote') }}</p>
         <ReasonConfirm
-          :title="t('campMergeTitle')"
+          :key="mergeWith"
+          :title="mergeTarget ? t('campMergeConfirmTitle', { name: mergeTarget.name, id: mergeTarget.id }) : t('campMergeTitle')"
           :action-label="t('campMerge')"
-          :busy="busy || !mergeWith"
+          :busy="busy || !mergeTarget"
           @confirm="merge"
           @cancel="mergeWith = ''"
         />

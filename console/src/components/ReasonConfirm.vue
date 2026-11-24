@@ -39,7 +39,7 @@ function cancel(): void {
     <p class="reason-title">{{ title }}</p>
     <label class="reason-field">
       <span>{{ t('reasonLabel') }}</span>
-      <input v-model="reason" type="text" required :disabled="busy" @keydown.enter.prevent="activate" />
+      <input v-model="reason" type="text" maxlength="500" required :disabled="busy" @keydown.enter.prevent="activate" />
     </label>
     <p v-if="missing" class="error" role="alert">{{ t('reasonRequired') }}</p>
     <div class="actions">

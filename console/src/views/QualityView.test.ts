@@ -11,7 +11,7 @@ vi.mock('../api', () => ({
   ApiError: class extends Error {},
 }))
 
-const hostile = '<img src=x onerror=alert(1)>'
+const hostile = '<img src=x onerror=alert(1)>.evil.example'
 
 function entry(over: Partial<AuditEntry>): AuditEntry {
   return {
@@ -107,8 +107,29 @@ describe('QualityView', () => {
     expect(wrapper.text()).toContain('Warn confirmed')
   })
 
+  it('shows a of b with the denominator the backend divides by, other rejects excluded', async () => {
+    const wrapper = await render(
+      stats({
+        by_band: [
+          { band: 'block', confirmed: 6, cleared: 2, other_reject: 5 },
+          { band: 'warn', confirmed: 1, cleared: 3, other_reject: 4 },
+          { band: 'allow', confirmed: 0, cleared: 0, other_reject: 0 },
+        ],
+        block_precision: 0.75,
+        warn_confirm_rate: 0.25,
+      }),
+    )
+    const text = wrapper.text()
+    expect(text).toContain('75%')
+    expect(text).toContain('6 of 8')
+    expect(text).toContain('25%')
+    expect(text).toContain('1 of 4')
+  })
+
   it('renders a hostile audit target as text', async () => {
     const wrapper = await render(stats(), [entry({ target: hostile, reason: hostile })])
     expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('[.]evil[.]example')
+    expect(wrapper.find('a[href^="http"]').exists()).toBe(false)
   })
 })

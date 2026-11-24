@@ -7,16 +7,21 @@ const REFRESH_MS = 30_000
 const health = ref<Health | null>(null)
 const reachable = ref<boolean | null>(null)
 let timer: ReturnType<typeof setInterval> | null = null
+let latest = 0
 
 export function useHealth() {
   return { health, reachable } as { health: Ref<Health | null>; reachable: Ref<boolean | null> }
 }
 
 export async function refreshHealth(): Promise<void> {
+  const mine = ++latest
   try {
-    health.value = await apiJson<Health>('/v1/admin/health')
+    const loaded = await apiJson<Health>('/v1/admin/health')
+    if (mine !== latest) return
+    health.value = loaded
     reachable.value = true
   } catch {
+    if (mine !== latest) return
     health.value = null
     reachable.value = false
   }
@@ -28,9 +33,14 @@ export function startHealth(): void {
   timer = setInterval(() => void refreshHealth(), REFRESH_MS)
 }
 
-export function _resetHealthForTest(): void {
+export function stopHealth(): void {
   if (timer !== null) clearInterval(timer)
   timer = null
+  latest++
+}
+
+export function _resetHealthForTest(): void {
+  stopHealth()
   health.value = null
   reachable.value = null
 }

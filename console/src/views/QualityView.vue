@@ -25,7 +25,7 @@ function percent(value: number): string {
 
 function bandTotal(band: Band): number {
   const row = quality.value?.by_band.find((b) => b.band === band)
-  return row ? row.confirmed + row.cleared + row.other_reject : 0
+  return row ? row.confirmed + row.cleared : 0
 }
 
 function bandConfirmed(band: Band): number {

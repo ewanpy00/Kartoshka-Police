@@ -522,12 +522,17 @@ export function adaptMerge(raw: Raw): MergeResult {
   return { id: raw.id, merged: list(raw.merged).filter((m) => typeof m === 'string') as unknown as string[] }
 }
 
+// Undo the backend's defang on the label of the kinds it defangs, so views defang once.
+function rawLabel(kind: string, label: string): string {
+  return kind in DEFANGED_BY_BACKEND ? label.replace(/\[\.\]/g, '.') : label
+}
+
 export function adaptPivot(raw: Raw): Pivot {
   return {
     total: num(raw.total),
     leads: list(raw.leads).map((l) => ({
       domain: l.domain,
-      via: list(l.via).map((v) => ({ kind: v.kind, label: v.label, strong: v.strong === true })),
+      via: list(l.via).map((v) => ({ kind: v.kind, label: rawLabel(v.kind, v.label), strong: v.strong === true })),
       status: str(l.status),
       score: nullableNum(l.score),
       campaign: str(l.campaign),
@@ -539,7 +544,7 @@ export function adaptEntity(raw: Raw): EntityCard {
   return {
     kind: raw.kind,
     value: raw.value,
-    label: str(raw.label) ?? raw.value,
+    label: str(raw.label) ? rawLabel(raw.kind, raw.label) : raw.value,
     first_seen: str(raw.first_seen),
     domain_count: num(raw.domain_count),
     hub: raw.hub === true,

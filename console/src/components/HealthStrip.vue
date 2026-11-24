@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import { startHealth, useHealth } from '../health'
+import { startHealth, stopHealth, useHealth } from '../health'
 import { healthLevel, healthParts, type HealthLevel } from '../healthLevel'
 import { t, type Key } from '../i18n'
 
@@ -24,6 +24,7 @@ const items = computed(() => {
 })
 
 onMounted(startHealth)
+onBeforeUnmount(stopHealth)
 </script>
 
 <template>

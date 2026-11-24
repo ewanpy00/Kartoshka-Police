@@ -10,7 +10,8 @@ const props = defineProps<{ id: string }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 
 const POLL_MS = 5000
-const GIVE_UP_MS = 60000
+// The API has no "check running" flag; two sandbox captures of up to 90 s each can run, so wait 180 s for a change.
+const GIVE_UP_MS = 180000
 const STATUSES: readonly TakedownStatus[] = ['pack_ready', 'sent', 'offline_pending', 'closed', 'reopened']
 
 const detail = ref<TakedownDetail | null>(null)
@@ -42,11 +43,17 @@ function newState(entry: AuditEntry): string | null {
   return statusText({ status: status ?? 'unknown', checks_offline: Number.isFinite(checks) ? checks : 0 })
 }
 
-async function fetchAll(): Promise<void> {
+function newestId(list: AuditEntry[]): number {
+  return list.reduce((max, e) => Math.max(max, e.id), 0)
+}
+
+async function fetchAll(mine: number): Promise<void> {
+  const id = props.id
   const [d, a] = await Promise.all([
-    apiJson<TakedownDetail>('/v1/admin/takedowns/' + encodeURIComponent(props.id)),
-    apiJson<{ entries: AuditEntry[] }>('/v1/admin/audit?target=' + encodeURIComponent(props.id) + '&limit=50'),
+    apiJson<TakedownDetail>('/v1/admin/takedowns/' + encodeURIComponent(id)),
+    apiJson<{ entries: AuditEntry[] }>('/v1/admin/audit?target=' + encodeURIComponent(id) + '&limit=50'),
   ])
+  if (mine !== seq) return
   detail.value = d
   entries.value = a.entries
 }
@@ -68,7 +75,7 @@ async function load(): Promise<void> {
   error.value = ''
   loading.value = true
   try {
-    await fetchAll()
+    await fetchAll(mine)
   } catch (e) {
     if (mine === seq) error.value = t('failed', { error: errorText(e) })
   } finally {
@@ -76,15 +83,15 @@ async function load(): Promise<void> {
   }
 }
 
-async function poll(before: { status: string; checks: number; count: number }, mine: number): Promise<void> {
+async function poll(before: { status: string; checks: number; newest: number }, mine: number): Promise<void> {
   try {
-    await fetchAll()
+    await fetchAll(mine)
   } catch (e) {
     if (mine === seq) error.value = t('failed', { error: errorText(e) })
     return
   }
   if (mine !== seq || !detail.value) return
-  if (detail.value.status !== before.status || detail.value.checks_offline !== before.checks || entries.value.length > before.count) {
+  if (detail.value.status !== before.status || detail.value.checks_offline !== before.checks || newestId(entries.value) > before.newest) {
     stopChecking()
     emit('changed')
   }
@@ -93,16 +100,19 @@ async function poll(before: { status: string; checks: number; count: number }, m
 async function checkNow(): Promise<void> {
   if (!detail.value) return
   const mine = seq
-  const before = { status: detail.value.status, checks: detail.value.checks_offline, count: entries.value.length }
+  const before = { status: detail.value.status, checks: detail.value.checks_offline, newest: newestId(entries.value) }
   error.value = ''
   checking.value = true
   try {
     await postJson('/v1/admin/takedowns/' + encodeURIComponent(props.id) + '/recheck', {})
   } catch (e) {
-    checking.value = false
-    error.value = t('failed', { error: errorText(e) })
+    if (mine === seq) {
+      checking.value = false
+      error.value = t('failed', { error: errorText(e) })
+    }
     return
   }
+  if (mine !== seq) return
   queued.value = true
   pollTimer = setInterval(() => void poll(before, mine), POLL_MS)
   giveUpTimer = setTimeout(stopChecking, GIVE_UP_MS)

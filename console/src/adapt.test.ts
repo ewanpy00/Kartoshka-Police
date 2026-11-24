@@ -423,6 +423,7 @@ describe('campaign actions', () => {
       campaign: null,
     })
     expect(pivot.leads[1]).toMatchObject({ status: null, score: null, campaign: 'cmp_9' })
+    expect(pivot.leads[0].via[0].label).toBe('ns1.shared.example')
     expect(JSON.stringify(pivot)).not.toContain('[.]')
   })
 
@@ -431,6 +432,7 @@ describe('campaign actions', () => {
     expect(card).toMatchObject({ kind: 'ns', value: 'ns1.shared.example', hub: false, domain_count: 2, first_seen: '2026-11-20T10:00:00+00:00' })
     expect(card.domains[0]).toEqual({ domain: 'c.example', status: 'confirmed', strength: 'strong', excluded: false, campaign: 'cmp_1', score: 91 })
     expect(card.domains[1]).toMatchObject({ strength: 'weak', excluded: true, status: null, score: null })
+    expect(card.label).toBe('ns1.shared.example')
     expect(JSON.stringify(card)).not.toContain('[.]')
   })
 

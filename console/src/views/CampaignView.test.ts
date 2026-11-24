@@ -122,6 +122,29 @@ describe('CampaignView actions', () => {
     })
   })
 
+  it('changing the merge target after arming resets the confirmation', async () => {
+    vi.mocked(postJson).mockResolvedValue({ id: 'camp_1', merged: [] })
+    vi.mocked(apiJson).mockImplementation(async (path: string) => {
+      if (path.endsWith('/graph')) return { nodes: [], edges: [] }
+      if (path === '/v1/admin/campaigns')
+        return { campaigns: [{ id: 'camp_2', name: 'B' }, { id: 'camp_3', name: 'C' }] }
+      return campaign
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const action = () => wrapper.find('.reason-confirm .actions .btn')
+    await wrapper.find('select').setValue('camp_2')
+    await setReason(wrapper, 'same actor')
+    await action().trigger('click')
+    await wrapper.find('select').setValue('camp_3')
+    expect(wrapper.find('.reason-title').text()).toContain('C')
+    expect(wrapper.find('.reason-title').text()).toContain('camp_3')
+    await setReason(wrapper, 'same actor')
+    await action().trigger('click')
+    await flushPromises()
+    expect(postJson).not.toHaveBeenCalled()
+  })
+
   it('pivot posts once to the pivot path and offers no write control on leads', async () => {
     const pivot: Pivot = {
       total: 1,

@@ -1053,7 +1053,7 @@ export const backend: Record<string, any> = {
   "leads": [
    {
     "domain": "lead-a.example", "display": "lead-a[.]example",
-    "via": [{ "kind": "ns", "label": "ns1.shared.example", "strong": true }, { "kind": "ip", "label": "203.0.113.7", "strong": false }],
+    "via": [{ "kind": "ns", "label": "ns1[.]shared[.]example", "strong": true }, { "kind": "ip", "label": "203.0.113.7", "strong": false }],
     "status": "open", "score": 82, "campaign": null
    },
    { "domain": "lead-b.example", "display": "lead-b[.]example", "via": [], "status": null, "score": null, "campaign": "cmp_9" }
@@ -1061,7 +1061,7 @@ export const backend: Record<string, any> = {
   "total": 2
  },
  "entity": {
-  "kind": "ns", "value": "ns1.shared.example", "label": "ns1.shared.example", "first_seen": "2026-11-20T10:00:00+00:00",
+  "kind": "ns", "value": "ns1.shared.example", "label": "ns1[.]shared[.]example", "first_seen": "2026-11-20T10:00:00+00:00",
   "domain_count": 2, "hub": false,
   "domains": [
    { "domain": "c.example", "display": "c[.]example", "status": "confirmed", "strength": "strong", "excluded": false, "campaign": "cmp_1", "evidence_id": "ev_1", "score": 91 },

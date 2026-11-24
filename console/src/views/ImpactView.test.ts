@@ -11,7 +11,7 @@ vi.mock('../api', () => ({
   ApiError: class extends Error {},
 }))
 
-const hostile = '<img src=x onerror=alert(1)>'
+const hostile = '<img src=x onerror=alert(1)>.evil.example'
 
 function stats(over: Partial<Stats['impact']> = {}): Stats {
   return {
@@ -113,6 +113,8 @@ describe('ImpactView', () => {
   it('renders a hostile domain as text', async () => {
     const wrapper = await render(stats({ lead_domains: [domainRow(hostile)] }), { [hostile]: lead('ahead', 'ahead') })
     expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('[.]evil[.]example')
+    expect(wrapper.find('a[href^="http"]').exists()).toBe(false)
     expect(wrapper.find('tbody td.mono').exists()).toBe(true)
   })
 })

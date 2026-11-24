@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { apiJson } from './api'
-import { _resetHealthForTest, refreshHealth, startHealth, useHealth } from './health'
+import { _resetHealthForTest, refreshHealth, startHealth, stopHealth, useHealth } from './health'
 import { HUNTER_FRESH_MS, healthLevel, healthParts } from './healthLevel'
 import type { Health } from './types'
 import HealthView from './views/HealthView.vue'
@@ -85,6 +85,27 @@ describe('health store', () => {
     expect(mocked).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(30_000)
     expect(mocked).toHaveBeenCalledTimes(2)
+  })
+
+  it('makes no further request after stopHealth', async () => {
+    vi.useFakeTimers()
+    mocked.mockResolvedValue(health())
+    startHealth()
+    stopHealth()
+    mocked.mockClear()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(mocked).not.toHaveBeenCalled()
+  })
+
+  it('ignores an older response that arrives after a newer one', async () => {
+    let releaseOld: (value: Health) => void = () => {}
+    mocked.mockImplementationOnce(() => new Promise<Health>((resolve) => (releaseOld = resolve)))
+    const older = refreshHealth()
+    mocked.mockResolvedValueOnce(health({ blocklist_version: 'new' }))
+    await refreshHealth()
+    releaseOld(health({ blocklist_version: 'old' }))
+    await older
+    expect(useHealth().health.value?.blocklist_version).toBe('new')
   })
 })
 

@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiJson, postJson } from '../api'
 import type { AuditEntry, TakedownDetail, TakedownRequest, TakedownStats } from '../types'
+import TakedownDetailPanel from '../components/TakedownDetail.vue'
 import TakedownsView from './TakedownsView.vue'
 
 vi.mock('../api', () => ({
@@ -13,7 +14,7 @@ vi.mock('../api', () => ({
 }))
 vi.mock('../session', () => ({ officerName: () => 'officer1' }))
 
-const hostile = '<img src=x onerror=alert(1)>'
+const hostile = '<img src=x onerror=alert(1)>.evil.example'
 
 function req(over: Partial<TakedownRequest>): TakedownRequest {
   return {
@@ -121,8 +122,58 @@ describe('TakedownsView extras', () => {
     expect(checkButton(wrapper).attributes('disabled')).toBeUndefined()
   })
 
+  it('shows the second request when the id changes while the first detail is pending', async () => {
+    const a = req({ id: 'a', domain: 'first.example' })
+    const b = req({ id: 'b', domain: 'second.example' })
+    let releaseA: (value: TakedownDetail) => void = () => {}
+    vi.mocked(apiJson).mockImplementation(async (path: string) => {
+      if (path.startsWith('/v1/admin/audit')) return { entries: [] }
+      if (path === '/v1/admin/takedowns/a') return new Promise<TakedownDetail>((resolve) => (releaseA = resolve))
+      return { ...b, pack: [b] }
+    })
+    const wrapper = mount(TakedownDetailPanel, { props: { id: 'a' } })
+    await flushPromises()
+    await wrapper.setProps({ id: 'b' })
+    await flushPromises()
+    releaseA({ ...a, pack: [a] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('second[.]example')
+    expect(wrapper.text()).not.toContain('first[.]example')
+  })
+
+  it('keeps Check now disabled 61 s after a click with no change', async () => {
+    const r = req({ status: 'offline_pending', checks_offline: 0 })
+    current = { ...r, pack: [r] }
+    vi.mocked(postJson).mockResolvedValue({ queued: true })
+    const wrapper = await mountPage([r])
+    await wrapper.findAll('button').find((b) => b.text() === 'Details')!.trigger('click')
+    await flushPromises()
+    await checkButton(wrapper).trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(61000)
+    await flushPromises()
+    expect(checkButton(wrapper).attributes('disabled')).toBeDefined()
+  })
+
+  it('fires no timers after unmount', async () => {
+    const r = req({ status: 'offline_pending', checks_offline: 0 })
+    current = { ...r, pack: [r] }
+    vi.mocked(postJson).mockResolvedValue({ queued: true })
+    routes([r])
+    const wrapper = mount(TakedownDetailPanel, { props: { id: 'r1' } })
+    await flushPromises()
+    await checkButton(wrapper).trigger('click')
+    await flushPromises()
+    wrapper.unmount()
+    vi.mocked(apiJson).mockClear()
+    await vi.advanceTimersByTimeAsync(200000)
+    expect(apiJson).not.toHaveBeenCalled()
+  })
+
   it('renders a hostile domain as text', async () => {
     const wrapper = await mountPage([req({ domain: hostile })])
     expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('[.]evil[.]example')
+    expect(wrapper.find('a[href^="http"]').exists()).toBe(false)
   })
 })

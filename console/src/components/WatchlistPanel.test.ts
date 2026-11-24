@@ -9,7 +9,7 @@ vi.mock('../api', () => ({
   errorText: (e: unknown) => String(e),
 }))
 
-const hostile = '<img src=x onerror=alert(1)>'
+const hostile = '<img src=x onerror=alert(1)>.evil.example'
 const future = '2099-01-01T00:00:00Z'
 
 function row(over: Partial<WatchRow>): WatchRow {
@@ -25,7 +25,7 @@ function serve(rows: WatchRow[], asks: Record<string, string[]> = {}) {
 
 async function render(rows: WatchRow[], asks: Record<string, string[]> = {}, woke: string[] = []) {
   serve(rows, asks)
-  const wrapper = mount(WatchlistPanel, { props: { woke }, global: { stubs: { RouterLink: true } } })
+  const wrapper = mount(WatchlistPanel, { props: { woke }, global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
   await flushPromises()
   return wrapper
 }
@@ -62,6 +62,8 @@ describe('WatchlistPanel', () => {
     const w = await render([row({ domain: hostile, last_status: hostile })])
     expect(w.find('img').exists()).toBe(false)
     expect(w.find('a[href]').exists()).toBe(false)
+    expect(w.text()).toContain('[.]evil[.]example')
+    expect(w.find('a[href^="http"]').exists()).toBe(false)
   })
 
   it('shows the empty state', async () => {
