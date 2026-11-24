@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.brands import load_brands
+from app.checks import normalize_host
 from app.config import get_settings
 from app.db import get_engine
 from app.models import Domain
@@ -16,7 +17,7 @@ def read_lines(path: Path) -> list[list[str]]:
 
 
 def upsert(session: Session, domain: str, status: str, brand_id: str | None) -> None:
-    statement = insert(Domain).values(domain=domain.lower(), status=status, brand_id=brand_id)
+    statement = insert(Domain).values(domain=normalize_host(domain), status=status, brand_id=brand_id)
     session.execute(
         statement.on_conflict_do_update(
             index_elements=[Domain.domain],

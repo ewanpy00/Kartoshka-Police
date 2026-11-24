@@ -1,3 +1,4 @@
+from app.checks import host_and_parents
 from app.models import Domain
 
 
@@ -45,7 +46,11 @@ def test_blocklisted_tamm_fines_url_gets_the_keyword_matched_service(client):
 def test_blocklisted_url_without_keywords_falls_back_to_homepage(client, session):
     session.add(Domain(domain="plain-clone.example", status="confirmed", brand_id="tamm"))
     body = check(client, "https://plain-clone.example/")
-    assert body["safe_action"]["url"] == "https://tamm.abudhabi"
+    assert body["safe_action"] == {
+        "label_en": "Go to the official TAMM website",
+        "label_ar": "الانتقال إلى الموقع الرسمي",
+        "url": "https://tamm.abudhabi",
+    }
 
 
 def test_unknown_url_is_pending_and_deep_mode_enqueues(client, enqueued):
@@ -81,3 +86,18 @@ def test_blocklist_lists_confirmed_domains(client):
     domains = {entry["domain"] for entry in client.get("/v1/blocklist").json()["domains"]}
     assert "uaepass-verify.example" in domains
     assert "google.com" not in domains
+
+
+def test_backslash_url_is_not_allowed_through_the_official_domain(client):
+    url = "https://evil.example\\@uaepass.ae/"
+    assert host_and_parents(url) == ["evil.example"]
+    assert check(client, url)["verdict"] == "pending"
+
+
+def test_host_case_and_trailing_dot_are_normalised(client):
+    assert check(client, "https://UAEPASS.ae./login")["verdict"] == "allow"
+    assert check(client, "https://uaepass-verify.example./login")["verdict"] == "block"
+
+
+def test_idna_host_is_punycode_encoded():
+    assert host_and_parents("https://bücher.example/") == ["xn--bcher-kva.example"]

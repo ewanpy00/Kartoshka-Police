@@ -21,7 +21,7 @@ def safe_action(brand: dict, url: str) -> dict:
         if any(keyword.lower() in lowered for keyword in service["keywords"]):
             return {"label_en": service["label_en"], "label_ar": service["label_ar"], "url": service["url"]}
     return {
-        "label_en": services[0]["label_en"],
-        "label_ar": services[0]["label_ar"],
+        "label_en": f"Go to the official {brand['names'][0]} website",
+        "label_ar": "الانتقال إلى الموقع الرسمي",
         "url": f"https://{brand['official_domains'][0]}",
     }

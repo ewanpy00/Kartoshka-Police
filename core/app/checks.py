@@ -23,8 +23,19 @@ BLOCKLISTED = {
 }
 
 
+def normalize_host(host: str) -> str:
+    """Lower-case, drop trailing dots and punycode-encode, so both sides of a lookup agree."""
+    host = host.lower().rstrip(".")
+    try:
+        return host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return host
+
+
 def host_and_parents(url: str) -> list[str]:
-    labels = (urlparse(url).hostname or "").split(".")
+    """The host a browser would visit, then its parent domains. Browsers read a backslash as a slash."""
+    parsed = urlparse(url.strip().replace("\\", "/"))
+    labels = normalize_host(parsed.hostname or "").split(".")
     return [".".join(labels[i:]) for i in range(len(labels) - 1)] or [".".join(labels)]
 
 
