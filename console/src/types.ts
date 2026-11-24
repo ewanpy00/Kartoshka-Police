@@ -56,8 +56,8 @@ export interface CaseDetail extends CaseSummary {
   final_url?: string | null
   summary?: { en: string; ar: string } | null
   checks?: { check_id: string; url: string; source: string; verdict: string; score: number; created_at: string }[]
-  report_notes: { id: number; note: string; created_at: string }[]
-  reviews: { id: number; decision: string; reason: string | null; reviewer: string; reviewed_at: string }[]
+  report_notes: { id: number | string; note: string; created_at: string }[]
+  reviews: { id: number | string; decision: string; reason: string | null; reviewer: string; reviewed_at: string }[]
   has_screenshot: boolean
 }
 
@@ -73,7 +73,15 @@ export interface CampaignHeader {
 }
 
 export interface CampaignDetail extends Omit<CampaignHeader, 'domains'> {
-  domains: { domain: string; state: string; score: number | null; evidence_id: string | null; excluded: string | null }[]
+  domains: {
+    domain: string
+    state: string
+    score: number | null
+    evidence_id: string | null
+    excluded: string | null
+    /** The backend's own advice on pre-ticking the site for "Confirm all". */
+    tick?: boolean
+  }[]
   shared: { kind: string; value: string; strength: string; domain_count: number }[]
   locations: (Location & { domains: number })[]
 }
@@ -103,9 +111,17 @@ export interface Helpline {
   confirmed: boolean
 }
 
+export type FeedEventType =
+  | 'hunter.candidate'
+  | 'check.verdict'
+  | 'case.reviewed'
+  | 'brand.spike'
+  | 'watchlist.woke'
+  | 'campaign.new_domain'
+
 export interface FeedRow {
   key: string
-  type: 'hunter.candidate' | 'check.completed'
+  type: FeedEventType
   at: string
   domain: string | null
   brand: string | null

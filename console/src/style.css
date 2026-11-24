@@ -38,87 +38,14 @@ Legacy (still supported): .banner .topbar .topbar-end .panel .split .filters .ca
   .graph .pack .check .signin .plain, button.secondary, button.danger, table, dl
 */
 
+@import '../../design/tokens.css';
+
 :root {
-  color-scheme: light;
   --head-h: 94px;
-
-  --c-page: #f5f6f8;
-  --c-surface: #ffffff;
-  --c-raised: #f8f9fb;
-  --c-hairline: #e4e7ec;
-  --c-selected: #f2f3f7;
-  --c-ink: #101727;
-  --c-muted: #5b6475;
-  --c-primary: #151925;
-  --c-on-primary: #ffffff;
-  --c-risk: #b32416;
-  --c-risk-bg: #fdecea;
-  --c-amber: #b4530a;
-  --c-amber-bg: #fdf1e3;
-  --c-ok: #18794e;
-  --c-ok-bg: #e6f4ec;
-  --c-accent: #8a6100;
-  --c-banner-bg: #fffaec;
-  --c-banner-text: #7a5a00;
-  --c-info-bg: #eef1f6;
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --radius-1: 6px;
-  --radius-2: 10px;
-  --fs-12: 12px;
-  --fs-13: 13px;
-  --fs-14: 14px;
-  --fs-16: 16px;
-  --fs-20: 20px;
-  --fs-24: 24px;
-
-  /* legacy aliases */
-  --bg: var(--c-page);
-  --surface: var(--c-surface);
-  --text: var(--c-ink);
-  --muted: var(--c-muted);
-  --border: var(--c-hairline);
-  --accent: var(--c-accent);
-  --danger: var(--c-risk);
-  --ok: var(--c-ok);
-  --warn: var(--c-amber);
-  --banner: var(--c-banner-bg);
-
-  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, 'Segoe UI', 'Noto Naskh Arabic', 'Noto Sans Arabic', sans-serif;
   font-family: var(--sans);
   font-size: var(--fs-14);
   color: var(--c-ink);
   background: var(--c-page);
-}
-
-@media all {
-  :root[data-theme='dark'] {
-    color-scheme: dark;
-    --c-page: #0b1320;
-    --c-surface: #111a2b;
-    --c-raised: #131e30;
-    --c-hairline: #1e2a40;
-    --c-selected: #192741;
-    --c-ink: #e8edf5;
-    --c-muted: #93a0b5;
-    --c-primary: #d7b14e;
-    --c-on-primary: #151925;
-    --c-risk: #ff9483;
-    --c-risk-bg: #2a1518;
-    --c-amber: #f0b35a;
-    --c-amber-bg: #2a2010;
-    --c-ok: #5fd19a;
-    --c-ok-bg: #11271f;
-    --c-accent: #d7b14e;
-    --c-banner-bg: #1a1708;
-    --c-banner-text: #d7b14e;
-    --c-info-bg: #16233a;
-  }
 }
 
 *,

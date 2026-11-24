@@ -1,3 +1,5 @@
+import { adaptRequest, adaptResponse, pagedKey } from './adapt'
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -25,20 +27,42 @@ async function failure(response: Response): Promise<ApiError> {
   return new ApiError(response.status, body)
 }
 
+const MAX_PAGES = 20
+
+/** Every page of a cursor-paginated route, rows concatenated, the last page's other fields kept. */
+async function allPages(path: string, key: string): Promise<unknown> {
+  let merged: Record<string, unknown> | null = null
+  let cursor: string | null = null
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const url: string = cursor === null ? path : `${path}${path.includes('?') ? '&' : '?'}cursor=${encodeURIComponent(cursor)}`
+    const response = await apiFetch(url)
+    if (!response.ok) throw await failure(response)
+    const body = (await response.json()) as Record<string, unknown>
+    merged = merged ? { ...body, [key]: [...(merged[key] as unknown[]), ...((body[key] as unknown[]) ?? [])] } : body
+    const next = body.next_cursor
+    if (next === null || next === undefined) break
+    cursor = String(next)
+  }
+  return merged
+}
+
+// Views ask in main's vocabulary; adapt.ts turns the backend's answers into main's shapes (types.ts).
 export async function apiJson<T>(path: string): Promise<T> {
+  const key = pagedKey(path)
+  if (key) return adaptResponse(path, await allPages(path, key)) as T
   const response = await apiFetch(path)
   if (!response.ok) throw await failure(response)
-  return response.json()
+  return adaptResponse(path, await response.json()) as T
 }
 
 export async function postJson<T>(path: string, body: object): Promise<T> {
   const response = await apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(adaptRequest(path, body)),
   })
   if (!response.ok) throw await failure(response)
-  return response.json()
+  return adaptResponse(path, await response.json(), 'POST') as T
 }
 
 export async function fetchBlob(path: string): Promise<Blob> {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { adaptEvent } from '../adapt'
 import { apiJson, apiToken, errorText } from '../api'
 import { defang } from '../defang'
 import { formatTime, t } from '../i18n'
@@ -8,12 +9,6 @@ import type { FeedRow } from '../types'
 const MAX_ROWS = 200
 const RECONNECT_MS = 3000
 const UNAUTHORISED = 4401
-
-interface Envelope {
-  type: string
-  at: string
-  data: { domain: string | null; brand?: string | null; verdict?: string; score?: number; check_id: string }
-}
 
 const rows = ref<FeedRow[]>([])
 const connected = ref(false)
@@ -35,7 +30,7 @@ function connect() {
     socket?.send(JSON.stringify({ type: 'auth', token: apiToken() }))
   }
   socket.onmessage = (message) => {
-    let event: Envelope
+    let event: { type: string; at?: string; data?: unknown }
     try {
       event = JSON.parse(message.data)
     } catch {
@@ -45,16 +40,8 @@ function connect() {
       connected.value = true
       return
     }
-    if (event.type !== 'hunter.candidate' && event.type !== 'check.completed') return
-    push({
-      key: `${event.type}:${event.data.check_id}`,
-      type: event.type,
-      at: event.at,
-      domain: event.data.domain,
-      brand: event.data.brand ?? null,
-      verdict: event.data.verdict ?? null,
-      score: event.data.score ?? null,
-    })
+    const row = adaptEvent(event)
+    if (row) push(row)
   }
   socket.onclose = (event) => {
     connected.value = false
@@ -66,21 +53,9 @@ function connect() {
 onMounted(async () => {
   connect()
   try {
-    const feed = await apiJson<{
-      items: { check_id: string; domain: string | null; brand: string | null; verdict: string; score: number; created_at: string }[]
-    }>('/v1/admin/feed?limit=50')
+    const feed = await apiJson<{ rows: FeedRow[] }>('/v1/admin/hunter/feed')
     const known = new Set(rows.value.map((row) => row.key))
-    const history = feed.items
-      .map((item) => ({
-        key: `check.completed:${item.check_id}`,
-        type: 'check.completed' as const,
-        at: item.created_at,
-        domain: item.domain,
-        brand: item.brand,
-        verdict: item.verdict,
-        score: item.score,
-      }))
-      .filter((row) => !known.has(row.key))
+    const history = feed.rows.filter((row) => !known.has(row.key))
     rows.value = [...rows.value, ...history]
   } catch (e) {
     error.value = t('failed', { error: errorText(e) })

@@ -10,10 +10,12 @@ import BlobImage from './BlobImage.vue'
 
 const REJECT_REASONS = [
   'legitimate_site',
+  'not_a_scam',
   'parked_or_empty',
   'already_offline',
   'not_enough_evidence',
   'test_or_internal',
+  'duplicate',
 ] as const
 
 const KNOWN_SOURCES = ['sandbox', 'rdap', 'kartoshka'] as const

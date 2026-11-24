@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { adaptRefused } from '../adapt'
 import { ApiError, apiJson, download, errorText, postJson } from '../api'
 import { defang } from '../defang'
 import { formatTime, t } from '../i18n'
@@ -9,7 +10,7 @@ import type { CaseSummary, Pack } from '../types'
 const confirmed = ref<string[]>([])
 const picked = reactive(new Set<string>())
 const packs = ref<Pack[]>([])
-const built = ref<{ packs: Pack[]; without_recipient: string[] } | null>(null)
+const built = ref<{ packs: Pack[]; without_recipient: string[]; refused?: { domain: string; reason: string }[] } | null>(null)
 const refused = ref<{ domain: string; reason: string }[]>([])
 const error = ref('')
 const copiedId = ref('')
@@ -39,11 +40,12 @@ async function build() {
   error.value = ''
   try {
     built.value = await postJson('/v1/admin/takedowns', { domains: [...picked], generated_by: officerName() })
+    refused.value = built.value?.refused ?? []
     picked.clear()
     await loadPacks()
   } catch (e) {
     if (e instanceof ApiError && e.status === 409) {
-      refused.value = (e.body as { refused?: { domain: string; reason: string }[] } | null)?.refused ?? []
+      refused.value = adaptRefused(e.body)
     } else {
       error.value = t('failed', { error: errorText(e) })
     }

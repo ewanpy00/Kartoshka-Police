@@ -85,6 +85,21 @@ describe('CaseCard', () => {
     expect(ev.find('button.danger').attributes('disabled')).toBeUndefined()
   })
 
+  it('offers the backend\'s seven reject reasons, in both languages, and posts the chosen one', async () => {
+    const codes = ['legitimate_site', 'not_a_scam', 'parked_or_empty', 'already_offline', 'not_enough_evidence', 'test_or_internal', 'duplicate']
+    const w = await mountCard({ evidence_id: 'e_1' })
+    expect(w.findAll('select option').map((o) => o.element.getAttribute('value')).filter(Boolean)).toEqual(codes)
+    expect(w.find('select option[value="not_a_scam"]').text()).toBe('Not a scam')
+    await w.find('select').setValue('duplicate')
+    await w.find('button.danger').trigger('click')
+    await flushPromises()
+    expect(postJson).toHaveBeenCalledWith('/v1/review/e_1', { decision: 'reject', reason: 'duplicate', reviewer: 'Demo Officer' })
+    setLocale('ar')
+    await flushPromises()
+    expect(w.find('select option[value="duplicate"]').text()).not.toBe('Duplicate of another case')
+    expect(w.find('select option[value="not_a_scam"]').text()).toBe('ليس احتيالًا')
+  })
+
   it('lists every reason with weight and source, in the current language only', async () => {
     const w = await mountCard({
       reasons: [

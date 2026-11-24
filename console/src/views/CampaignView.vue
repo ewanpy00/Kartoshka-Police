@@ -23,7 +23,7 @@ async function load() {
     graph.value = loadedGraph
     ticked.clear()
     for (const row of loadedDetail.domains) {
-      if (!row.excluded && row.score !== null && row.score >= 70) ticked.add(row.domain)
+      if (!row.excluded && (row.tick ?? (row.score !== null && row.score >= 70))) ticked.add(row.domain)
     }
   } catch (e) {
     error.value = t('failed', { error: errorText(e) })
