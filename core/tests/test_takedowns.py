@@ -7,13 +7,13 @@ from datetime import timedelta
 
 import pytest
 from factories import NOW, make_check
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app import queue
 from app.config import Settings
 from app.deep import watchlist
 from app.evidence import store
-from app.models import AuditLog, Domain, Report, Watchlist
+from app.models import AuditLog, Domain, Report, TakedownRequest, Watchlist
 from app.takedown import contacts, tracker
 
 AUTH = {"Authorization": "Bearer test-token"}
@@ -39,7 +39,8 @@ def confirmed(session, domain: str, source: str = "officer", infra: dict | None 
     evidence = store.append(session, check.id, domain, {"url": check.url, "domain": domain, "score": 95,
                                                         "infra": infra or INFRA})
     check.evidence_id = evidence.id
-    session.add(Domain(domain=domain, status="confirmed", source=source, brand_id="tamm"))
+    session.add(Domain(domain=domain, status="confirmed", source=source, brand_id="tamm",
+                       confirmed_by="officer" if source == "officer" else "auto"))
     session.flush()
     return check
 
@@ -58,16 +59,23 @@ def test_ip_server_picks_the_registry_from_the_bootstrap():
     assert contacts.ip_server(bootstrap, "203.0.113.1") == "https://rdap.org/"
 
 
-def test_create_refuses_unconfirmed_and_auto_confirmed(client, session):
+def test_create_needs_every_domain_confirmed_by_an_officer(client, session):
+    """Main's rule: an auto-confirmed or never-confirmed domain is a 409 and nothing is built."""
     confirmed(session, "td-ok.top")
     confirmed(session, "td-auto.top", source="police")
     make_check(session, "td-open.top", 80)
-    body = client.post("/v1/admin/takedowns", headers=AUTH,
-                       json={"domains": ["td-ok.top", "td-auto.top", "td-open.top"], "reviewer": "Officer F"}).json()
+    response = client.post("/v1/admin/takedowns", headers=AUTH,
+                           json={"domains": ["td-ok.top", "td-auto.top", "td-open.top"], "reviewer": "Officer F"})
+    assert response.status_code == 409
+    assert {r["domain"] for r in response.json()["detail"]["refused"]} == {"td-auto.top", "td-open.top"}
+    assert session.scalar(select(func.count()).select_from(TakedownRequest)) == 0
+
+
+def test_create_for_confirmed_domains(client, session):
+    confirmed(session, "td-ok.top")
+    body = client.post("/v1/admin/takedowns", headers=AUTH, json={"domains": ["td-ok.top"], "reviewer": "Officer F"}).json()
     assert sorted(r["recipient_kind"] for r in body["requests"]) == ["gsb", "hosting", "registrar"]
     assert all(r["status"] == "pack_ready" and r["display"] == "td-ok[.]top" for r in body["requests"])
-    why = {r["domain"]: r["why"] for r in body["refused"]}
-    assert why["td-auto.top"].startswith("auto-confirmed") and why["td-open.top"] == "not confirmed"
     again = client.post("/v1/admin/takedowns", headers=AUTH, json={"domains": ["td-ok.top"]}).json()
     assert again["requests"] == [] and again["refused"][0]["why"].startswith("requests already open")
 

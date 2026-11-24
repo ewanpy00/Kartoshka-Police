@@ -9,24 +9,45 @@
 The zip is rebuilt on each download and is byte-for-byte reproducible (fixed timestamps, sorted
 entries, PDF creation date taken from the record), so its SHA-256 always matches the one stored on
 the request. Resident report notes are never included.
+
+Hardening (third-party data reaches this file): a domain that is not a plain host name is refused before any
+zip path is built, and every value written into an email line is flattened to one line.
 """
 import hashlib
 import io
 import json
+import re
+import unicodedata
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.defang import defang
-from app.evidence import pdf
-from app.models import Artifact, Evidence
+from app.evidence import pdf, store
+from app.models import Evidence
 
 ZIP_TIME = (2020, 1, 1, 0, 0, 0)
+MAX_FIELD = 200
+MAX_DOMAIN = 253
+DOMAIN_PATTERN = r"^[a-z0-9][a-z0-9.-]*$"
+
+
+def check_domain(domain: str) -> str:
+    """The domain unchanged if it is a plain host name; otherwise ValueError. Used for zip paths."""
+    if (not isinstance(domain, str) or len(domain) > MAX_DOMAIN or not re.fullmatch(DOMAIN_PATTERN, domain)
+            or ".." in domain):
+        raise ValueError(f"Unsafe domain name: {str(domain)[:80]!r}")
+    return domain
+
+
+def one_line(value: object) -> str:
+    """The value as one short line for email.txt. Line breaks, control characters and Unicode line
+    separators become a space, so third-party data cannot add a header or a line."""
+    text = "".join(" " if unicodedata.category(c)[0] == "C" or unicodedata.category(c) in ("Zl", "Zp") else c
+                   for c in str(value or "-"))
+    return re.sub(r" {2,}", " ", text).strip()[:MAX_FIELD] or "-"
 
 
 @dataclass
@@ -44,20 +65,15 @@ def evidence_json(evidence: Evidence) -> bytes:
 
 
 def screenshot(session: Session, evidence: Evidence) -> bytes | None:
-    artifact = session.scalar(select(Artifact).where(Artifact.evidence_id == evidence.id, Artifact.kind == "screenshot"))
-    if artifact is None:
-        return None
-    root = Path(get_settings().captures_dir).resolve()
-    path = Path(artifact.path).resolve()
-    if not path.is_relative_to(root) or not path.is_file():
-        return None
-    return path.read_bytes()
+    """The phone screenshot: path inside the captures directory and PNG signature checked by the store."""
+    return store.screenshot_png(session, evidence.id)
 
 
 def email(recipient: str, recipient_kind: str, items: list[Item], generated_at: datetime) -> str:
-    names = [defang(item.domain) for item in items]
-    brands = sorted({item.brand for item in items if item.brand})
+    names = [one_line(defang(item.domain)) for item in items]
+    brands = sorted({one_line(item.brand) for item in items if item.brand})
     target = f" impersonating {', '.join(brands)}" if brands else ""
+    recipient, recipient_kind = one_line(recipient), one_line(recipient_kind)
     to = recipient if not recipient.startswith("https://") else f"(web form) {recipient}"
     lines = [
         f"To: {to}",
@@ -70,7 +86,7 @@ def email(recipient: str, recipient_kind: str, items: list[Item], generated_at: 
         "Please suspend the domain(s) or remove the content. The evidence records, screenshots and a SHA-256",
         "manifest are attached; each record carries a hash chain value that can be verified on request.",
         "",
-        *[f"  - {name}  (evidence {item.evidence.id})" for name, item in zip(names, items)],
+        *[f"  - {name}  (evidence {one_line(item.evidence.id)})" for name, item in zip(names, items)],
         "",
         "السلام عليكم،",
         "",
@@ -86,6 +102,8 @@ def email(recipient: str, recipient_kind: str, items: list[Item], generated_at: 
 
 
 def build(session: Session, recipient: str, recipient_kind: str, items: list[Item], generated_at: datetime) -> bytes:
+    for item in items:
+        check_domain(item.domain)  # before any zip path or file is built
     files: dict[str, bytes] = {}
     for item in sorted(items, key=lambda i: i.domain):
         files[f"evidence/{item.domain}.pdf"] = pdf.render(session, item.evidence)

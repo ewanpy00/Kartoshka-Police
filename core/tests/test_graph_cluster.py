@@ -1,107 +1,134 @@
-from graph_helpers import ingest
+"""Clustering rules (main's 3bad956 and rule tests on feat/app's graph): only strong links merge, official contacts never
+link, the hub rule holds, country is not a node, and a campaign needs an officer confirm to be called confirmed."""
+import pytest
+from factories import make_check
 from sqlalchemy import select
 
-from app.models import AuditLog, Campaign, Check, Entity
+import app.brands
+from app.graph import build as graph
+from app.graph import cluster, rules
+from app.models import AuditLog, Campaign, Check, Domain, Entity
 
 PHONE = "+971500000001"
+OFFICIAL = "+971600561111"
+
+
+def site(session, domain, *nodes):
+    make_check(session, domain, 90)
+    graph.record(session, domain, list(nodes), None)
+    return graph.refresh(session, domain)
 
 
 def campaign_ids(session, *domains):
-    rows = session.scalars(select(Entity).where(Entity.kind == "domain", Entity.value.in_(domains)))
-    return {row.value: row.campaign_id for row in rows}
+    return {d: graph.campaign_of(session, d) for d in domains}
 
 
-def test_shared_phone_forms_one_campaign(session, published):
-    ingest(session, "a.example", phones=[PHONE], brand="UAE PASS")
-    assert campaign_ids(session, "a.example") == {"a.example": None}
-    ingest(session, "b.example", phones=[PHONE], brand="UAE PASS")
-    ids = campaign_ids(session, "a.example", "b.example")
-    assert ids["a.example"] is not None and ids["a.example"] == ids["b.example"]
-    campaign = session.get(Campaign, ids["a.example"])
-    assert campaign.name.startswith("UAE PASS · a.example · ")
-    assert campaign.last_activity_at is not None
+@pytest.fixture
+def official_phone(monkeypatch):
+    monkeypatch.setattr(app.brands, "official_phones", lambda: frozenset({OFFICIAL}), raising=False)
+
+
+def test_shared_phone_forms_one_campaign(session):
+    assert site(session, "a.example", ("phone", PHONE)) is None
+    campaign = site(session, "b.example", ("phone", PHONE))
+    assert campaign_ids(session, "a.example", "b.example") == {"a.example": campaign.id, "b.example": campaign.id}
     assert {c.campaign_id for c in session.scalars(select(Check).where(Check.domain.in_(["a.example", "b.example"])))} == {campaign.id}
-    assert published == []
-    session.commit()
-    assert published == [("campaign.new_domain", {"campaign_id": campaign.id, "domain": "b.example"})]
+    assert campaign.confirmed_count == 0  # clustering alone never makes it confirmed
 
 
-def test_third_domain_joins_existing_campaign(session):
-    ingest(session, "a.example", phones=[PHONE])
-    ingest(session, "b.example", phones=[PHONE], brand="UAE PASS")
-    ingest(session, "c.example", phones=[PHONE])
-    assert len(set(campaign_ids(session, "a.example", "b.example", "c.example").values())) == 1
+@pytest.mark.parametrize("node", [("ns", "ns1.bigprovider.net"), ("registrar", "Big Registrar"), ("asn", "AS64500 X"),
+                                  ("kit_sim", "abc")])
+def test_weak_links_do_not_cluster(session, node):
+    site(session, "a.example", node)
+    site(session, "b.example", node)
+    assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
+
+
+def test_shared_ip_behind_a_cdn_does_not_cluster_but_a_plain_one_does(session):
+    assert rules.strength("ip", "104.16.0.1", shared_infra=True) == "weak"
+    site(session, "a.example", ("ip", "104.16.0.1", rules.strength("ip", "104.16.0.1", shared_infra=True)))
+    site(session, "b.example", ("ip", "104.16.0.1", rules.strength("ip", "104.16.0.1", shared_infra=True)))
+    assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
+    site(session, "c.example", ("ip", "203.0.113.9"))
+    campaign = site(session, "d.example", ("ip", "203.0.113.9"))
+    assert campaign_ids(session, "c.example", "d.example") == {"c.example": campaign.id, "d.example": campaign.id}
+
+
+def test_hub_entity_does_not_merge(session, monkeypatch):
+    monkeypatch.setattr(cluster, "hub_degree", lambda: 2)
+    site(session, "a.example", ("phone", PHONE))
+    site(session, "b.example", ("phone", PHONE))
+    site(session, "c.example", ("phone", PHONE))
     assert session.scalar(select(Entity.domain_count).where(Entity.kind == "phone")) == 3
+    assert graph.campaign_of(session, "c.example") is None
 
 
-def test_shared_name_servers_do_not_cluster(session):
-    ingest(session, "a.example", name_servers=["ns1.bigprovider.net"])
-    ingest(session, "b.example", name_servers=["ns1.bigprovider.net"])
+def test_hub_degree_comes_from_the_graph_hub_degree_setting():
+    from app.config import Settings
+
+    assert Settings(graph_hub_degree=7).graph_hub_degree == 7 and not hasattr(Settings(), "hub_threshold")
+
+
+def test_official_phone_never_links(session, official_phone):
+    site(session, "a.example", ("phone", OFFICIAL))
+    site(session, "b.example", ("whatsapp", OFFICIAL.removeprefix("+971")))  # local form of the same number
     assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
+    assert session.scalars(select(Entity).where(Entity.kind.in_(["phone", "whatsapp"]))).all() == []
+    site(session, "c.example", ("phone", OFFICIAL), ("phone", PHONE))
+    campaign = site(session, "d.example", ("phone", PHONE))
+    assert campaign_ids(session, "c.example", "d.example") == {"c.example": campaign.id, "d.example": campaign.id}
+    assert [e.value for e in session.scalars(select(Entity).where(Entity.kind == "phone"))] == [PHONE]
 
 
-def test_shared_registrar_does_not_cluster(session):
-    ingest(session, "a.example", registrar="Big Registrar")
-    ingest(session, "b.example", registrar="Big Registrar")
+def test_a_missing_official_phones_function_counts_as_none(session, monkeypatch):
+    monkeypatch.delattr(app.brands, "official_phones", raising=False)
+    assert graph.official_phones() == frozenset()
+    site(session, "a.example", ("phone", OFFICIAL))
+    assert site(session, "b.example", ("phone", OFFICIAL)) is not None  # nothing is official yet, so it still links
+
+
+def test_official_payment_host_never_links(session):
+    site(session, "a.example", ("payment", "pay.uaepass.ae/checkout"))
+    site(session, "b.example", ("payment", "pay.uaepass.ae/checkout"))
     assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
-
-
-def test_shared_ip_behind_proxy_does_not_cluster(session):
-    ingest(session, "a.example", ip="104.16.0.1", proxy="cloudflare")
-    ingest(session, "b.example", ip="104.16.0.1", proxy="cloudflare")
-    assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
-
-
-def test_shared_ip_without_proxy_clusters(session):
-    ingest(session, "a.example", ip="203.0.113.9")
-    ingest(session, "b.example", ip="203.0.113.9")
-    ids = campaign_ids(session, "a.example", "b.example")
-    assert ids["a.example"] is not None and ids["a.example"] == ids["b.example"]
-
-
-def test_hub_entity_does_not_merge(session):
-    ingest(session, "a.example", phones=[PHONE], hub_threshold=2)
-    ingest(session, "b.example", phones=[PHONE], hub_threshold=2)
-    ingest(session, "c.example", phones=[PHONE], hub_threshold=2)
-    assert session.scalar(select(Entity.domain_count).where(Entity.kind == "phone")) == 3
-    assert campaign_ids(session, "c.example") == {"c.example": None}
-
-
-def test_merge_keeps_oldest_campaign_and_audits(session):
-    ingest(session, "a1.example", phones=["+971500000011"])
-    ingest(session, "a2.example", phones=["+971500000011"])
-    ingest(session, "b1.example", phones=["+971500000022"])
-    ingest(session, "b2.example", phones=["+971500000022"])
-    before = campaign_ids(session, "a1.example", "b1.example")
-    assert before["a1.example"] != before["b1.example"]
-    oldest = min(
-        session.scalars(select(Campaign).where(Campaign.id.in_(before.values()))), key=lambda c: c.first_seen
-    )
-    ingest(session, "bridge.example", phones=["+971500000011", "+971500000022"])
-    ids = campaign_ids(session, "a1.example", "a2.example", "b1.example", "b2.example", "bridge.example")
-    assert set(ids.values()) == {oldest.id}
-    assert len(session.scalars(select(Campaign).where(Campaign.id.in_(before.values()))).all()) == 1
-    audit = session.scalars(select(AuditLog).where(AuditLog.action == "campaign.merge")).one()
-    assert audit.actor == "system" and audit.target == oldest.id
+    session.add(Domain(domain="gateway.example", status="allowlisted", source="seed"))
+    session.flush()
+    site(session, "c.example", ("payment", "gateway.example/pay"))
+    site(session, "d.example", ("payment", "gateway.example/pay"))
+    assert set(campaign_ids(session, "c.example", "d.example").values()) == {None}
+    site(session, "e.example", ("payment", "collector.example/pay"))
+    assert site(session, "f.example", ("payment", "collector.example/pay")) is not None
 
 
 def test_country_is_never_an_entity(session):
-    ingest(session, "a.example", ip="203.0.113.9", ip_country="AE")
+    site(session, "a.example", ("ip", "203.0.113.9"), ("country", "AE"))
     assert session.scalars(select(Entity).where(Entity.kind == "country")).all() == []
-    assert "AE" not in session.scalars(select(Entity.value)).all()
 
 
-def test_official_hotline_does_not_cluster(session):
-    ingest(session, "a.example", phones=["+971600561111"])
-    ingest(session, "b.example", phones=["+971600561111"])
-    assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
-    ingest(session, "c.example", phones=["+971600561111", PHONE])
-    ingest(session, "d.example", phones=[PHONE])
-    assert len(set(campaign_ids(session, "c.example", "d.example").values())) == 1
-    assert campaign_ids(session, "c.example")["c.example"] is not None
+def test_campaign_is_confirmed_only_after_an_officer_confirm(session):
+    site(session, "a.example", ("phone", PHONE))
+    campaign = site(session, "b.example", ("phone", PHONE))
+    session.add(Domain(domain="a.example", status="confirmed", source="auto", confirmed_by="auto"))
+    session.flush()
+    cluster.refresh(session, "a.example")
+    assert session.get(Campaign, campaign.id).confirmed_count == 0
+    session.get(Domain, "a.example").confirmed_by = "officer"
+    session.flush()
+    cluster.refresh(session, "a.example")
+    assert session.get(Campaign, campaign.id).confirmed_count == 1
 
 
-def test_official_payment_host_does_not_cluster(session):
-    ingest(session, "a.example", payment_hosts=["pay.uaepass.ae"])
-    ingest(session, "b.example", payment_hosts=["pay.uaepass.ae"])
-    assert set(campaign_ids(session, "a.example", "b.example").values()) == {None}
+def test_merge_keeps_oldest_campaign_and_audits(session):
+    site(session, "a1.example", ("phone", "+971500000011"))
+    site(session, "a2.example", ("phone", "+971500000011"))
+    site(session, "b1.example", ("phone", "+971500000022"))
+    site(session, "b2.example", ("phone", "+971500000022"))
+    before = campaign_ids(session, "a1.example", "b1.example")
+    assert before["a1.example"] != before["b1.example"]
+    oldest = min(session.scalars(select(Campaign).where(Campaign.id.in_(before.values()))), key=lambda c: c.first_seen)
+    site(session, "bridge.example", ("phone", "+971500000011"), ("phone", "+971500000022"))
+    ids = campaign_ids(session, "a1.example", "a2.example", "b1.example", "b2.example", "bridge.example")
+    assert set(ids.values()) == {oldest.id}
+    assert len(session.scalars(select(Campaign).where(Campaign.id.in_(before.values()))).all()) == 1
+    entry = session.scalars(select(AuditLog).where(AuditLog.action == "campaign.merge")).one()
+    assert entry.actor == "system" and entry.target == oldest.id

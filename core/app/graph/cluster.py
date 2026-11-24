@@ -3,7 +3,7 @@
 Clustering follows strong, non-excluded edges only, and skips any entity shared by more than
 `GRAPH_HUB_DEGREE` domains (the hub rule). Official and allowlisted sites (which include the Tranco
 list) never join. Two or more sites sharing a strong entity form a campaign; with no officer-confirmed
-site in it, the campaign is "suspected" (`confirmed_count = 0`). When a component touches several
+site in it (an auto-confirm does not count), the campaign is "suspected" (`confirmed_count = 0`). When a component touches several
 campaigns they merge into the oldest id, and the merge is written to the audit log.
 
     python -m app.graph.cluster rebuild    # recompute every campaign from scratch, keeping old ids
@@ -27,6 +27,12 @@ GRAPH_LOCK = 7_301_002
 MAX_DOMAINS = 500
 PROTECTED = ("official", "allowlisted")
 TOKEN = re.compile(r"[a-z0-9]+")
+
+
+def officer_confirmed(session: Session, names: list[str]) -> set[str]:
+    """Sites an officer confirmed. An auto-confirm never turns a suspicion into a campaign."""
+    return set(session.scalars(select(Domain.domain).where(
+        Domain.domain.in_(names), Domain.status == "confirmed", Domain.confirmed_by == "officer")))
 
 
 def hub_degree() -> int:
@@ -120,7 +126,7 @@ def assign(session: Session, ids: set[int], actor: str = "system", prefer: list[
                      {"campaigns": [c.id for c in existing]}, {"campaign": campaign.id}, "shared strong link")
     session.execute(update(Edge).where(Edge.src_id.in_(ids)).values(campaign_id=campaign.id))
     session.execute(update(Check).where(Check.domain.in_(names) | Check.host.in_(names)).values(campaign_id=campaign.id))
-    confirmed = set(session.scalars(select(Domain.domain).where(Domain.domain.in_(names), Domain.status == "confirmed")))
+    confirmed = officer_confirmed(session, names)
     describe(session, campaign, names, confirmed)
     session.flush()
     return campaign
@@ -142,7 +148,7 @@ def detach(session: Session, domain_id: int) -> None:
         session.delete(campaign)
     else:
         names = list(session.scalars(select(Entity.value).where(Entity.id.in_(rest))))
-        confirmed = set(session.scalars(select(Domain.domain).where(Domain.domain.in_(names), Domain.status == "confirmed")))
+        confirmed = officer_confirmed(session, names)
         describe(session, campaign, names, confirmed)
     session.flush()
 

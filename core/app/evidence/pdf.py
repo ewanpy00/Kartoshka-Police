@@ -1,21 +1,46 @@
 """Evidence record as a PDF for officers, courts and takedown packs (ARCHITECTURE.md 1.5).
 
-Arabic is shaped with HarfBuzz (fpdf2 text shaping) in DejaVu Sans. Domains and URLs are defanged so
-nothing in the document is a live link.
+Arabic is shaped with HarfBuzz (fpdf2 text shaping) and laid out right to left with fpdf2's bidi
+algorithm, in Noto Naskh Arabic (package fonts-noto-core); Latin runs, digits and defanged domains inside
+an Arabic line stay left to right. Latin text is DejaVu Sans. Domains and URLs are defanged so nothing
+in the document is a live link. fpdf2 fetches nothing: the only image is the local screenshot file, and
+only when its path resolves inside the captures directory and it begins with the PNG signature.
 """
+import re
+from io import BytesIO
 from pathlib import Path
 
 from fpdf import FPDF
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.defang import defang
-from app.evidence.store import row_hash
+from app.evidence.store import row_hash, screenshot_png
 from app.models import Artifact, Evidence, Review
 
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
+NOTO_DIR = Path("/usr/share/fonts/truetype/noto")
+ARABIC = re.compile(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]")
 GREY = (110, 110, 110)
+
+
+def has_arabic(text: str) -> bool:
+    return bool(ARABIC.search(text))
+
+
+def ltr_numbers(text: str) -> str:
+    """In an Arabic line a leading + would sit after its number; a left-to-right mark keeps `+97150...` in order."""
+    return re.sub(r"(?<![\w\u200e])\+(?=\d)", "\u200e+", text) if has_arabic(text) else text
+
+
+def arabic_font(style: str) -> Path:
+    """Noto Naskh Arabic, else Noto Sans Arabic, in the requested style."""
+    suffix = "Bold" if style == "B" else "Regular"
+    for family in ("NotoNaskhArabic", "NotoSansArabic"):
+        path = NOTO_DIR / f"{family}-{suffix}.ttf"
+        if path.is_file():
+            return path
+    raise FileNotFoundError(f"No Arabic font in {NOTO_DIR}; install fonts-noto-core")
 
 
 class EvidencePDF(FPDF):
@@ -25,14 +50,32 @@ class EvidencePDF(FPDF):
         self.add_font("DejaVu", "", str(FONT_DIR / "DejaVuSans.ttf"))
         self.add_font("DejaVu", "B", str(FONT_DIR / "DejaVuSans-Bold.ttf"))
         self.add_font("Mono", "", str(FONT_DIR / "DejaVuSansMono.ttf"))
+        self.add_font("Arabic", "", str(arabic_font("")))
+        self.add_font("Arabic", "B", str(arabic_font("B")))
+        # Glyphs the Arabic face lacks (most Latin) come from DejaVu, run by run.
+        self.set_fallback_fonts(["DejaVu"])
         self.set_text_shaping(True)
         self.set_auto_page_break(True, margin=15)
         self.set_margins(15, 15, 15)
 
+    def face(self, text: str, style: str = "", size: float = 8, mono: bool = False) -> bool:
+        """Pick the font and text direction for this text. Returns True for an Arabic line (right to left,
+        right-aligned); Latin runs and digits inside it still read left to right through the bidi pass."""
+        arabic = has_arabic(text)
+        self.set_text_shaping(True, direction="rtl" if arabic else None)
+        if arabic:
+            self.set_font("Arabic", style, size + 1)
+        else:
+            self.set_font("Mono" if mono else "DejaVu", style, size)
+        return arabic
+
     def header(self) -> None:
-        self.set_font("DejaVu", "B", 13)
-        self.cell(0, 8, "Kartoshka-Police · Evidence record · سجل الأدلة", new_x="LMARGIN", new_y="NEXT")
-        self.set_font("DejaVu", "", 8)
+        self.set_text_color(0, 0, 0)
+        self.face("Kartoshka-Police · Evidence record", "B", 13)
+        self.cell(110, 8, "Kartoshka-Police · Evidence record")
+        self.face("سجل الأدلة", "B", 13)
+        self.cell(0, 8, "سجل الأدلة", align="R", new_x="LMARGIN", new_y="NEXT")
+        self.face(self.evidence_id, "", 8)
         self.set_text_color(*GREY)
         self.cell(0, 5, self.evidence_id, new_x="LMARGIN", new_y="NEXT")
         self.set_text_color(0, 0, 0)
@@ -40,26 +83,26 @@ class EvidencePDF(FPDF):
 
     def footer(self) -> None:
         self.set_y(-12)
-        self.set_font("DejaVu", "", 7)
+        self.face("Page", "", 7)
         self.set_text_color(*GREY)
         self.cell(0, 5, f"Page {self.page_no()} · integrity: hash = SHA-256(prev_hash + canonical JSON of the payload)", align="C")
+        self.set_text_color(0, 0, 0)
 
     def section(self, title: str) -> None:
         self.ln(2)
-        self.set_font("DejaVu", "B", 10)
+        arabic = self.face(title, "B", 10)
         self.set_fill_color(235, 238, 242)
-        self.cell(0, 7, title, fill=True, new_x="LMARGIN", new_y="NEXT")
-        self.set_font("DejaVu", "", 9)
+        self.cell(0, 7, title, fill=True, align="R" if arabic else "L", new_x="LMARGIN", new_y="NEXT")
 
     def row(self, label: str, value, mono: bool = False) -> None:
         if value in (None, "", [], {}):
             return
         text = ", ".join(map(str, value)) if isinstance(value, list) else str(value)
-        self.set_font("DejaVu", "B", 8)
         self.set_x(self.l_margin)
+        self.face(label, "B", 8)
         self.cell(42, 5, label)
-        self.set_font("Mono" if mono else "DejaVu", "", 8)
-        self.multi_cell(0, 5, text[:2000], new_x="LMARGIN", new_y="NEXT")
+        arabic = self.face(text, "", 8, mono)
+        self.multi_cell(0, 5, ltr_numbers(text[:2000]), align="R" if arabic else "L", new_x="LMARGIN", new_y="NEXT")
 
 
 def render(session: Session, evidence: Evidence) -> bytes:
@@ -83,12 +126,17 @@ def render(session: Session, evidence: Evidence) -> bytes:
     pdf.section(f"Verdict: {p.get('verdict')} · score {p.get('score')} · {p.get('brand') or 'no brand'}")
     for item in p.get("reasons") or []:
         weight = f"+{item['weight']}" if item.get("weight") else ""
-        pdf.set_font("DejaVu", "B", 8)
-        pdf.cell(42, 5, f"{item['code']} {weight}")
-        pdf.set_font("DejaVu", "", 8)
-        pdf.multi_cell(0, 5, item.get("en", ""), new_x="LMARGIN", new_y="NEXT")
-        pdf.set_x(pdf.l_margin + 42)
-        pdf.multi_cell(0, 5, item.get("ar", ""), align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(pdf.l_margin)
+        pdf.face("code", "B", 8)
+        pdf.cell(42, 5, f"{item['code']} {weight}".strip())
+        english = item.get("en") or ""
+        pdf.face(english, "", 8)
+        pdf.multi_cell(0, 5, english, new_x="LMARGIN", new_y="NEXT")
+        arabic = item.get("ar") or ""
+        if arabic:  # right to left, right-aligned, under the English line
+            pdf.set_x(pdf.l_margin + 42)
+            pdf.face(arabic, "", 8)
+            pdf.multi_cell(0, 6, ltr_numbers(arabic), align="R", new_x="LMARGIN", new_y="NEXT")
     for item in p.get("sources") or []:
         pdf.row(f"source: {item['id']}", f"{item['status']} {item.get('detail') or ''}".strip())
 
@@ -118,10 +166,10 @@ def render(session: Session, evidence: Evidence) -> bytes:
     artifacts = session.scalars(select(Artifact).where(Artifact.evidence_id == evidence.id)).all()
     shot = next((a for a in artifacts if a.kind == "screenshot"), None)
     if shot is not None:
-        path = Path(shot.path)
-        if path.is_file() and path.resolve().is_relative_to(Path(get_settings().captures_dir).resolve()):
+        png = screenshot_png(session, evidence.id)  # inside the captures directory, PNG signature checked
+        if png is not None:
             pdf.section("Screenshot (Arabic phone profile)")
-            pdf.image(str(path), w=55)
+            pdf.image(BytesIO(png), w=55)
 
     pdf.section("Artifacts (SHA-256)")
     for artifact in artifacts:

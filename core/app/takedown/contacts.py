@@ -12,6 +12,7 @@ A recipient without an email gets a form link instead; the officer submits it by
 sends anything.
 """
 import ipaddress
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -26,6 +27,16 @@ CLOUDFLARE_ASN = "13335"
 CLOUDFLARE_FORM = "https://abuse.cloudflare.com/phishing"
 GSB_FORM = "https://safebrowsing.google.com/safebrowsing/report_phish/"
 AEDA_FORM = "https://www.aeda.ae/"
+
+
+ADDRESS = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+MAX_ADDRESS = 254
+
+
+def valid_addresses(values: list | None) -> list[str]:
+    """RDAP data is third-party input: keep only plain single addresses (no whitespace, comma, line break,
+    display name or second address), in sorted order so the choice does not depend on the registry's order."""
+    return sorted(v for v in values or [] if isinstance(v, str) and len(v) <= MAX_ADDRESS and ADDRESS.fullmatch(v))
 
 
 @dataclass(frozen=True)
@@ -92,16 +103,17 @@ def recipients(domain: str, infra: dict, ip_lookup=ip_abuse) -> list[Recipient]:
     """One recipient per kind. `infra` is the evidence record's infrastructure block (DNS, ASN, RDAP)."""
     found: list[Recipient] = []
     registration = infra.get("rdap") or {}
-    emails = registration.get("abuse_emails") or []
-    if emails:
+    emails = valid_addresses(registration.get("abuse_emails"))
+    if emails:  # no valid address means no registrar recipient, not an error
         found.append(Recipient("registrar", emails[0], registration.get("registrar") or ""))
     if behind_cloudflare(infra):
         found.append(Recipient("cloudflare", CLOUDFLARE_FORM, "Cloudflare"))
     else:
         for ip in (infra.get("a") or []) + (infra.get("aaaa") or []):
             network = ip_lookup(ip)
-            if network and network["abuse_emails"]:
-                found.append(Recipient("hosting", network["abuse_emails"][0], network["name"]))
+            hosting = valid_addresses(network["abuse_emails"]) if network else []
+            if hosting:
+                found.append(Recipient("hosting", hosting[0], network["name"]))
                 break
     if domain.endswith(".ae"):
         found.append(Recipient("aeda", AEDA_FORM, "aeDA (TDRA)"))

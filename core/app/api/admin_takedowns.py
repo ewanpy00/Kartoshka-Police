@@ -8,22 +8,27 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 from sqlalchemy import select
 
 from app import queue
 from app.auth import require_write_token
 from app.defang import defang
 from app.deps import SessionDep, SettingsDep
-from app.models import TakedownRequest
+from app.models import Domain, TakedownRequest
 from app.takedown import pack, tracker
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_write_token)])
 PAGE = 50
 
 
+# A domain is a plain host name; path separators, "..", control characters and whitespace are a 422.
+PlainDomain = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True, max_length=pack.MAX_DOMAIN,
+                                               pattern=pack.DOMAIN_PATTERN), AfterValidator(pack.check_domain)]
+
+
 class CreateBody(BaseModel):
-    domains: list[str] = Field(min_length=1, max_length=200)
+    domains: list[PlainDomain] = Field(min_length=1, max_length=200)
     reviewer: str = Field("Demo Officer", max_length=200)
 
 
@@ -73,8 +78,16 @@ def takedowns(
 
 
 @router.post("/takedowns", description="Prepare requests for officer-confirmed domains: one per domain and recipient, "
-             "one pack per recipient. Unconfirmed, auto-confirmed and already requested domains are refused and listed.")
+             "one pack per recipient. If any domain is not confirmed by an officer (never confirmed, or "
+             "auto-confirmed) the answer is 409 listing them and nothing is built. Domains without evidence or with "
+             "requests already open are refused and listed.")
 def create(body: CreateBody, session: SessionDep, settings: SettingsDep) -> dict:
+    wanted = sorted(set(body.domains))
+    rows = {row.domain: row for row in session.scalars(select(Domain).where(Domain.domain.in_(wanted)))}
+    unconfirmed = [{"domain": d, "display": defang(d), "why": "not confirmed by an officer"} for d in wanted
+                   if d not in rows or rows[d].status != "confirmed" or rows[d].confirmed_by != "officer"]
+    if unconfirmed:
+        raise HTTPException(409, {"refused": unconfirmed})
     created, refused = tracker.create(session, body.domains, body.reviewer)
     session.commit()
     now = datetime.now(UTC)

@@ -110,3 +110,18 @@ def test_graph_collapses_single_use_entities_above_the_limit(client, session, mo
     assert {"phone", "asn"} <= {n["kind"] for n in shape["nodes"]}  # shared nodes stay
     assert shape["collapsed"] == [{"kind": "ns", "count": 3}]
     assert session.scalar(select(Edge).where(Edge.excluded.is_(True))) is None
+
+
+def test_confirm_all_skips_official_and_lets_an_officer_confirm_an_auto_confirmed_site(client, session):
+    campaign = campaign_of(session, ["o-one.top", "o-auto.top", "o-real.top"], node=("payment", "collector.example/pay"))
+    session.add(Domain(domain="o-real.top", status="official", source="seed"))
+    session.add(Domain(domain="o-auto.top", status="confirmed", source="auto", confirmed_by="auto"))
+    session.flush()
+    cluster.refresh(session, "o-one.top")
+    assert client.get(f"/v1/admin/campaigns/{campaign.id}", headers=AUTH).json()["confirmed_count"] == 0  # auto does not count
+    body = client.post(f"/v1/admin/campaigns/{campaign.id}/confirm", headers=AUTH,
+                       json={"domains": ["o-one.top", "o-auto.top", "o-real.top"], "reviewer": "Officer H"}).json()
+    assert sorted(d["domain"] for d in body["confirmed"]) == ["o-auto.top", "o-one.top"]
+    assert {r["domain"]: r["why"] for r in body["refused"]} == {"o-real.top": "official"}
+    assert len(session.scalars(select(Review).where(Review.reviewer == "Officer H")).all()) == 2  # one decision per site
+    assert client.get(f"/v1/admin/campaigns/{campaign.id}", headers=AUTH).json()["confirmed_count"] == 2

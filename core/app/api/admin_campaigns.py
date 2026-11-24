@@ -111,7 +111,7 @@ def summary(campaign: Campaign, now: datetime) -> dict:
     last = campaign.last_activity_at
     return {
         "id": campaign.id, "name": campaign.name, "brand_id": campaign.brand_id,
-        "status": "confirmed" if campaign.confirmed_count > 0 else "suspected",
+        "status": "confirmed" if campaign.confirmed_count > 0 else "suspected",  # confirmed_count is officer confirms only
         "domain_count": campaign.domain_count, "confirmed_count": campaign.confirmed_count,
         "first_seen": campaign.first_seen.isoformat(), "last_activity_at": last.isoformat() if last else None,
         "active": bool(last and last >= now - ACTIVE_FOR),
@@ -154,6 +154,7 @@ def campaign_detail(campaign_id: str, session: SessionDep) -> dict:
     names = sorted(sites)
     latest = latest_checks(session, names)
     status = statuses(session, names)
+    by_officer = cluster.officer_confirmed(session, names)
     links = session.execute(
         select(Edge.src_id, Entity.kind, Entity.value, Entity.domain_count, Edge.strength, Edge.excluded)
         .join(Entity, Entity.id == Edge.dst_id).where(Edge.src_id.in_(sites.values()))
@@ -175,7 +176,7 @@ def campaign_detail(campaign_id: str, session: SessionDep) -> dict:
             "evidence_id": check.evidence_id if check else None, "brand_id": check.brand_id if check else None,
             "last_seen": check.created_at.isoformat() if check else None,
             "links": sorted(set(by_site.get(sites[name], []))),
-            "tick": status.get(name) != "confirmed" and bool(check and check.score >= CONFIRM_FROM and check.evidence_id),
+            "tick": name not in by_officer and status.get(name) not in decisions.PROTECTED and bool(check and check.score >= CONFIRM_FROM and check.evidence_id),
         })
     entities = sorted((e for e in shared.values() if e["in_campaign"] > 1 or e["strength"] == "strong"),
                       key=lambda e: (e["strength"] != "strong", -e["in_campaign"], e["kind"]))
@@ -237,6 +238,7 @@ def confirm_all(campaign_id: str, body: ConfirmBody, session: SessionDep) -> dic
     wanted = sorted({d.lower().strip() for d in body.domains})
     latest = latest_checks(session, wanted)
     status = statuses(session, wanted)
+    by_officer = cluster.officer_confirmed(session, wanted)
     refused, outcomes = [], []
     note = f"[{campaign_id}] {body.note}".strip()
     for site in wanted:
@@ -244,12 +246,15 @@ def confirm_all(campaign_id: str, body: ConfirmBody, session: SessionDep) -> dic
             refused.append({"domain": site, "display": defang(site), "why": "not in this campaign"})
         elif status.get(site) in decisions.PROTECTED:
             refused.append({"domain": site, "display": defang(site), "why": status[site]})
-        elif status.get(site) == "confirmed":
+        elif site in by_officer:
             refused.append({"domain": site, "display": defang(site), "why": "already confirmed"})
         elif site not in latest or not latest[site].evidence_id:
             refused.append({"domain": site, "display": defang(site), "why": "no evidence yet"})
-        else:
-            outcomes.append(decisions.review(session, latest[site].evidence_id, "confirm", body.reviewer, None, note))
+        else:  # one review, hence one decision, per ticked site; an auto-confirmed site gets its officer decision here
+            try:
+                outcomes.append(decisions.review(session, latest[site].evidence_id, "confirm", body.reviewer, None, note))
+            except decisions.ReviewRefused as refusal:
+                refused.append({"domain": site, "display": defang(site), "why": str(refusal)})
     session.commit()
     version = None
     for outcome in outcomes:
