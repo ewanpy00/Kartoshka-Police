@@ -180,6 +180,8 @@ class CaseDetail(CaseSummary):
     title: str | None
     reasons: list[dict]
     infrastructure: dict
+    location: dict | None
+    lead_time: dict | None
     report_notes: list[ReportNote]
     checks: list[CaseCheck]
     reviews: list[CaseReview]
@@ -220,3 +222,23 @@ class AuditEntry(BaseModel):
 
 class AuditResponse(BaseModel):
     entries: list[AuditEntry]
+
+
+class FeedItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    check_id: str
+    domain: str | None
+    url: str
+    brand: str | None
+    verdict: str
+    score: int
+    created_at: datetime
+
+
+class FeedResponse(BaseModel):
+    items: list[FeedItem]
+
+
+class WatchRunResponse(BaseModel):
+    queued: int

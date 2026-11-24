@@ -11,11 +11,15 @@ import yaml
 
 from app.health import HEARTBEAT_PATH
 from app.matcher import match_domains
+from app.submitter import Submitter
 
 CERTSTREAM_URL = os.environ.get("CERTSTREAM_URL", "ws://certstream:8080/")
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/srv/data"))
 STATS_INTERVAL_SECONDS = 30
 MAX_BACKOFF_SECONDS = 60
+CORE_URL = os.environ.get("CORE_URL", "http://core:8000")
+CORE_WRITE_TOKEN = os.environ.get("CORE_WRITE_TOKEN", "")
+SUBMIT_PER_MIN = int(os.environ.get("HUNTER_SUBMIT_PER_MIN", "6"))
 HOSTNAME = re.compile(r"[A-Za-z0-9*._-]+")
 
 log = logging.getLogger("hunter")
@@ -54,22 +58,23 @@ def certificate_domains(raw: str | bytes) -> list[str] | None:
     ]
 
 
-def handle_message(raw: str | bytes, brands: list[dict], counters: Counters) -> None:
+def handle_message(raw: str | bytes, brands: list[dict], counters: Counters) -> list[str]:
     try:
         domains = certificate_domains(raw)
         if domains is None:
-            return
+            return []
         found = match_domains(domains, brands)
     except Exception as error:
         log.warning("skipping malformed message: %r", error)
-        return
+        return []
     counters.certificates += 1
     for brand_id, domain in found:
         counters.matches += 1
         log.info("match brand=%s domain=%s", brand_id, domain)
+    return [domain for _, domain in found]
 
 
-async def consume(ws, brands: list[dict], counters: Counters) -> None:
+async def consume(ws, brands: list[dict], counters: Counters, submitter: Submitter) -> None:
     loop = asyncio.get_running_loop()
     last_beat = 0.0
     async for raw in ws:
@@ -77,12 +82,14 @@ async def consume(ws, brands: list[dict], counters: Counters) -> None:
         if now - last_beat >= 1:
             HEARTBEAT_PATH.touch()
             last_beat = now
-        handle_message(raw, brands, counters)
+        for domain in handle_message(raw, brands, counters):
+            await asyncio.to_thread(submitter.submit, domain)
 
 
 async def main() -> None:
     brands = yaml.safe_load((DATA_DIR / "brands.yaml").read_text(encoding="utf-8"))
     counters = Counters()
+    submitter = Submitter(CORE_URL, CORE_WRITE_TOKEN, SUBMIT_PER_MIN)
     stats_task = asyncio.create_task(log_stats(counters))
     backoff = 1
     while True:
@@ -90,7 +97,7 @@ async def main() -> None:
             async with websockets.connect(CERTSTREAM_URL) as ws:
                 log.info("connected to %s", CERTSTREAM_URL)
                 backoff = 1
-                await consume(ws, brands, counters)
+                await consume(ws, brands, counters, submitter)
             log.warning("stream closed, reconnecting in %ds", backoff)
         except (OSError, websockets.WebSocketException) as error:
             log.warning("stream failed (%s), reconnecting in %ds", error, backoff)

@@ -14,6 +14,7 @@ from app.admin.review import PROTECTED
 from app.checks import run_check
 from app.config import get_settings
 from app.db import get_session
+from app.infra import location
 from app.models import AuditLog, Check, Domain, Evidence, Report, Review, Watchlist
 from app.schemas import (
     AuditResponse,
@@ -25,6 +26,7 @@ from app.schemas import (
     UndoResponse,
     WatchResponse,
 )
+from app.watch import lead_time
 
 router = APIRouter()
 
@@ -164,6 +166,7 @@ def case_detail(domain: str, session: SessionDep) -> CaseDetail:
     case = require_case(session, domain)
     check = representative(case)
     payload = case.evidence.payload if case.evidence else {}
+    watching = session.get(Watchlist, domain)
     return CaseDetail(
         **summarise(case, datetime.now(UTC)).model_dump(),
         url=check.url,
@@ -171,6 +174,8 @@ def case_detail(domain: str, session: SessionDep) -> CaseDetail:
         title=payload.get("capture", {}).get("title"),
         reasons=payload.get("risk", {}).get("reasons", check.reasons),
         infrastructure=payload.get("infrastructure", {}),
+        location=location(payload["infrastructure"]) if "infrastructure" in payload else None,
+        lead_time=lead_time(min(c.created_at for c in case.checks), watching) if watching else None,
         report_notes=[r for r in case.reports if r.note],
         checks=case.checks,
         reviews=case.reviews,
