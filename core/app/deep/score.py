@@ -1,9 +1,10 @@
+import re
 from datetime import UTC, datetime, timedelta
 
 NEW_DOMAIN_DAYS = 30
 MIN_MATCH_LENGTH = 4
-MAX_LABEL_LENGTH = 63
 BLOCK_AT = 70
+LOOKALIKE_WITH_FORM_FLOOR = 70
 WARN_AT = 30
 
 REASONS = {
@@ -14,7 +15,7 @@ REASONS = {
         "النطاق يستخدم اسم {brand} وليس من نطاقاته الرسمية",
     ),
     "CREDENTIAL_FORM": (
-        30,
+        25,
         "sandbox",
         "The page asks for a password, PIN, one-time code or card details",
         "الصفحة تطلب كلمة مرور أو رمزا سريا أو رمز تحقق أو بيانات بطاقة",
@@ -58,7 +59,7 @@ def names_in_domain(brand: dict) -> list[str]:
 
 
 def names_in_text(brand: dict) -> list[str]:
-    return [name.lower() for name in brand["names"] if len(squash(name)) >= MIN_MATCH_LENGTH]
+    return [name for name in brand["names"] if len(squash(name)) >= MIN_MATCH_LENGTH]
 
 
 def lookalike_tokens(brand: dict) -> set[str]:
@@ -70,8 +71,6 @@ def lookalike_tokens(brand: dict) -> set[str]:
 
 def label_candidates(label: str, max_length: int) -> set[str]:
     """Runs of adjacent hyphen-separated tokens in the label, joined without separators, up to `max_length` characters."""
-    if len(label) > MAX_LABEL_LENGTH:
-        return set()
     tokens = label.split("-")
     runs = set()
     for start in range(len(tokens)):
@@ -92,7 +91,10 @@ def lookalike(host: str, brand: dict) -> bool:
 
 
 def mentioned(host: str, text: str, brand: dict) -> bool:
-    return not is_official(host, brand) and any(name in text for name in names_in_text(brand))
+    """The brand name as a whole word, so "Tammer" does not name TAMM."""
+    return not is_official(host, brand) and any(
+        re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.IGNORECASE) for name in names_in_text(brand)
+    )
 
 
 def is_new(registered_at: str | None, now: datetime) -> bool:
@@ -114,8 +116,7 @@ def score(
     now: datetime,
 ) -> dict:
     """Score a page. `page_text` is the title and visible text. A lookalike with a credential form is 70 or more."""
-    lowered = page_text.lower()
-    brand = next((b for b in brands if lookalike(host, b)), None) or next((b for b in brands if mentioned(host, lowered, b)), None)
+    brand = next((b for b in brands if lookalike(host, b)), None) or next((b for b in brands if mentioned(host, page_text, b)), None)
     found = []
     if brand and lookalike(host, brand):
         found.append(reason("BRAND_LOOKALIKE_DOMAIN", brand["names"][0]))
@@ -123,10 +124,13 @@ def score(
         found.append(reason("CREDENTIAL_FORM"))
     if facts_unavailable:
         found.append(reason("PAGE_FACTS_UNAVAILABLE"))
-    if brand and mentioned(host, lowered, brand):
+    if brand and mentioned(host, page_text, brand):
         found.append(reason("BRAND_IN_PAGE", brand["names"][0]))
     if is_new(registered_at, now):
         found.append(reason("NEW_DOMAIN"))
-    total = min(100, sum(item["weight"] for item in found))
+    total = sum(item["weight"] for item in found)
+    if credential_form and any(item["code"] == "BRAND_LOOKALIKE_DOMAIN" for item in found):
+        total = max(total, LOOKALIKE_WITH_FORM_FLOOR)
+    total = min(100, total)
     verdict = "block" if total >= BLOCK_AT else "warn" if total >= WARN_AT else "allow"
     return {"score": total, "verdict": verdict, "reasons": found, "brand": brand}

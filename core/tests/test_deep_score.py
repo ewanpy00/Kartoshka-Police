@@ -28,7 +28,7 @@ def test_plain_page_is_allowed():
     ("kwargs", "expected_codes", "expected_score", "expected_verdict"),
     [
         ({"host": "tamm-pay.example"}, ["BRAND_LOOKALIKE_DOMAIN"], 40, "warn"),
-        ({"credential_form": True}, ["CREDENTIAL_FORM"], 30, "warn"),
+        ({"credential_form": True}, ["CREDENTIAL_FORM"], 25, "allow"),
         ({"text": "Pay your TAMM fines"}, ["BRAND_IN_PAGE"], 20, "allow"),
         ({"registered_at": (NOW - timedelta(days=5)).isoformat()}, ["NEW_DOMAIN"], 15, "allow"),
         ({"registered_at": (NOW - timedelta(days=30)).isoformat()}, [], 0, "allow"),
@@ -36,7 +36,7 @@ def test_plain_page_is_allowed():
         ({"host": "uaepass-login.example", "text": "UAE PASS"}, ["BRAND_LOOKALIKE_DOMAIN", "BRAND_IN_PAGE"], 60, "warn"),
         ({"facts_unavailable": True}, ["PAGE_FACTS_UNAVAILABLE"], 30, "warn"),
         ({"host": "tamm-pay.example", "facts_unavailable": True}, ["BRAND_LOOKALIKE_DOMAIN", "PAGE_FACTS_UNAVAILABLE"], 70, "block"),
-        ({"credential_form": True, "text": "tamm", "registered_at": (NOW - timedelta(days=1)).isoformat()}, ["CREDENTIAL_FORM", "BRAND_IN_PAGE", "NEW_DOMAIN"], 65, "warn"),
+        ({"credential_form": True, "text": "tamm", "registered_at": (NOW - timedelta(days=1)).isoformat()}, ["CREDENTIAL_FORM", "BRAND_IN_PAGE", "NEW_DOMAIN"], 60, "warn"),
     ],
 )
 def test_weights_and_verdicts(kwargs, expected_codes, expected_score, expected_verdict):
@@ -133,6 +133,40 @@ def test_very_long_host_of_single_letter_tokens_is_fast_and_does_not_match():
     assert result["reasons"] == []
 
 
-def test_label_longer_than_a_dns_label_is_never_a_lookalike():
-    assert run(host="x" * 50 + "-tamm-pay.example")["reasons"] != []
-    assert run(host="x" * 70 + "-tamm-pay.example")["reasons"] == []
+def test_label_longer_than_a_dns_label_is_still_matched():
+    host = "x" * 50 + "-uaepass-" + "y" * 11 + ".example"
+    assert "BRAND_LOOKALIKE_DOMAIN" in codes(run(host=host))
+
+
+@pytest.mark.parametrize("text", ["Tammer-Golf admin", "Tammy's shop", "tammy", "retamm"])
+def test_brand_inside_a_longer_word_is_not_named_in_the_page(text):
+    assert run(text=text)["reasons"] == []
+
+
+@pytest.mark.parametrize(
+    ("text", "brand_id"),
+    [("Pay your TAMM fines", "tamm"), ("tamm.", "tamm"), ("UAE PASS login", "uaepass"), ("الهوية الرقمية الجديدة", "uaepass")],
+)
+def test_brand_named_as_a_whole_word_is_found_in_the_page(text, brand_id):
+    result = run(text=text)
+    assert codes(result) == ["BRAND_IN_PAGE"]
+    assert result["brand"]["id"] == brand_id
+
+
+def test_credential_form_alone_is_allowed():
+    assert (run(credential_form=True)["score"], run(credential_form=True)["verdict"]) == (25, "allow")
+
+
+def test_lookalike_with_credential_form_is_floored_to_70_and_blocks():
+    result = run(host="tamm-pay.example", credential_form=True)
+    assert (result["score"], result["verdict"]) == (70, "block")
+
+
+def test_brand_in_page_with_credential_form_is_a_warning():
+    result = run(text="Pay your TAMM fines", credential_form=True)
+    assert (result["score"], result["verdict"]) == (45, "warn")
+
+
+def test_auto_confirm_threshold_is_reachable():
+    result = run(host="tamm-pay.example", text="TAMM", credential_form=True, registered_at=(NOW - timedelta(days=1)).isoformat())
+    assert result["score"] == 100

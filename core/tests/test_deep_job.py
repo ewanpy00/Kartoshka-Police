@@ -95,7 +95,7 @@ def test_lookalike_page_with_password_form_is_blocked_with_evidence(session, cap
     )
     jobs.run_deep_check(session, check.id, sandbox_client(capture), rdap_client(domain_document(400)))
 
-    assert (check.verdict, check.score, check.stage) == ("block", 90, "deep")
+    assert (check.verdict, check.score, check.stage) == ("block", 85, "deep")
     assert [reason["code"] for reason in check.reasons] == ["BRAND_LOOKALIKE_DOMAIN", "CREDENTIAL_FORM", "BRAND_IN_PAGE"]
     assert check.brand == "TAMM"
     assert check.safe_action["url"].startswith("https://")
@@ -125,7 +125,7 @@ def test_lookalike_page_with_password_form_is_blocked_with_evidence(session, cap
                 "check_id": check.id,
                 "domain": "tamm-secure-pay.test",
                 "verdict": "block",
-                "score": 90,
+                "score": 85,
                 "source": "api",
                 "evidence_id": check.evidence_id,
             },
