@@ -41,7 +41,7 @@ Rules for every subagent brief:
 
 - Compose project name: `kartoshka-police`.
 - Published host ports: core on `${BIND_ADDR}:${CORE_PORT}` (127.0.0.1:8000), console on `127.0.0.1:${CONSOLE_PORT}` (5173). Nothing else.
-- `BIND_ADDR` defaults to `127.0.0.1` and applies to core only. `0.0.0.0` is for the demo phone only, because it exposes core to the whole LAN. The console port is never published beyond localhost.
+- `BIND_ADDR` defaults to `127.0.0.1` and applies to core and, in the stretch profile, AdGuard's DNS port. `0.0.0.0` is for the demo phone only, because it exposes them to the whole LAN. The console port and AdGuard's setup UI are never published beyond localhost.
 - Postgres and redis are never published to the host. They stay on `internal` only. This machine already has another stack on 5432, 6379 and 3000, and unpublished ports cannot be reached from the sandbox through the host.
 - The sandbox gets no `env_file`, only explicit `environment` entries, so API keys and the write token never enter it.
 
@@ -57,7 +57,7 @@ Rules for every subagent brief:
 | certstream | `0rickyy0/certstream-server-go:v1.10.1` | 8080 | `wget -qO- http://127.0.0.1:8080/example.json` | uses the config baked into the image, so no config file is committed |
 | hunter | build `./hunter` (python 3.12 slim) | none | `python -m app.health` (exit 0 when `/tmp/hunter.heartbeat` is newer than 60 s) | `watchfiles` wrapping `python -m app.certstream_consumer`; depends on healthy certstream |
 | console | build `./console` (`node:24.22.3-alpine3.24`) | 5173 | `wget -qO- http://127.0.0.1:5173/` | `npm run dev`; `node_modules` in an anonymous volume; gets `VITE_CORE_WRITE_TOKEN=${CORE_WRITE_TOKEN}` |
-| adguard | `adguard/adguardhome:v0.107.80` | 53, 3000 | none | profile `stretch`; host ports `${ADGUARD_DNS_PORT}` (5335) and `${ADGUARD_UI_PORT}` (3001) |
+| adguard | `adguard/adguardhome:v0.107.80` | 53, 3000 | none | profile `stretch`; DNS on `${BIND_ADDR}:${ADGUARD_DNS_PORT}` (127.0.0.1:5335), setup UI on `127.0.0.1:${ADGUARD_UI_PORT}` (3001) |
 
 Mounts: core and worker get `./core:/srv/core`, `./data:/srv/data:ro`, `./eval:/srv/eval:ro`, working dir `/srv/core`. Hunter gets `./hunter:/srv/hunter`, `./data:/srv/data:ro`. Sandbox gets `./sandbox/app:/srv/sandbox/app:ro` and the `captures` volume at `/captures`; the worker mounts `captures` read-only. Python containers run as a non-root user with `PYTHONDONTWRITEBYTECODE=1`.
 
