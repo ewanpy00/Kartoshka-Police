@@ -31,3 +31,14 @@ def test_publish_logs_and_swallows_redis_failure(monkeypatch, caplog):
 def test_published_fixture_collects_calls(published):
     events.publish("campaign.new_domain", {"campaign_id": "c1", "domain": "a.example"})
     assert published == [("campaign.new_domain", {"campaign_id": "c1", "domain": "a.example"})]
+
+
+def test_cache_publish_is_a_wrapper_over_events_publish(published):
+    import importlib
+
+    from app import cache
+
+    # conftest stubs cache.publish; reload the module to reach the real wrapper
+    real = importlib.reload(cache).publish
+    real({"type": "hunter.candidate", "domain": "tamm-pay.xyz", "at": "ignored"})
+    assert published == [("hunter.candidate", {"domain": "tamm-pay.xyz"})]

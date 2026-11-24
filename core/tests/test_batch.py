@@ -1,4 +1,4 @@
-def test_batch_returns_definite_verdicts_from_the_fast_score(client, enqueued):
+def test_batch_returns_definite_verdicts_from_the_fast_score(client, enqueued, settings):
     urls = [
         "https://uaepass.ae/login",
         "https://uaepass-verify.example/login",
@@ -8,7 +8,7 @@ def test_batch_returns_definite_verdicts_from_the_fast_score(client, enqueued):
     response = client.post("/v1/batch", json={"urls": urls})
     assert response.status_code == 200
     body = response.json()
-    assert body["cutoff"] == 40
+    assert body["cutoff"] == settings.batch_cutoff
     by_url = {row["url"]: row for row in body["results"]}
     assert {row["verdict"] for row in body["results"]} == {"allow", "block"}
     assert by_url[urls[0]]["verdict"] == "allow"
@@ -34,3 +34,29 @@ def test_batch_csv_has_the_same_rows(client):
     assert header == "url,check_id,verdict,score,timed_out"
     assert row.startswith("https://uaepass-verify.example/login,c_")
     assert row.endswith(",block,100,false")
+
+
+def test_batch_csv_defuses_formula_cells(client, monkeypatch):
+    """Validation only lets http(s) URLs in, so no URL cell can start with a formula character; the writer is
+    exercised through the endpoint with a check id (the other free-text cell) that does."""
+    import csv
+    import io
+    from types import SimpleNamespace
+
+    from app.api import check as check_module
+
+    async def fake_run_check(session, url, *args, **kwargs):
+        return SimpleNamespace(id="=1+1", score=50, sources=[], verdict="block", brand=None, reasons=[])
+
+    monkeypatch.setattr(check_module, "run_check", fake_run_check)
+    response = client.post("/v1/batch?format=csv", json={"urls": ["https://a.example/"]})
+    assert response.status_code == 200
+    header, row = list(csv.reader(io.StringIO(response.text)))
+    assert row[1] == "'=1+1"
+    assert not any(cell.startswith(("=", "+", "-", "@")) for cell in row)
+
+
+def test_batch_csv_cells_use_csvsafe_for_every_prefix():
+    from app.csvsafe import cell
+
+    assert [cell(v) for v in ("=a", "+a", "-a", "@a")] == ["'=a", "'+a", "'-a", "'@a"]

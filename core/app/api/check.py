@@ -3,9 +3,12 @@ import csv
 import io
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 
+from app.auth import bearer, require_write_token
+from app.csvsafe import cell
 from app.deps import SessionDep, SettingsDep
 from app.models import Check
 from app.schemas import BatchRequest, BatchResponse, BatchResult, CheckRequest, Verdict, for_resident
@@ -14,6 +17,9 @@ from app.verdict.service import run_check
 router = APIRouter()
 
 RESIDENT_SOURCES = ("browser", "gatekeeper", "share", "resident", "sms")
+# Sources the core itself assigns to privileged traffic. A caller cannot claim one without the write token,
+# so a forged `source` cannot pass a resident's check off as a hunter find, an officer run or a batch row.
+RESERVED_SOURCES = ("hunter", "watchlist", "user_report", "officer", "batch")
 
 CHECK_NOTE = (
     "Runs the fast score (lists, verdict cache, lexical and domain features, lookups inside "
@@ -22,7 +28,8 @@ CHECK_NOTE = (
     "and `ai` sources say `running` until it finishes. Poll `GET /v1/check/{id}` for the deep result. "
     "`pending` is kept for older clients: it means no verdict yet, never safe; Gatekeeper treats it like the "
     "timeout branch of ARCHITECTURE.md section 3. Resident sources (browser, gatekeeper, share, resident, sms) "
-    "get reasons without their weights."
+    "get reasons without their weights. The sources hunter, watchlist, user_report, officer and batch are "
+    "reserved and need the write token."
 )
 
 
@@ -32,7 +39,14 @@ def shape(check: Check, resident: bool) -> dict | Verdict:
 
 
 @router.post("/check", response_model=Verdict, description=CHECK_NOTE)
-async def create_check(body: CheckRequest, session: SessionDep, settings: SettingsDep):
+async def create_check(
+    body: CheckRequest,
+    session: SessionDep,
+    settings: SettingsDep,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
+):
+    if body.source in RESERVED_SOURCES:
+        require_write_token(credentials, settings)
     check = await run_check(session, body.url, body.source, body.mode, settings, text=body.text)
     return shape(check, body.source in RESIDENT_SOURCES)
 
@@ -83,6 +97,8 @@ async def batch(
         out = io.StringIO()
         writer = csv.writer(out)
         writer.writerow(["url", "check_id", "verdict", "score", "timed_out"])
-        writer.writerows([r.url, r.check_id, r.verdict, r.score, str(r.timed_out).lower()] for r in results)
+        writer.writerows(
+            [cell(v) for v in (r.url, r.check_id, r.verdict, r.score, str(r.timed_out).lower())] for r in results
+        )
         return Response(out.getvalue(), media_type="text/csv")
     return JSONResponse(BatchResponse(cutoff=settings.batch_cutoff, results=results).model_dump(exclude_none=not explain))

@@ -89,6 +89,7 @@ def test_preview_image_stays_inside_the_captures_volume(client, session):
 
 def test_evidence_pdf(client, session):
     evidence_id = with_evidence(session, make_check(session, "pdf-case.xyz", 80))
-    response = client.get(f"/v1/evidence/{evidence_id}.pdf")
+    assert client.get(f"/v1/evidence/{evidence_id}.pdf").status_code == 401
+    response = client.get(f"/v1/evidence/{evidence_id}.pdf", headers={"Authorization": "Bearer test-token"})
     assert response.status_code == 200 and response.content.startswith(b"%PDF")
     assert response.headers["content-type"] == "application/pdf"

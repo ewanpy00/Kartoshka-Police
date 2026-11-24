@@ -36,6 +36,8 @@ class Submitter:
         self.sent = 0
         self.dropped = 0
         self._post = post or self._http_post
+        if post is None and not TOKEN:
+            log.warning("CORE_WRITE_TOKEN is empty, submission to core will be refused")
 
     def fresh(self, source: str, host: str, now: float) -> bool:
         key = (source, host)

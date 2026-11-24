@@ -8,7 +8,7 @@ import redis.asyncio as aredis
 from app.config import get_settings
 
 VERSION_KEY = "kp:blocklist_version"
-EVENTS_CHANNEL = "kp:events"
+EVENTS_CHANNEL = "kp:events"  # kept for readers; events.CHANNEL is the same channel
 
 
 @lru_cache
@@ -88,10 +88,13 @@ def rate_limited(key: str, limit: int, window_s: int) -> bool:
 
 
 def publish(event: dict) -> None:
-    try:
-        sync_client().publish(EVENTS_CHANNEL, json.dumps(event, default=str))
-    except redis.RedisError:
-        pass
+    """Flat-event wrapper: `type` is the event type and the other fields (except `at`) are its data.
+
+    The one function that talks to Redis is `app.events.publish`."""
+    from app import events
+
+    data = {key: value for key, value in event.items() if key not in ("type", "at")}
+    events.publish(event["type"], json.loads(json.dumps(data, default=str)))
 
 
 def sync_client_once(key: str, ttl_s: int) -> bool:
