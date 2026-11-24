@@ -2,7 +2,7 @@
 
 The Android app: the default browser that checks every tapped link before it opens (ARCHITECTURE.md section 3). It is a separate Gradle build; `docker compose` does not build or start it.
 
-**Status:** the source is written but has not been built as an APK, because the development machine has no Android SDK. The pure-Kotlin logic (`app/src/main/java/ae/kartoshka/gatekeeper/logic/`) is compiled and unit-tested on a plain JVM by `make test`, and it was also checked against the running core. Expect small fixes on the first Android Studio build.
+**Status:** builds and passes its JVM unit tests. The debug APK is built in Docker (`make apk`), with no Android SDK needed on the machine. It has not yet been run on a phone.
 
 ## What it does
 
@@ -37,10 +37,19 @@ Privacy: no account and no device id with checks. The full URL goes to core only
 
 ## Build
 
-Needs Android Studio (or the Android SDK with JDK 17).
+**Without Android Studio (Docker):**
 
-1. Open `gatekeeper/` in Android Studio; it downloads Gradle 8.11.1 from `gradle/wrapper/gradle-wrapper.properties`. The wrapper jar is not committed. Without Android Studio, run `gradle wrapper --gradle-version 8.11.1` once, then use `./gradlew`.
-2. Run `./gradlew installDebug` with a phone attached over USB.
+    make apk                      # phone over USB: core at 127.0.0.1, use adb reverse
+    make apk host=192.168.1.20    # phone over Wi-Fi: core at that laptop address
+
+The APK lands in `gatekeeper/dist/gatekeeper-debug-<host>.apk`.
+- The build image (`gatekeeper/docker/Dockerfile`) holds JDK 17, Gradle 8.11.1 and the Android SDK, and accepts the SDK licences while it builds.
+- On Apple Silicon it runs as linux/amd64 under emulation, because the Android build tools ship only for x86_64 on Linux. The first build takes about 15 minutes; later ones take a few.
+- The debug signing key stays in the `kp-android-debug-key` Docker volume, so a new APK installs over the old one.
+
+**With Android Studio:** open `gatekeeper/` and run `./gradlew installDebug`. The wrapper jar is not committed; without Android Studio, run `gradle wrapper --gradle-version 8.11.1` once.
+
+**Install on the phone:** send the APK to the phone by any route (USB file transfer, a messenger, Drive), open it, and allow installs from that app. Play Protect may warn about an unknown developer; choose "Install anyway". With adb, run `adb install -r gatekeeper/dist/<file>.apk`.
 
 After `data/brands.yaml` changes, refresh the bundled catalog:
 
@@ -51,8 +60,8 @@ After `data/brands.yaml` changes, refresh the bundled catalog:
 `coreUrl` and `residentUrl` live in `gradle.properties` and default to `127.0.0.1`.
 
 - **USB (recommended for recording).** Run `adb reverse tcp:8000 tcp:8000 && adb reverse tcp:5174 tcp:5174`. Nothing is exposed to the network.
-- **Emulator.** Build with `./gradlew installDebug -PcoreUrl=http://10.0.2.2:8000 -PresidentUrl=http://10.0.2.2:5174`.
-- **Wi-Fi.** Set `BIND_ADDR=0.0.0.0` in `.env`, restart the stack, then build with `-PcoreUrl=http://<laptop IP>:8000 -PresidentUrl=http://<laptop IP>:5174`. Debug builds allow cleartext HTTP to any host (`src/debug/res/xml`); release builds allow it only to 127.0.0.1, localhost and 10.0.2.2. This exposes core to the whole network, so set `BIND_ADDR` back afterwards.
+- **Emulator.** Build with `make apk host=10.0.2.2`.
+- **Wi-Fi.** Set `BIND_ADDR=0.0.0.0` in `.env`, restart the stack, then build with `make apk host=<laptop IP>`. Debug builds allow cleartext HTTP to any host (`src/debug/res/xml`); release builds allow it only to 127.0.0.1, localhost and 10.0.2.2. This exposes core to the whole network, so set `BIND_ADDR` back afterwards.
 
 `POST /v1/check` can return `pending`. It means there is no verdict yet; it never means safe. Gatekeeper treats it as a timeout.
 

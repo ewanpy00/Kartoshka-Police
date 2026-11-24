@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs retrain
+.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs retrain apk
 
 help: ## Show this help
 	@awk -F ':.*## ' '/^[a-z-]+:.*## /{printf "  make %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -39,3 +39,6 @@ refs: ## Capture the brands' official pages and store their visual hashes (needs
 
 retrain: ## Retrain the URL model with officer decisions added as labels (A7)
 	docker compose exec -T core python -m app.ai.url_model retrain /srv/data/train/phish.txt /srv/data/train/benign.txt
+
+apk: ## Build the Gatekeeper debug APK in Docker (make apk host=<laptop IP> for Wi-Fi)
+	./scripts/apk.sh $(host)
