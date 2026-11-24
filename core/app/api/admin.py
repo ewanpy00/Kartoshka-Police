@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app import audit, cache, queue
 from app.admin import queue as cases
+from app.admin import stats as kpi
 from app.auth import require_write_token
 from app.deep import watchlist
 from app.deep.visual import REFS_KEY
@@ -151,6 +152,12 @@ def watched(session: SessionDep, cursor: int = 0) -> dict:
 @router.get("/evidence/verify", description="Recompute the whole evidence hash chain from the first record.")
 def verify_chain(session: SessionDep) -> dict:
     return {**store.verify(session), "checked_at": datetime.now(UTC).isoformat()}
+
+
+@router.get("/stats", description="Impact KPIs for 24 hours or 7 days (volumes, a time series for the chart, lead time "
+            "per confirmed CT-sighted domain against GSB and VirusTotal) and model quality against officer decisions.")
+def stats(session: SessionDep, range: Annotated[str, Query(pattern="^(24h|7d)$")] = "24h") -> dict:
+    return {**kpi.impact(session, range), "quality": kpi.quality(session)}
 
 
 @router.get("/health", description="System strip for the console: database, redis, deep queue, Hunter freshness, models.")
