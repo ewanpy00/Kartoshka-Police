@@ -29,9 +29,6 @@ class Counters:
         self.counts[key] = self.counts.get(key, 0) + 1
         return self.counts[key] > limit
 
-    def exceeded(self, key, limit):
-        return self.counts.get(key, 0) > limit
-
     def ttl(self, key, window_s):
         return window_s - 5
 
@@ -40,7 +37,6 @@ class Counters:
 def live_limits(monkeypatch):
     counters = Counters()
     monkeypatch.setattr(cache, "rate_limited", counters.limited)
-    monkeypatch.setattr(cache, "rate_exceeded", counters.exceeded)
     monkeypatch.setattr(cache, "rate_ttl", counters.ttl)
     return counters
 
@@ -157,9 +153,27 @@ def test_a_wrong_bearer_is_counted_and_then_refused(client, settings, live_limit
     settings.auth_fail_per_10min = 2
     codes = [client.post("/v1/review/ev_1", json={"decision": "confirm"}, headers=WRONG).status_code for _ in range(3)]
     assert codes == [401, 401, 429]
-    assert client.post("/v1/review/ev_1", json={"decision": "confirm"}, headers=TOKEN).status_code == 429
     limited = client.post("/v1/review/ev_1", json={"decision": "confirm"}, headers=WRONG)
-    assert limited.headers["retry-after"] == "595"
+    assert limited.status_code == 429 and limited.headers["retry-after"] == "595"
+
+
+def test_the_right_token_is_accepted_from_an_address_over_the_wrong_attempt_limit(client, settings, live_limits):
+    settings.auth_fail_per_10min = 1
+    codes = [client.get("/v1/admin/health", headers=WRONG).status_code for _ in range(3)]
+    assert codes == [401, 429, 429]
+    assert client.get("/v1/admin/health", headers=TOKEN).status_code == 200
+    assert client.get("/v1/admin/health", headers=WRONG).status_code == 429
+
+
+def test_the_right_token_on_the_socket_is_accepted_after_wrong_attempts(client, settings, live_limits):
+    settings.auth_fail_per_10min = 1
+    for _ in range(2):
+        with pytest.raises(WebSocketDisconnect), client.websocket_connect("/v1/events") as socket:
+            socket.send_text(json.dumps({"type": "auth", "token": "nope"}))
+            socket.receive_text()
+    with client.websocket_connect("/v1/events") as socket:
+        socket.send_text(json.dumps({"type": "auth", "token": settings.core_write_token}))
+        assert socket.receive_json() == {"type": "hello"}
 
 
 def test_requests_without_a_token_are_not_counted_as_failures(client, settings, live_limits):

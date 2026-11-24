@@ -96,14 +96,6 @@ def rate_ttl(key: str, window_s: int) -> int:
     return ttl if ttl > 0 else window_s
 
 
-def rate_exceeded(key: str, limit: int) -> bool:
-    """True when the window counter is already over `limit`, without counting. Fails open."""
-    try:
-        return int(sync_client().get(key) or 0) > limit
-    except redis.RedisError:
-        return False
-
-
 def publish(event: dict) -> None:
     """Flat-event wrapper: `type` is the event type and the other fields (except `at`) are its data.
 

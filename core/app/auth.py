@@ -18,16 +18,14 @@ def valid_token(given: str, settings: Settings) -> bool:
 
 
 def accepts(request: Request, given: str | None, settings: Settings) -> bool:
-    """True for the right write token. A wrong one is counted per address, and an address over the limit gets 429."""
+    """True for the right write token, always. A wrong one is counted per address and gets 429 once over the limit."""
     if given is None:
         return False
-    address = client_ip(request, settings)
-    key = f"kp:rate:authfail:{address}"
-    if cache.rate_exceeded(key, settings.auth_fail_per_10min):
-        raise too_many("sign-in", key, AUTH_FAIL_WINDOW_S)
     if valid_token(given, settings):
         return True
-    limit(request, "authfail", settings.auth_fail_per_10min, AUTH_FAIL_WINDOW_S, who=address)
+    key = f"kp:rate:authfail:{client_ip(request, settings)}"
+    if cache.rate_limited(key, settings.auth_fail_per_10min, AUTH_FAIL_WINDOW_S):
+        raise too_many("sign-in", key, AUTH_FAIL_WINDOW_S)
     return False
 
 

@@ -83,10 +83,6 @@ def limit_reached(websocket: WebSocket, settings: Settings) -> bool:
 async def events(websocket: WebSocket, settings: Annotated[Settings, Depends(get_settings)]) -> None:
     await websocket.accept()
     try:
-        address = client_ip(websocket, settings)
-        if cache.rate_exceeded(f"kp:rate:authfail:{address}", settings.auth_fail_per_10min):
-            await websocket.close(code=TOO_MANY_ATTEMPTS)
-            return
         refused = refusal_code(await presented_token(websocket), settings.core_write_token, websocket, settings)
         if refused is not None:
             await websocket.close(code=refused)
