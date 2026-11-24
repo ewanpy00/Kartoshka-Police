@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { apiJson, apiToken } from '../api'
+import { apiJson, apiToken, errorText } from '../api'
 import { defang } from '../defang'
 import { formatTime, t } from '../i18n'
 import type { FeedRow } from '../types'
@@ -12,7 +12,7 @@ const UNAUTHORISED = 4401
 interface Envelope {
   type: string
   at: string
-  data: { domain: string; brand?: string | null; verdict?: string; score?: number; check_id: string }
+  data: { domain: string | null; brand?: string | null; verdict?: string; score?: number; check_id: string }
 }
 
 const rows = ref<FeedRow[]>([])
@@ -24,6 +24,7 @@ let retry: ReturnType<typeof setTimeout> | undefined
 let closed = false
 
 function push(row: FeedRow) {
+  if (rows.value.some((existing) => existing.key === row.key)) return
   rows.value = [row, ...rows.value].slice(0, MAX_ROWS)
 }
 
@@ -34,14 +35,19 @@ function connect() {
     socket?.send(JSON.stringify({ type: 'auth', token: apiToken() }))
   }
   socket.onmessage = (message) => {
-    const event: Envelope = JSON.parse(message.data)
+    let event: Envelope
+    try {
+      event = JSON.parse(message.data)
+    } catch {
+      return
+    }
     if (event.type === 'hello') {
       connected.value = true
       return
     }
     if (event.type !== 'hunter.candidate' && event.type !== 'check.completed') return
     push({
-      key: `${event.type}:${event.data.check_id}:${event.at}`,
+      key: `${event.type}:${event.data.check_id}`,
       type: event.type,
       at: event.at,
       domain: event.data.domain,
@@ -61,22 +67,23 @@ onMounted(async () => {
   connect()
   try {
     const feed = await apiJson<{
-      items: { check_id: string; domain: string; brand: string | null; verdict: string; score: number; created_at: string }[]
+      items: { check_id: string; domain: string | null; brand: string | null; verdict: string; score: number; created_at: string }[]
     }>('/v1/admin/feed?limit=50')
-    rows.value = [
-      ...rows.value,
-      ...feed.items.map((item) => ({
-        key: `feed:${item.check_id}`,
+    const known = new Set(rows.value.map((row) => row.key))
+    const history = feed.items
+      .map((item) => ({
+        key: `check.completed:${item.check_id}`,
         type: 'check.completed' as const,
         at: item.created_at,
         domain: item.domain,
         brand: item.brand,
         verdict: item.verdict,
         score: item.score,
-      })),
-    ]
+      }))
+      .filter((row) => !known.has(row.key))
+    rows.value = [...rows.value, ...history]
   } catch (e) {
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
 })
 
@@ -109,7 +116,7 @@ onBeforeUnmount(() => {
         <tr v-for="row in rows" :key="row.key">
           <td>{{ formatTime(row.at) }}</td>
           <td>{{ t(`event.${row.type}`) }}</td>
-          <td class="mono">{{ defang(row.domain) }}</td>
+          <td class="mono">{{ row.domain ? defang(row.domain) : t('unknown') }}</td>
           <td>{{ row.brand ?? '' }}</td>
           <td>{{ row.verdict ?? '' }}{{ row.score !== null ? ` (${row.score})` : '' }}</td>
         </tr>

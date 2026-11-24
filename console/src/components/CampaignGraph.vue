@@ -6,6 +6,7 @@ import { t } from '../i18n'
 import type { Graph } from '../types'
 
 const props = defineProps<{ graph: Graph }>()
+const PLAIN_KINDS = new Set(['phone', 'registrar'])
 const container = ref<HTMLElement | null>(null)
 const showWeak = ref(false)
 let cy: cytoscape.Core | null = null
@@ -19,9 +20,11 @@ onMounted(() => {
     container: container.value,
     elements: [
       ...props.graph.nodes.map(({ data }) => ({
-        data: { ...data, label: data.kind === 'domain' ? defang(data.label) : data.label },
+        data: { ...data, id: `n:${data.id}`, label: PLAIN_KINDS.has(data.kind) ? data.label : defang(data.label) },
       })),
-      ...props.graph.edges,
+      ...props.graph.edges.map(({ data }) => ({
+        data: { ...data, id: `e:${data.id}`, source: `n:${data.source}`, target: `n:${data.target}` },
+      })),
     ],
     style: [
       { selector: 'node', style: { label: 'data(label)', 'font-size': 10, 'background-color': '#52606d', color: '#1f2933' } },

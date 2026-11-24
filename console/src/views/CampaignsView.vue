@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { apiJson } from '../api'
+import { apiJson, errorText } from '../api'
 import { formatTime, t } from '../i18n'
 import type { CampaignHeader } from '../types'
 
@@ -12,7 +12,7 @@ onMounted(async () => {
   try {
     campaigns.value = (await apiJson<{ campaigns: CampaignHeader[] }>('/v1/admin/campaigns')).campaigns
   } catch (e) {
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
   loaded.value = true
 })

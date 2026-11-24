@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ApiError, apiJson, download, postJson } from '../api'
+import { ApiError, apiJson, download, errorText, postJson } from '../api'
 import { defang } from '../defang'
 import { formatTime, t } from '../i18n'
 import { officerName } from '../session'
@@ -24,7 +24,7 @@ async function load() {
     confirmed.value = queue.cases.filter((c) => c.state === 'confirmed').map((c) => c.domain)
     await loadPacks()
   } catch (e) {
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
 }
 
@@ -43,9 +43,9 @@ async function build() {
     await loadPacks()
   } catch (e) {
     if (e instanceof ApiError && e.status === 409) {
-      refused.value = (e.body as { refused: { domain: string; reason: string }[] }).refused
+      refused.value = (e.body as { refused?: { domain: string; reason: string }[] } | null)?.refused ?? []
     } else {
-      error.value = t('failed', { error: String(e) })
+      error.value = t('failed', { error: errorText(e) })
     }
   }
 }
@@ -55,13 +55,25 @@ async function markSent(id: string) {
     await postJson(`/v1/admin/takedowns/${id}/sent`, { sent_by: officerName() })
     await loadPacks()
   } catch (e) {
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
 }
 
 async function copy(pack: Pack) {
-  await navigator.clipboard.writeText(pack.recipient)
-  copiedId.value = pack.id
+  try {
+    await navigator.clipboard.writeText(pack.recipient)
+    copiedId.value = pack.id
+  } catch (e) {
+    error.value = t('failed', { error: errorText(e) })
+  }
+}
+
+async function save(pack: Pack) {
+  try {
+    await download(`/v1/admin/takedowns/${pack.id}/pack.zip`, `${pack.id}.zip`)
+  } catch (e) {
+    error.value = t('failed', { error: errorText(e) })
+  }
 }
 
 onMounted(load)
@@ -117,7 +129,7 @@ onMounted(load)
       <p v-if="pack.sent_at">{{ t('sentBy', { who: pack.sent_by ?? '', when: formatTime(pack.sent_at) }) }}</p>
       <p v-else class="muted">{{ t('notSent') }}</p>
       <div class="actions">
-        <button class="secondary" @click="download(`/v1/admin/takedowns/${pack.id}/pack.zip`, `${pack.id}.zip`)">
+        <button class="secondary" @click="save(pack)">
           {{ t('downloadPack') }}
         </button>
         <button v-if="!pack.sent_at" @click="markSent(pack.id)">{{ t('markSent') }}</button>

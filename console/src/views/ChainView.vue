@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { apiJson } from '../api'
+import { apiJson, errorText } from '../api'
 import { t } from '../i18n'
 import type { Verify } from '../types'
 
@@ -13,7 +13,7 @@ async function verify() {
     result.value = await apiJson<Verify>('/v1/admin/evidence/verify')
   } catch (e) {
     result.value = null
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
 }
 </script>

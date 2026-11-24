@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { apiJson } from '../api'
+import { apiJson, errorText } from '../api'
 import CaseCard from '../components/CaseCard.vue'
 import { defang } from '../defang'
 import { t } from '../i18n'
@@ -25,7 +25,7 @@ async function load() {
     cases.value = (await apiJson<{ cases: CaseSummary[] }>(`/v1/admin/queue?${query}`)).cases
     error.value = ''
   } catch (e) {
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
   loaded.value = true
 }

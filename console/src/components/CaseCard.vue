@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { apiJson, download, postJson } from '../api'
+import { apiJson, download, errorText, postJson } from '../api'
 import { defang } from '../defang'
 import { formatTime, t, type Key } from '../i18n'
 import { officerName } from '../session'
@@ -30,12 +30,24 @@ const gsb = computed(() => detail.value?.lead_time?.gsb ?? null)
 const leadHours = computed(() => (gsb.value && gsb.value.state !== 'not_polled' ? gsb.value.at_least_hours : null))
 
 async function load() {
+  const requested = path.value
   error.value = ''
   try {
-    detail.value = await apiJson<CaseDetail>(path.value)
+    const loaded = await apiJson<CaseDetail>(requested)
+    if (requested === path.value) detail.value = loaded
   } catch (e) {
+    if (requested !== path.value) return
     detail.value = null
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
+  }
+}
+
+async function save(file: string, filename: string) {
+  error.value = ''
+  try {
+    await download(file, filename)
+  } catch (e) {
+    error.value = t('failed', { error: errorText(e) })
   }
 }
 
@@ -48,7 +60,7 @@ async function act(what: Key, work: () => Promise<unknown>) {
     await load()
     emit('changed')
   } catch (e) {
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
 }
 
@@ -152,10 +164,10 @@ watch(() => props.domain, load, { immediate: true })
         {{ t('undoAuto') }}
       </button>
       <template v-if="detail.evidence_id">
-        <button class="secondary" @click="download(`/v1/evidence/${detail.evidence_id}.pdf`, `evidence-${detail.evidence_id}.pdf`)">
+        <button class="secondary" @click="save(`/v1/evidence/${detail.evidence_id}.pdf`, `evidence-${detail.evidence_id}.pdf`)">
           {{ t('downloadPdf') }}
         </button>
-        <button class="secondary" @click="download(`/v1/evidence/${detail.evidence_id}.json`, `evidence-${detail.evidence_id}.json`)">
+        <button class="secondary" @click="save(`/v1/evidence/${detail.evidence_id}.json`, `evidence-${detail.evidence_id}.json`)">
           {{ t('downloadJson') }}
         </button>
       </template>

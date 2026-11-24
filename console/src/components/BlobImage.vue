@@ -6,6 +6,7 @@ import { t } from '../i18n'
 const props = defineProps<{ path: string }>()
 const url = ref<string | null>(null)
 const failed = ref(false)
+let unmounted = false
 
 function release() {
   if (url.value) URL.revokeObjectURL(url.value)
@@ -19,7 +20,7 @@ watch(
     failed.value = false
     try {
       const next = URL.createObjectURL(await fetchBlob(path))
-      if (path === props.path) url.value = next
+      if (path === props.path && !unmounted) url.value = next
       else URL.revokeObjectURL(next)
     } catch {
       failed.value = true
@@ -28,7 +29,10 @@ watch(
   { immediate: true },
 )
 
-onBeforeUnmount(release)
+onBeforeUnmount(() => {
+  unmounted = true
+  release()
+})
 </script>
 
 <template>

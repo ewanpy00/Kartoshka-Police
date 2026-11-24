@@ -52,6 +52,18 @@ export async function download(path: string, filename: string): Promise<void> {
   const link = document.createElement('a')
   link.href = url
   link.download = filename
+  document.body.append(link)
   link.click()
-  URL.revokeObjectURL(url)
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+export function errorText(error: unknown): string {
+  if (error instanceof ApiError) {
+    const detail = (error.body as { detail?: unknown } | null)?.detail
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) return detail.map((item) => item?.msg ?? String(item)).join('; ')
+    return error.message
+  }
+  return error instanceof Error ? error.message : String(error)
 }

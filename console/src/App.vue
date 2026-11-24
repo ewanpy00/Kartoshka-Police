@@ -4,7 +4,7 @@ import { officer, signIn, signOut } from './session'
 </script>
 
 <template>
-  <div v-if="officer" class="banner" role="status">{{ t('demoBanner') }}</div>
+  <div class="banner" role="status">{{ t('demoBanner') }}</div>
   <header class="topbar">
     <strong class="brand">{{ t('appName') }}</strong>
     <nav v-if="officer">

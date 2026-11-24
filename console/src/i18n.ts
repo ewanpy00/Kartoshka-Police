@@ -24,8 +24,6 @@ const en = {
   any: 'Any',
   stateOpen: 'Open',
   stateAutoConfirmed: 'Auto-confirmed',
-  stateConfirmed: 'Confirmed',
-  stateRejected: 'Rejected',
   stateAll: 'All',
   bandBlock: 'Block (70+)',
   bandWarn: 'Warn (30-69)',
@@ -37,7 +35,6 @@ const en = {
   verdict: 'Verdict',
   reports: 'Reports',
   hits: 'Checks',
-  lastSeen: 'Last seen',
   firstSeen: 'First seen',
   screenshot: 'Screenshot',
   noScreenshot: 'No screenshot captured.',
@@ -89,7 +86,6 @@ const en = {
   graph: 'Link graph',
   showWeak: 'Show weak links',
   shared: 'Shared infrastructure',
-  sharedStrength: 'Link',
   strong: 'strong',
   weak: 'weak',
   domainCount: 'Domains',
@@ -139,7 +135,6 @@ const en = {
   records: '{count} records',
   intact: 'chain intact',
   broken: 'Chain broken at record {id} (sequence {seq}): {reason}',
-  yes: 'Yes',
 } as const
 
 export type Key = keyof typeof en
@@ -166,8 +161,6 @@ const ar: Record<Key, string> = {
   any: 'الكل',
   stateOpen: 'مفتوحة',
   stateAutoConfirmed: 'مؤكدة تلقائياً',
-  stateConfirmed: 'مؤكدة',
-  stateRejected: 'مرفوضة',
   stateAll: 'الكل',
   bandBlock: 'حظر (70 فأكثر)',
   bandWarn: 'تحذير (30-69)',
@@ -179,7 +172,6 @@ const ar: Record<Key, string> = {
   verdict: 'الحكم',
   reports: 'البلاغات',
   hits: 'الفحوصات',
-  lastSeen: 'آخر ظهور',
   firstSeen: 'أول ظهور',
   screenshot: 'لقطة الشاشة',
   noScreenshot: 'لم تُلتقط لقطة شاشة.',
@@ -231,7 +223,6 @@ const ar: Record<Key, string> = {
   graph: 'مخطط الروابط',
   showWeak: 'إظهار الروابط الضعيفة',
   shared: 'البنية المشتركة',
-  sharedStrength: 'الرابط',
   strong: 'قوي',
   weak: 'ضعيف',
   domainCount: 'النطاقات',
@@ -281,7 +272,6 @@ const ar: Record<Key, string> = {
   records: '{count} سجل',
   intact: 'السلسلة سليمة',
   broken: 'السلسلة مكسورة عند السجل {id} (التسلسل {seq}): {reason}',
-  yes: 'نعم',
 }
 
 const dictionaries: Record<Locale, Record<Key, string>> = { en, ar }

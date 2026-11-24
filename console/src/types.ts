@@ -10,10 +10,8 @@ export interface CaseSummary {
   reports: number
   hits: number
   first_seen: string
-  last_seen: string
   evidence_id: string | null
   campaign_id: string | null
-  rank: number
 }
 
 export interface Reason {
@@ -42,20 +40,16 @@ export interface Infrastructure {
   ip?: string | null
   ip_network?: string | null
   ip_owner?: string | null
-  ip_country?: string | null
-  abuse_emails?: string[]
 }
 
 export interface CaseDetail extends CaseSummary {
   url: string
-  final_url: string | null
   title: string | null
   reasons: Reason[]
   infrastructure: Infrastructure
   location?: Location | null
   lead_time?: { gsb?: LeadSide | null } | null
   report_notes: { id: number; note: string; created_at: string }[]
-  checks: { check_id: string; url: string; source: string; verdict: string; score: number; created_at: string }[]
   reviews: { id: number; decision: string; reason: string | null; reviewer: string; reviewed_at: string }[]
   has_screenshot: boolean
 }
@@ -72,7 +66,7 @@ export interface CampaignHeader {
 }
 
 export interface CampaignDetail extends Omit<CampaignHeader, 'domains'> {
-  domains: { domain: string; state: string; score: number; evidence_id: string | null; excluded: string | null }[]
+  domains: { domain: string; state: string; score: number | null; evidence_id: string | null; excluded: string | null }[]
   shared: { kind: string; value: string; strength: string; domain_count: number }[]
   locations: (Location & { domains: number })[]
 }
@@ -106,7 +100,7 @@ export interface FeedRow {
   key: string
   type: 'hunter.candidate' | 'check.completed'
   at: string
-  domain: string
+  domain: string | null
   brand: string | null
   verdict: string | null
   score: number | null

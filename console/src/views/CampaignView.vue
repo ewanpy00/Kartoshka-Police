@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { apiJson, postJson } from '../api'
+import { apiJson, postJson, errorText } from '../api'
 import CampaignGraph from '../components/CampaignGraph.vue'
 import LocationLines from '../components/LocationLines.vue'
 import { defang } from '../defang'
@@ -23,10 +23,10 @@ async function load() {
     graph.value = loadedGraph
     ticked.clear()
     for (const row of loadedDetail.domains) {
-      if (!row.excluded && row.score >= 70) ticked.add(row.domain)
+      if (!row.excluded && row.score !== null && row.score >= 70) ticked.add(row.domain)
     }
   } catch (e) {
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
 }
 
@@ -44,7 +44,7 @@ async function confirmAll() {
     error.value = ''
     await load()
   } catch (e) {
-    error.value = t('failed', { error: String(e) })
+    error.value = t('failed', { error: errorText(e) })
   }
 }
 
@@ -90,7 +90,7 @@ onMounted(load)
               {{ row.state }}
               <span v-if="row.excluded" class="muted">{{ t('excluded', { why: row.excluded }) }}</span>
             </td>
-            <td>{{ row.score }}</td>
+            <td>{{ row.score ?? '—' }}</td>
           </tr>
         </tbody>
       </table>
