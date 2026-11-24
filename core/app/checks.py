@@ -1,6 +1,7 @@
 import uuid
 from urllib.parse import urlparse
 
+import idna
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,11 +25,14 @@ BLOCKLISTED = {
 
 
 def normalize_host(host: str) -> str:
-    """Lower-case, drop trailing dots and punycode-encode, so both sides of a lookup agree."""
+    """Lower-case, drop trailing dots and punycode-encode the way browsers do (UTS 46, non-transitional).
+
+    A host that fails to encode is returned as given. It is invalid or non-ASCII, so it cannot equal a seeded domain.
+    """
     host = host.lower().rstrip(".")
     try:
-        return host.encode("idna").decode("ascii")
-    except UnicodeError:
+        return idna.encode(host, uts46=True, transitional=False).decode("ascii")
+    except idna.IDNAError:
         return host
 
 

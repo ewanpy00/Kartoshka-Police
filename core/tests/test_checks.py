@@ -101,3 +101,9 @@ def test_host_case_and_trailing_dot_are_normalised(client):
 
 def test_idna_host_is_punycode_encoded():
     assert host_and_parents("https://bücher.example/") == ["xn--bcher-kva.example"]
+
+
+def test_idna2003_lookalikes_do_not_match_the_allowlist(client):
+    assert host_and_parents("https://uaepaß.ae/") == ["xn--uaepa-pqa.ae"]
+    assert check(client, "https://uaepaß.ae/login")["verdict"] == "pending"
+    assert check(client, "https://uae\u200dpass.ae/login")["verdict"] == "pending"
