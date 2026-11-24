@@ -59,7 +59,7 @@ Rules for every subagent brief:
 | console | build `./console` (`node:24.22.3-alpine3.24`) | 5173 | `wget -qO- http://127.0.0.1:5173/` | `npm run dev`; `node_modules` in an anonymous volume; gets `VITE_CORE_WRITE_TOKEN=${CORE_WRITE_TOKEN}` |
 | adguard | `adguard/adguardhome:v0.107.80` | 53, 3000 | none | profile `stretch`; DNS on `${BIND_ADDR}:${ADGUARD_DNS_PORT}` (127.0.0.1:5335), setup UI on `127.0.0.1:${ADGUARD_UI_PORT}` (3001) |
 
-Mounts: core and worker get `./core:/srv/core`, `./data:/srv/data:ro`, `./eval:/srv/eval:ro`, working dir `/srv/core`. Hunter gets `./hunter:/srv/hunter`, `./data:/srv/data:ro`. Sandbox gets `./sandbox/app:/srv/sandbox/app:ro` and the `captures` volume at `/captures`; the worker mounts `captures` read-only. Python containers run as a non-root user with `PYTHONDONTWRITEBYTECODE=1`.
+Mounts: core and worker get `./core:/srv/core`, `./data:/srv/data:ro`, `./eval:/srv/eval:ro`, working dir `/srv/core`. Hunter gets `./hunter:/srv/hunter`, `./data:/srv/data:ro`. Sandbox gets `./sandbox:/srv/sandbox:ro` and the `captures` volume at `/captures`; the worker mounts `captures` read-only. Python containers run as a non-root user with `PYTHONDONTWRITEBYTECODE=1`.
 
 Sandbox hardening: `user: pwuser`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `read_only: true`, `tmpfs: /tmp` with `HOME=/tmp`, `shm_size: 256m`, `init: true`, `mem_limit: 1g`, `cpus: 1.0`, `pids_limit: 512`.
 
@@ -89,9 +89,10 @@ Sandbox hardening: `user: pwuser`, `cap_drop: [ALL]`, `security_opt: [no-new-pri
 
 - `GET /healthz`: 200 `{"status":"ok","db":"ok","redis":"ok"}`; 503 with `"error"` in the failing field.
 - Routes: all eight in ARCHITECTURE.md lines 223-234. Where the doc gives no response shape, the stub returns the smallest obvious JSON and the report lists it. `/v1/evidence/{id}.pdf` returns 501.
-- `POST /v1/check {url, source, mode}` returns the verdict JSON from lines 74-101 and stores a `checks` row so `GET /v1/check/{id}` works. Lookup is against the `domains` table, matching the host or any parent domain:
-  - status `official` or `allowlisted`: `allow`, score 0, reason `ALLOWLISTED`, `safe_action` null.
-  - status `confirmed`: `block`, score 100, reason `BLOCKLISTED`, brand set, `safe_action` from brands.yaml by the documented rule (service keyword in the URL, else the brand homepage).
+- `POST /v1/check {url, source, mode}` returns the verdict JSON from lines 74-101 and stores a `checks` row so `GET /v1/check/{id}` works. Lookup is against the `domains` table, after normalising the host the way a browser does (backslashes as slashes, lower case, no trailing dot, UTS-46 punycode per label):
+  - status `official` (brand domains), matching the host or any parent domain: `allow`, score 0, reason `ALLOWLISTED`, `safe_action` null.
+  - status `allowlisted` (`data/allowlist.txt`), matching the exact host or its `www.` form only, because generic sites host user content on subdomains: `allow`, as above.
+  - status `confirmed`, matching the host or any parent domain, and winning over an allow entry: `block`, score 100, reason `BLOCKLISTED`, brand set, `safe_action` from brands.yaml by the documented rule (service keyword in the URL, else the brand homepage with a generic label).
   - unknown: `pending`, score 0, no reasons. With `mode: deep` it also enqueues `app.jobs.deep_check(check_id)`.
 - **How clients treat `pending`.** It means "no verdict yet", never "safe". Clients poll `GET /v1/check/{id}`. Gatekeeper handles `pending` like the timeout branch in ARCHITECTURE.md section 3 (line 143 onwards): forward if the local score is low, otherwise show "Checking link" briefly, then warn. This text is in the route's OpenAPI description and in `gatekeeper/README.md`.
 - `POST /v1/batch {urls[]}` never returns `pending`. Response: `{"cutoff": 70, "results": [{"url", "check_id", "verdict": "allow"|"block", "score", "timed_out"}]}`; `?format=csv` returns the same rows as CSV. Each URL is checked; a pending one gets a deep job and is awaited for up to `BATCH_URL_BUDGET_MS`. The answer is then `block` if the score is at or above `BATCH_CUTOFF`, else `allow`, and `timed_out` is true when the budget ran out. URLs are processed concurrently, at most `BATCH_CONCURRENCY` at a time. Waiting and then answering `allow` is skeleton-only behaviour; slice 1 replaces it with the fast score.

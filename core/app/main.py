@@ -61,8 +61,10 @@ def healthz(session: SessionDep) -> Response:
     return JSONResponse(health, status_code=503 if failed else 200)
 
 
-@v1.post("/check", response_model=Verdict, description=f"Check one URL against the domains table.\n\n{PENDING_NOTE}")
+@v1.post("/check", response_model=Verdict, description="Check one URL against the domains table. Official and confirmed domains match the host or any "
+    f"parent domain; allowlisted domains match only the exact host or its www form.\n\n{PENDING_NOTE}")
 def create_check(body: CheckRequest, session: SessionDep, settings: SettingsDep) -> Verdict:
+    """Official and confirmed domains match the host or any parent; allowlisted ones only the host or its www form."""
     check = run_check(session, body.url, body.source, body.mode, settings.data_dir)
     if check.verdict == "pending" and body.mode == "deep":
         queue.enqueue_deep_check(check.id)

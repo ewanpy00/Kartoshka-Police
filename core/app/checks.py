@@ -52,9 +52,11 @@ def host_and_parents(url: str) -> list[str]:
 
 
 def lookup_domain(session: Session, url: str) -> Domain | None:
-    candidates = host_and_parents(url)
+    """Official and confirmed entries match the host or a parent; allowlisted ones only the host or its www form."""
+    host, *_ = candidates = host_and_parents(url)
     rows = session.scalars(select(Domain).where(Domain.domain.in_(candidates))).all()
-    return max(rows, key=lambda row: len(row.domain), default=None)
+    matches = [row for row in rows if row.status != "allowlisted" or host in (row.domain, f"www.{row.domain}")]
+    return max(matches, key=lambda row: (row.status == "confirmed", len(row.domain)), default=None)
 
 
 def run_check(session: Session, url: str, source: str, mode: str, data_dir: str) -> Check:

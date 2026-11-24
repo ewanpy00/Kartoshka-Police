@@ -113,3 +113,19 @@ def test_one_odd_label_does_not_stop_the_parent_domains_matching(client, session
     session.add(Domain(domain="xn--bcher-kva.example", status="confirmed", brand_id="tamm"))
     assert check(client, "https://foo_bar.bücher.example/")["verdict"] == "block"
     assert check(client, "https://foo_bar.uaepass.ae/")["verdict"] == "allow"
+
+
+def test_allowlisted_domain_does_not_cover_its_subdomains(client):
+    assert check(client, "https://sites.google.com/view/x")["verdict"] == "pending"
+    assert check(client, "https://google.com/")["verdict"] == "allow"
+    assert check(client, "https://www.google.com/")["verdict"] == "allow"
+    assert check(client, "https://login.uaepass.ae/")["verdict"] == "allow"
+
+
+def test_subdomain_of_a_blocklisted_domain_is_blocked(client):
+    assert check(client, "https://login.uaepass-verify.example/")["verdict"] == "block"
+
+
+def test_confirmed_wins_over_an_allowlist_entry(client, session):
+    session.add(Domain(domain="www.google.com", status="confirmed", brand_id="tamm"))
+    assert check(client, "https://www.google.com/")["verdict"] == "block"
