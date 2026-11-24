@@ -247,4 +247,65 @@ Run by the main session; only failing output is read.
 
 ## Next steps (out of scope tonight)
 
-Campaign merge, exclude and rebuild job; campaign PDF; pivot search; takedown state machine, kanban, SLA and offline detection; aeDA and Safe Browsing recipients; registrar ranking; KPI, model-quality and system-health pages; list editing and appeals; alerts; officer copilot; AI origin indicators; Tranco import; Maps listings source; favicon, kit and certificate entities; watchlist scheduler; real officer sign-in.
+Campaign merge, exclude and rebuild job; campaign PDF; pivot search; takedown state machine, kanban, SLA and offline detection; aeDA and Safe Browsing recipients; registrar ranking; KPI, model-quality and system-health pages; list editing and appeals; alerts; officer copilot; AI origin indicators; Tranco import; Maps listings source; favicon, kit and certificate entities; watchlist scheduler; real officer sign-in; discovery source detail (certificate stream, Maps, ads) on the case API.
+
+## Restyle (2026-11-24)
+
+Status: built and verified. Frontend only, `console/` plus this section. No backend change. Console tests 61 (were 10), `make test` green.
+
+The console takes the layout of `docs/design/Phishing review queue redesign.pdf`: top bar, side menu, stat strip, searchable queue on the left, case card on the right, in the PDF's light and dark palettes (following the OS setting).
+
+### Decisions
+
+| Topic | Decision |
+|---|---|
+| Header | "Kartoshka-Police · Officer Console", EN / العربية switch, "Demo Officer". Demo banner kept. No police name, crest, unit or officer names. |
+| Menu | Review queue (count), Hunter live feed, Campaigns, Fake helplines, Takedowns, Evidence chain, Audit log. |
+| Stat strip | Awaiting review (`/queue`), auto-confirmed today (`/audit`, `case.auto_confirm`), chain status (`/evidence/verify`), median lead time. A figure with no data is not rendered. |
+| Brand chips | `brands.yaml` has no category, so chips are All, High risk (score >= 70) and one per brand found in the loaded queue. |
+| Status | `open`: "suspected phishing page". `confirmed`: "confirmed". Auto-confirmed stays "suspected" with a note until an officer confirms. |
+| Score | The API score only. Reports never contribute; they show in the reports panel and order the queue through `rank`. |
+| Reasons | Every reason with weight and source, in the current language, under a one-line summary. |
+| Lead time | Shown only when a real Safe Browsing or VirusTotal lookup was made for the case (`state` is `ahead` or `hit`). Otherwise absent, on the card and in the strip. |
+| Median lead | Computed in the browser once per session from at most 30 watched cases, after the queue has rendered, never blocking. Shown as "at least N h, K cases". |
+| Chain wording | "record N", never "block N". |
+| Hosting | "Unknown, behind a proxy service", no country, when the host is proxied. |
+| AI summary | Panel built against an optional `summary: {en, ar}`; hidden because the API does not send it. |
+| Shortcuts | J and K move, C arms the confirm and Enter commits it, Escape cancels, R goes to the reject reason. |
+| Row tag | First match of: confirmed campaign with domain count, data the page requests, report count, discovery source, behind a proxy. Structured fields only. |
+
+### Packages
+
+| Pkg | Phase | Owns | Builds |
+|---|---|---|---|
+| S | 0 | `style.css`, `App.vue`, `i18n.ts`, `types.ts`, `router.ts`, `stats.ts`, `StatStrip.vue`, `AuditView.vue` stub | Tokens, shell, stat strip, all strings, types. |
+| Q | 1 | `QueueView.vue`, `rowTag.ts`, their tests | Queue page and shortcuts. |
+| C | 1 | `CaseCard.vue`, `CaseTitle.vue`, `LocationLines.vue`, `BlobImage.vue`, `CaseCard.test.ts` | Case card. |
+| F | 1 | `FeedView.vue` | Hunter live feed. |
+| G | 1 | `CampaignsView.vue`, `CampaignView.vue`, `CampaignGraph.vue` | Campaigns. |
+| H | 1 | `HelplinesView.vue`, `TakedownsView.vue` | Fake helplines, takedowns. |
+| E | 1 | `ChainView.vue`, `AuditView.vue` | Evidence chain, audit log. |
+| R | 2 | nothing | Review by a Sonnet agent that wrote none of it. |
+
+Same rules as above: Sonnet subagents write, the main session verifies and commits, strict file ownership, the Docker safety rule applies unchanged.
+
+### Verification
+
+- `make test`: all suites pass; the console has 61 tests and a type-checked build.
+- Browser (Playwright, `127.0.0.1:5173`), English and Arabic, light and dark: queue, case card, live feed, campaigns, helplines, takedowns, chain and audit log render with the dev data and with empty data (empty lists returned by request interception, nothing deleted). Arabic sets `dir="rtl"`. No console errors or warnings.
+- A page title and a report note containing HTML render as text; no element is created from them.
+- Confirm with C then Enter, checked on the reserved domain `restyle-tamm-pay.example`: it reached `/v1/blocklist`, was then rejected as `test_or_internal`, and left the blocklist. The review and audit rows remain.
+- Undo of an auto-confirm, the proxy hosting line, the lead-time lines, the AI summary panel and the median figure were checked against intercepted responses, because the dev database has no auto-confirmed case, no proxied case, no Safe Browsing or VirusTotal key and no summary field. With the keys unset, lead time is absent on the card and in the strip.
+- Median lead time: 35 watched targets produced exactly 30 case requests, started after the queue request; a second load made none.
+- Not checked in a browser with real data: a campaign, the campaign graph, a fake helpline row, a real screenshot in the new frame.
+
+### Known limits
+
+- `brands.yaml` has no category, so there is no category chip.
+- The API sends no AI summary; the panel stays hidden until `summary: {en, ar}` exists on the case detail.
+- The queue response lacks campaign status and domain count, the data a page requests, and the proxy flag, so the row tag shows only the report count or the discovery source today. `rowTag()` already handles the other three.
+- Reports carry no per-report channel; the card shows the case-level `sources` only. Gatekeeper, share and paste are translated if the API ever sends them.
+- Median lead time samples at most the 30 most recently watched cases and is computed once per browser session.
+- Auto-confirmed today reads the newest 500 audit entries.
+- The review independent of the authors found a confirm that could reach the previously selected case while the next one loaded, a reject reason carried between cases, and a double post on a double click. All three are fixed and tested.
+- The dev database now also holds `restyle-uaepass-verify.example` and `restyle-plain-shop.example` (open) and `restyle-tamm-pay.example` (rejected), created for this verification.
