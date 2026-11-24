@@ -7,6 +7,7 @@ export const router = createRouter({
     { path: '/login', name: 'login', component: () => import('./pages/Login.vue'), meta: { open: true } },
     { path: '/', redirect: '/queue' },
     { path: '/queue', name: 'queue', component: () => import('./pages/Queue.vue') },
+    { path: '/live', name: 'live', component: () => import('./pages/Live.vue'), meta: { bare: true } },
     { path: '/case/:domain', name: 'case', component: () => import('./pages/Case.vue'), props: true },
     { path: '/hunter', name: 'hunter', component: () => import('./pages/Hunter.vue') },
     { path: '/campaigns', name: 'campaigns', component: () => import('./pages/Campaigns.vue') },

@@ -4,6 +4,8 @@ import cytoscape, { type Core, type ElementDefinition } from 'cytoscape'
 import fcose from 'cytoscape-fcose'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { t } from '../i18n'
+import { reducedMotion } from '../motion'
+import { cssVar, dark } from '../theme'
 import type { CampaignGraph } from '../types'
 
 cytoscape.use(fcose)
@@ -22,7 +24,7 @@ const COLORS: Record<string, string> = {
 function elements(): ElementDefinition[] {
   const nodes: ElementDefinition[] = props.graph.nodes.map((n) => ({
     data: { id: n.id, label: n.label, kind: n.kind, status: n.status ?? '', hub: n.hub ? 1 : 0,
-            color: n.kind === 'domain' ? (n.status === 'confirmed' ? '#b42318' : '#a35f00') : (COLORS[n.kind] ?? '#9aa3ae') },
+            color: n.kind === 'domain' ? (n.status === 'confirmed' ? cssVar('--block') : cssVar('--warn')) : (COLORS[n.kind] ?? '#9aa3ae') },
   }))
   const edges: ElementDefinition[] = props.graph.edges.map((e, i) => ({
     data: { id: `e${i}`, source: e.source, target: e.target, strength: e.strength, excluded: e.excluded ? 1 : 0 },
@@ -43,28 +45,67 @@ function applyWeak() {
 function render() {
   if (!box.value) return
   cy?.destroy()
+  const text = cssVar('--text')
+  const edge = cssVar('--muted')
+  const weak = cssVar('--line')
+  const accent = cssVar('--accent')
+  const block = cssVar('--block')
   cy = cytoscape({
     container: box.value,
     elements: elements(),
     wheelSensitivity: 0.3,
     style: [
-      { selector: 'node', style: { 'background-color': 'data(color)', label: 'data(label)', 'font-size': 9, color: '#1c2430',
+      { selector: 'node', style: { 'background-color': 'data(color)', label: 'data(label)', 'font-size': 9, color: text, 'text-outline-color': cssVar('--surface-2'), 'text-outline-width': 2,
+        'transition-property': 'width, height, underlay-opacity, underlay-padding', 'transition-duration': 300,
         'text-valign': 'bottom', 'text-margin-y': 3, width: 14, height: 14 } },
       { selector: 'node[kind = "domain"]', style: { shape: 'round-rectangle', width: 22, height: 22, 'font-size': 10, 'font-weight': 'bold' } },
+      { selector: 'node[status = "confirmed"]', style: { 'underlay-color': block, 'underlay-padding': 7, 'underlay-opacity': dark.value ? 0.35 : 0.18,
+        'underlay-shape': 'round-rectangle' } },
+      { selector: 'node.pulse', style: { width: 34, height: 34, 'underlay-color': block, 'underlay-padding': 16, 'underlay-opacity': 0.45,
+        'underlay-shape': 'ellipse' } },
+      { selector: 'node.faded', style: { opacity: 0.25 } },
+      { selector: 'edge.faded', style: { opacity: 0.12 } },
       { selector: 'node[hub = 1]', style: { 'border-width': 2, 'border-color': '#9aa3ae', 'border-style': 'dashed' } },
-      { selector: 'edge', style: { width: 2, 'line-color': '#5f6b7a', 'curve-style': 'bezier' } },
-      { selector: 'edge[strength = "weak"]', style: { width: 1, 'line-style': 'dashed', 'line-color': '#c2c8d0' } },
+      { selector: 'edge', style: { width: 2, 'line-color': edge, opacity: 0.8, 'curve-style': 'bezier' } },
+      { selector: 'edge[strength = "weak"]', style: { width: 1, 'line-style': 'dashed', 'line-color': weak } },
       { selector: 'edge[excluded = 1]', style: { 'line-color': '#e2a59f', 'line-style': 'dotted' } },
-      { selector: ':selected', style: { 'border-width': 3, 'border-color': '#1f4e8c' } },
+      { selector: 'edge.lit', style: { 'line-color': accent, width: 3, opacity: 1 } },
+      { selector: ':selected', style: { 'border-width': 3, 'border-color': accent } },
     ],
-    layout: { name: 'fcose', animate: false, randomize: true, nodeRepulsion: () => 6000, idealEdgeLength: () => 70 } as cytoscape.LayoutOptions,
+    layout: { name: 'fcose', animate: !reducedMotion.value, animationDuration: 900, animationEasing: 'ease-out-cubic', randomize: true, nodeRepulsion: () => 6000, idealEdgeLength: () => 70 } as cytoscape.LayoutOptions,
   })
   cy.on('tap', 'node', (event) => emit('select', event.target.id()))
+  // Hovering a node lights its neighbourhood and fades the rest, so a shared phone or kit reads at a glance.
+  cy.on('mouseover', 'node', (event) => {
+    const near = event.target.closedNeighborhood()
+    cy?.elements().not(near).addClass('faded')
+    near.edges().addClass('lit')
+  })
+  cy.on('mouseout', 'node', () => cy?.elements().removeClass('faded lit'))
   applyWeak()
 }
 
+/** Draws the eye to one node (a site that just joined the campaign). */
+function pulse(id: string) {
+  const node = cy?.getElementById(id)
+  if (!node || node.empty()) return
+  let left = 3
+  const beat = () => {
+    node.addClass('pulse')
+    window.setTimeout(() => {
+      node.removeClass('pulse')
+      if (--left > 0) window.setTimeout(beat, 300)
+    }, 450)
+  }
+  beat()
+  if (!reducedMotion.value) cy?.animate({ center: { eles: node }, duration: 500, easing: 'ease-out-cubic' })
+}
+
+defineExpose({ pulse })
+
 onMounted(render)
 watch(() => props.graph, render)
+watch(dark, render)
 watch(showWeak, applyWeak)
 onBeforeUnmount(() => cy?.destroy())
 </script>

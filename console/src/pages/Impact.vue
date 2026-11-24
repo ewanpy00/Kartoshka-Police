@@ -1,10 +1,12 @@
 <script setup lang="ts">
 // Impact (D6): volumes, a series chart, and lead time per confirmed domain that Hunter saw in CT.
 import { BarController, BarElement, CategoryScale, Chart, Legend, LinearScale, LineController, LineElement, PointElement, Tooltip } from 'chart.js'
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { get } from '../api'
 import DefangedDomain from '../components/DefangedDomain.vue'
 import { t } from '../i18n'
+import { useCountUp } from '../motion'
+import { cssVar, dark } from '../theme'
 import type { Stats } from '../types'
 
 Chart.register(BarController, BarElement, LineController, LineElement, PointElement, CategoryScale, LinearScale, Legend, Tooltip)
@@ -14,6 +16,13 @@ const stats = ref<Stats | null>(null)
 const error = ref('')
 const canvas = ref<HTMLCanvasElement | null>(null)
 let chart: Chart | null = null
+
+const totals = computed(() => stats.value?.totals)
+const threats = useCountUp(() => (totals.value ? totals.value.warn + totals.value.block : 0))
+const candidates = useCountUp(() => totals.value?.candidates ?? 0)
+const confirmed = useCountUp(() => totals.value?.confirmed ?? 0)
+const rejected = useCountUp(() => totals.value?.rejected ?? 0)
+const blockedVisits = useCountUp(() => Object.values(totals.value?.blocked_hits ?? {}).reduce((a, b) => a + b, 0))
 
 async function load() {
   error.value = ''
@@ -30,6 +39,9 @@ function draw() {
   const s = stats.value
   if (!s || !canvas.value) return
   chart?.destroy()
+  const [warn, accent, block, muted, line] = ['--warn', '--accent', '--block', '--muted', '--line'].map((name) => cssVar(name))
+  Chart.defaults.color = muted
+  Chart.defaults.borderColor = line
   const labels = s.series.buckets.map((b) => {
     const d = new Date(b)
     return range.value === '24h' ? `${d.getHours()}:00` : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -39,12 +51,12 @@ function draw() {
     data: {
       labels,
       datasets: [
-        { label: 'warn / block checks', data: s.series.checks, backgroundColor: '#a35f00' },
-        { label: 'Hunter candidates', data: s.series.candidates, backgroundColor: '#1f4e8c' },
-        { type: 'line', label: 'confirmed', data: s.series.confirmed, borderColor: '#b42318', backgroundColor: '#b42318' },
+        { label: 'warn / block checks', data: s.series.checks, backgroundColor: warn, borderRadius: 3 },
+        { label: 'Hunter candidates', data: s.series.candidates, backgroundColor: accent, borderRadius: 3 },
+        { type: 'line', label: 'confirmed', data: s.series.confirmed, borderColor: block, backgroundColor: block, tension: 0.35 },
       ],
     },
-    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+    options: { responsive: true, animation: { duration: 700, easing: 'easeOutCubic' }, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
   })
 }
 
@@ -55,6 +67,7 @@ function hrs(value: number | null, open = false): string {
 
 onMounted(load)
 watch(range, load)
+watch(dark, () => nextTick(draw))
 onBeforeUnmount(() => chart?.destroy())
 </script>
 
@@ -69,13 +82,13 @@ onBeforeUnmount(() => chart?.destroy())
     <p v-if="error" class="error">{{ error }}</p>
     <template v-if="stats">
       <div class="grid cols-4">
-        <div class="card"><div class="muted small">warn / block checks</div><div class="stat">{{ stats.totals.warn + stats.totals.block }}</div>
+        <div class="card"><div class="muted small">warn / block checks</div><div class="stat">{{ threats }}</div>
           <div class="small muted">{{ stats.totals.checks }} checks</div></div>
-        <div class="card"><div class="muted small">Hunter candidates</div><div class="stat">{{ stats.totals.candidates }}</div>
+        <div class="card"><div class="muted small">Hunter candidates</div><div class="stat">{{ candidates }}</div>
           <div class="small muted">{{ Object.entries(stats.totals.candidates_by_source).map(([k, v]) => `${k} ${v}`).join(' · ') || '—' }}</div></div>
-        <div class="card"><div class="muted small">confirmed / rejected</div><div class="stat">{{ stats.totals.confirmed }} / {{ stats.totals.rejected }}</div>
+        <div class="card"><div class="muted small">confirmed / rejected</div><div class="stat">{{ confirmed }} / {{ rejected }}</div>
           <div class="small muted">blocklist {{ stats.totals.blocklist_size }} · taken down {{ stats.totals.taken_down }}</div></div>
-        <div class="card"><div class="muted small">blocked visits</div><div class="stat">{{ Object.values(stats.totals.blocked_hits).reduce((a, b) => a + b, 0) }}</div>
+        <div class="card"><div class="muted small">blocked visits</div><div class="stat">{{ blockedVisits }}</div>
           <div class="small muted">{{ Object.entries(stats.totals.blocked_hits).map(([k, v]) => `${k} ${v}`).join(' · ') || '—' }} · {{ stats.totals.reports }} reports</div></div>
       </div>
       <div class="card chart"><canvas ref="canvas" /></div>
@@ -106,4 +119,5 @@ onBeforeUnmount(() => chart?.destroy())
 
 <style scoped>
 .chart { height: 300px; margin-top: 1rem; }
+.stat { font-variant-numeric: tabular-nums; }
 </style>

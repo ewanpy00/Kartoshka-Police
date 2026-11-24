@@ -8,11 +8,13 @@ import type { MessageKey } from '../i18n/en'
 import { reviewer } from '../session'
 import type { CaseDetail } from '../types'
 import DefangedDomain from './DefangedDomain.vue'
+import Propagation from './Propagation.vue'
 import ReasonList from './ReasonList.vue'
+import ScoreBar from './ScoreBar.vue'
 import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps<{ domain: string; compact?: boolean }>()
-const emit = defineEmits<{ changed: [domain: string, decision: string] }>()
+const emit = defineEmits<{ changed: [domain: string, decision: string, version?: number | null] }>()
 
 const detail = ref<CaseDetail | null>(null)
 const error = ref('')
@@ -20,6 +22,8 @@ const notice = ref('')
 const busy = ref(false)
 const rejecting = ref(false)
 const note = ref('')
+const activeReason = ref<string | null>(null)
+const propagated = ref<{ version: number | null } | null>(null)
 const REASONS = ['legitimate_site', 'not_a_scam', 'insufficient_evidence', 'duplicate'] as const
 
 async function load() {
@@ -63,7 +67,8 @@ function confirm() {
     const result = await post<{ blocklist_version: number | null }>(`/v1/review/${evidenceId.value}`, {
       decision: 'confirm', reviewer: reviewer(), note: note.value,
     })
-    emit('changed', props.domain, 'confirm')
+    propagated.value = { version: result.blocklist_version }
+    emit('changed', props.domain, 'confirm', result.blocklist_version)
     await load()
     return `Confirmed. Blocklist version ${result.blocklist_version ?? '—'}.`
   })
@@ -136,10 +141,11 @@ function fmt(value: string | null | undefined): string {
         <button :disabled="busy" @click="watchSite">{{ t('case.watch') }} <kbd>W</kbd></button>
         <a v-if="evidenceId" class="button" :href="evidenceUrl(evidenceId, 'pdf')" target="_blank" rel="noopener">PDF</a>
       </div>
+      <Propagation v-if="propagated" :version="propagated.version" />
       <input v-model="note" class="note" :placeholder="t('case.note')" maxlength="2000" />
 
       <div v-if="rejecting" class="modal-back" @click.self="rejecting = false">
-        <div class="modal">
+        <div class="modal pop">
           <h2>{{ t('reject.title') }}</h2>
           <div class="grid">
             <button v-for="(code, i) in REASONS" :key="code" @click="reject(code)">
@@ -154,7 +160,8 @@ function fmt(value: string | null | undefined): string {
         <section>
           <img v-if="evidenceId && latest?.preview" class="shot" :src="previewUrl(evidenceId)" alt="Phone screenshot of the page" />
           <h3>{{ t('case.reasons') }}</h3>
-          <ReasonList v-if="latest" :reasons="latest.reasons" />
+          <ScoreBar v-if="latest" v-model:active="activeReason" :reasons="latest.reasons" :score="latest.score" :verdict="latest.verdict" />
+          <ReasonList v-if="latest" v-model:active="activeReason" :reasons="latest.reasons" />
           <p v-if="latest?.deep_status && latest.deep_status !== 'done'" class="muted small">deep: {{ latest.deep_status }}</p>
           <h3>{{ t('case.sources') }}</h3>
           <div class="row">
@@ -227,7 +234,9 @@ function fmt(value: string | null | undefined): string {
 <style scoped>
 .head { margin-bottom: 0.25rem; font-size: 1.05rem; }
 .actions { margin: 0.5rem 0; }
-.note { width: 100%; margin-bottom: 0.75rem; }
+.note { width: 100%; margin: 0.5rem 0 0.75rem; }
+.pop { animation: kp-rise var(--dur) var(--ease-spring) both; }
+.shot { animation: kp-rise var(--dur-slow) var(--ease-out) both; }
 .shot { width: 100%; max-width: 260px; border: 1px solid var(--line); border-radius: 6px; display: block; margin-bottom: 0.75rem; }
 .excerpt { white-space: pre-wrap; max-height: 14rem; overflow: auto; background: var(--surface-2); padding: 0.5rem; border-radius: 6px; }
 ul.plain { list-style: none; padding: 0; margin: 0 0 0.5rem; }

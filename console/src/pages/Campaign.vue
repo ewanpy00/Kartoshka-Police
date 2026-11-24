@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // One campaign (D3): graph, site table with ticks, "Confirm ticked", exclude, merge, and leads from a pivot.
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { get, post } from '../api'
+import { get, onEvent, post } from '../api'
 import CampaignGraphView from '../components/CampaignGraph.vue'
 import DefangedDomain from '../components/DefangedDomain.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -34,7 +34,20 @@ async function load() {
   }
 }
 
-onMounted(load)
+const graphView = ref<InstanceType<typeof CampaignGraphView> | null>(null)
+
+// A site that joins this campaign while the page is open: reload, then point at it in the graph.
+let stop: (() => void) | undefined
+onMounted(() => {
+  load()
+  stop = onEvent(async (event) => {
+    if (event.type !== 'campaign.new_domain' || event.campaign_id !== props.id) return
+    await load()
+    await nextTick()
+    window.setTimeout(() => graphView.value?.pulse(`d:${String(event.domain)}`), 950)
+  })
+})
+onUnmounted(() => stop?.())
 watch(() => props.id, load)
 
 const tickable = computed(() => detail.value?.domains.filter((d) => d.status !== 'confirmed') ?? [])
@@ -141,7 +154,7 @@ function select(nodeId: string) {
       <p class="muted small">{{ detail.domain_count }} sites · {{ detail.confirmed_count }} confirmed · since {{ new Date(detail.first_seen).toLocaleDateString() }}</p>
       <div class="grid cols-2">
         <div class="card">
-          <CampaignGraphView v-if="graph" :graph="graph" @select="select" />
+          <CampaignGraphView v-if="graph" ref="graphView" :graph="graph" @select="select" />
           <p class="muted small">Click an entity to list other sites that use it.</p>
           <h3>Linking entities</h3>
           <table class="small">

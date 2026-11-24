@@ -1,12 +1,15 @@
 <script setup lang="ts">
 // Ranked queue (D1). J/K move, C confirms, R opens the reject reasons (1-4 pick one), D re-runs deep
 // analysis, W adds to the watchlist.
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { get, onEvent } from '../api'
 import CaseCard from '../components/CaseCard.vue'
 import DefangedDomain from '../components/DefangedDomain.vue'
+import Propagation from '../components/Propagation.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { t } from '../i18n'
+import { defang } from '../defang'
+import { useFlash } from '../motion'
 import type { QueuePage, QueueRow } from '../types'
 
 const rows = ref<QueueRow[]>([])
@@ -19,6 +22,10 @@ const fresh = ref(0)
 const filters = ref({ source: '', band: '', brand: '', has_reports: false, auto: false })
 const card = ref<InstanceType<typeof CaseCard> | null>(null)
 const REJECTS = ['legitimate_site', 'not_a_scam', 'insufficient_evidence', 'duplicate'] as const
+const { keys: flashing, flash } = useFlash()
+const departing = ref<Record<string, string>>({})
+const lastConfirm = ref<{ domain: string; version: number | null; at: number } | null>(null)
+let confirmTimer: number | undefined
 
 async function load(more = false) {
   loading.value = true
@@ -29,7 +36,9 @@ async function load(more = false) {
       source: f.source, band: f.band, brand: f.brand, has_reports: f.has_reports || undefined, auto: f.auto || undefined,
       cursor: more ? cursor.value : undefined,
     })
+    const known = new Set(rows.value.map((row) => row.domain))
     rows.value = more ? [...rows.value, ...page.cases] : page.cases
+    if (!more && known.size) page.cases.filter((row) => !known.has(row.domain)).forEach((row) => flash(row.domain))
     total.value = page.total
     cursor.value = page.next_cursor
     if (!more) {
@@ -45,7 +54,18 @@ async function load(more = false) {
 
 const current = computed(() => rows.value[selected.value] ?? null)
 
-function changed(domain: string) {
+async function changed(domain: string, decision: string, version?: number | null) {
+  if (decision === 'confirm') {
+    lastConfirm.value = { domain, version: version ?? null, at: Date.now() }
+    window.clearTimeout(confirmTimer)
+    confirmTimer = window.setTimeout(() => { lastConfirm.value = null }, 6000)
+  }
+  departing.value = { ...departing.value, [domain]: decision }
+  await nextTick()
+  window.setTimeout(() => {
+    const { [domain]: _gone, ...rest } = departing.value
+    departing.value = rest
+  }, 600)
   const index = rows.value.findIndex((row) => row.domain === domain)
   if (index >= 0) rows.value.splice(index, 1)
   total.value = Math.max(0, total.value - 1)
@@ -78,10 +98,19 @@ onMounted(() => {
   window.addEventListener('keydown', onKey)
   stop = onEvent((event) => {
     if (event.type === 'check.verdict' || event.type === 'hunter.candidate') fresh.value += 1
+    if (event.type === 'check.verdict') {
+      const row = rows.value.find((r) => r.domain === event.domain)
+      if (row) {
+        row.score = Number(event.score)
+        if (event.verdict === 'warn' || event.verdict === 'block') row.band = event.verdict
+        flash(row.domain)
+      }
+    }
   })
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
+  window.clearTimeout(confirmTimer)
   stop?.()
 })
 watch(filters, () => load(), { deep: true })
@@ -99,7 +128,7 @@ function ago(value: string | null): string {
     <div class="row">
       <h1>{{ t('queue.title') }} <span class="muted small">({{ total }})</span></h1>
       <span class="spacer" />
-      <button v-if="fresh" @click="load()">+{{ fresh }} new · {{ t('common.refresh') }}</button>
+      <button v-if="fresh" class="fresh" @click="load()"><span class="live-dot" />+{{ fresh }} new · {{ t('common.refresh') }}</button>
       <button v-else :disabled="loading" @click="load()">{{ t('common.refresh') }}</button>
     </div>
     <div class="row filters small">
@@ -119,16 +148,26 @@ function ago(value: string | null): string {
       <div class="card list scroll">
         <p v-if="!rows.length && !loading" class="muted">{{ t('queue.empty') }}</p>
         <table>
-          <tr v-for="(row, i) in rows" :key="row.domain" class="clickable" :class="{ selected: i === selected }" @click="selected = i">
+          <TransitionGroup tag="tbody" name="row">
+          <tr v-for="(row, i) in rows" :key="row.domain" class="clickable"
+              :class="[{ selected: i === selected, flash: flashing.has(row.domain) }, departing[row.domain] ? `gone-${departing[row.domain]}` : '']"
+              @click="selected = i">
             <td><DefangedDomain :display="row.display" />
               <div class="muted small">{{ row.brand ?? '—' }} · {{ row.sources.join(', ') }}<template v-if="row.reports"> · {{ row.reports }} reports</template><template v-if="row.hits"> · {{ row.hits }} hits</template></div>
               <div class="muted small reason">{{ row.top_reasons[0]?.en }}</div></td>
             <td><StatusBadge :value="row.band" :score="row.score" /><div class="muted small">{{ ago(row.last_seen) }}</div></td>
           </tr>
+          </TransitionGroup>
         </table>
         <button v-if="cursor" :disabled="loading" @click="load(true)">{{ t('common.more') }}</button>
       </div>
       <div class="detail">
+        <Transition name="page">
+          <div v-if="lastConfirm" :key="lastConfirm.at" class="confirmed">
+            <div class="small muted"><DefangedDomain :display="defang(lastConfirm.domain)" /></div>
+            <Propagation :version="lastConfirm.version" />
+          </div>
+        </Transition>
         <CaseCard v-if="current" ref="card" :key="current.domain" :domain="current.domain" compact @changed="changed" />
       </div>
     </div>
@@ -140,5 +179,12 @@ function ago(value: string | null): string {
 .layout { display: grid; grid-template-columns: minmax(280px, 400px) minmax(0, 1fr); gap: 1rem; align-items: start; }
 @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 .list { padding: 0.25rem; }
+.confirmed { margin-bottom: 0.75rem; display: grid; gap: 0.25rem; }
+.fresh { border-color: var(--accent); color: var(--accent); }
+.live-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--accent); animation: kp-blink 1.2s infinite; }
+tr.gone-confirm td { background: var(--block-soft); }
+tr.gone-reject td { background: var(--allow-soft); }
+tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+[dir='rtl'] tr.selected td:first-child { box-shadow: inset -3px 0 0 var(--accent); }
 .reason { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
