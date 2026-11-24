@@ -5,7 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ./scripts/env.sh
 
 if [ "${1:-}" = "stretch" ]; then
-  docker compose --profile stretch up -d --build --renew-anon-volumes --wait
+  docker compose -p kartoshka-police --profile stretch up -d --build --renew-anon-volumes --wait
 else
-  docker compose up -d --build --renew-anon-volumes --wait
+  docker compose -p kartoshka-police up -d --build --renew-anon-volumes --wait
 fi

@@ -9,4 +9,4 @@ if [ "$answer" != "yes" ]; then
   echo "Aborted"
   exit 1
 fi
-docker compose --profile stretch down -v --remove-orphans
+docker compose -p kartoshka-police --profile stretch down -v --remove-orphans

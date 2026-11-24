@@ -18,3 +18,5 @@ console/dist/
 # DNS config is generated at runtime; keep only the placeholder
 dns/conf/*
 !dns/conf/.gitkeep
+
+docs/design

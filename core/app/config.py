@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     batch_url_budget_ms: int = 3000
     batch_cutoff: int = 70
     batch_concurrency: int = 20
+    captures_dir: str = "/captures"
+    google_safe_browsing_api_key: str = ""
+    virustotal_api_key: str = ""
+    hub_threshold: int = 50
 
 
 @lru_cache
