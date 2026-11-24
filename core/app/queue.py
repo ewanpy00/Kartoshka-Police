@@ -18,7 +18,7 @@ def get_queue() -> Queue:
 
 
 def enqueue_deep_check(check_id: str) -> None:
-    get_queue().enqueue("app.jobs.deep_check", check_id, job_timeout=180, retry=Retry(max=1, interval=10))
+    get_queue().enqueue("app.deep.job.deep_check", check_id, job_timeout=180, retry=Retry(max=1, interval=10))
 
 
 def claim_deep(host: str) -> bool:

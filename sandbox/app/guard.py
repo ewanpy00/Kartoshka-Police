@@ -6,7 +6,7 @@ import socket
 from collections.abc import Collection
 from urllib.parse import urlsplit
 
-from playwright.async_api import BrowserContext, Page, Route, WebSocketRoute
+from playwright.async_api import BrowserContext, Error as PlaywrightError, Page, Route, WebSocketRoute
 
 log = logging.getLogger("sandbox.guard")
 
@@ -121,15 +121,20 @@ class Guard:
             except Exception:
                 log.exception("guard failed closed job=%s url=%s", self.job_url, url)
                 abort, internal = True, False
-            if not abort:
-                await session.send("Fetch.continueRequest", {"requestId": event["requestId"]})
-                return
             if internal and event["resourceType"] == "Document" and event["frameId"] == main_frame_id:
                 self.main_blocked.setdefault(page, url)
-            await session.send(
-                "Fetch.failRequest",
-                {"requestId": event["requestId"], "errorReason": "BlockedByClient"},
-            )
+            try:
+                if not abort:
+                    await session.send("Fetch.continueRequest", {"requestId": event["requestId"]})
+                else:
+                    await session.send(
+                        "Fetch.failRequest",
+                        {"requestId": event["requestId"], "errorReason": "BlockedByClient"},
+                    )
+            except PlaywrightError:
+                # The page closed while the request was paused. Nothing is left to continue or fail, and a
+                # request whose continue did not go through stays paused, so this still fails closed.
+                pass
 
         session.on("Fetch.requestPaused", on_paused)
         await session.send("Fetch.enable", {"patterns": [{"urlPattern": "*"}]})

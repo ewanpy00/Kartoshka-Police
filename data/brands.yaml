@@ -5,6 +5,7 @@
 #   match_tokens     what to look for inside a domain; tokens shorter than 5 letters match a whole
 #                    word only (rta-fines.top matches "rta", portal.top does not)
 #   official_domains the brand's own domains; every subdomain is official
+#   reference_urls   official pages whose phone screenshots `make refs` hashes for the visual match
 #   services         safe_action catalog, collected by opening the public site and copying the URL
 #   tip_en / tip_ar  one-line advice shown on the scam radar
 #
@@ -14,8 +15,8 @@
 - id: uaepass
   names: [UAE PASS, "الهوية الرقمية", uaepass, uae-pass]
   official_domains: [uaepass.ae]
+  reference_urls: ["https://uaepass.ae/"]
   official_phones: ["<fill from the official website>"]
-  reference_screens: [refs/uaepass_login_ar.png, refs/uaepass_login_en.png]
   keywords: [verify, login, update]
   category: identity
   tip_en: "UAE PASS never asks for your OTP or password through a link in an SMS."
@@ -29,7 +30,7 @@
 - id: tamm
   names: [TAMM, "تم", tamm]
   official_domains: [tamm.abudhabi]
-  reference_screens: [refs/tamm_home_ar.png]
+  reference_urls: ["https://www.tamm.abudhabi/wb/adp/pay-traffic-fines"]
   keywords: [fine, fines, pay, service]
   category: government
   tip_en: "TAMM never asks for card details by SMS. Check fines only inside the TAMM app or tamm.abudhabi."
@@ -45,7 +46,7 @@
   names: [RTA, "هيئة الطرق والمواصلات", Roads and Transport Authority]
   match_tokens: [rta, rtadubai]
   official_domains: [rta.ae]
-  reference_screens: [refs/rta_home_ar.png]
+  reference_urls: ["https://www.rta.ae/wps/portal/rta/ae/home"]
   keywords: [fine, fines, nol, parking, salik, license]
   category: government
   tip_en: "RTA fines are paid only on rta.ae or the RTA app, never through an SMS link."
@@ -53,7 +54,7 @@
 - id: dubaipolice
   names: [Dubai Police, "شرطة دبي", dubaipolice, dubai-police]
   official_domains: [dubaipolice.gov.ae]
-  reference_screens: [refs/dubaipolice_home_ar.png]
+  reference_urls: ["https://www.dubaipolice.gov.ae/wps/portal/home"]
   keywords: [fine, fines, police, case, report]
   category: police
   tip_en: "Dubai Police will never ask you to pay a fine through a WhatsApp or SMS link."
@@ -61,6 +62,7 @@
 - id: adpolice
   names: [Abu Dhabi Police, "شرطة أبوظبي", adpolice, abudhabipolice]
   official_domains: [adpolice.gov.ae]
+  reference_urls: ["https://www.adpolice.gov.ae/"]
   keywords: [fine, fines, police]
   category: police
   tip_en: "Abu Dhabi Police fines are shown in TAMM and the police app only."
@@ -68,7 +70,7 @@
 - id: emiratespost
   names: [Emirates Post, "بريد الإمارات", emiratespost, emirates-post]
   official_domains: [emiratespost.ae]
-  reference_screens: [refs/emiratespost_home_ar.png]
+  reference_urls: ["https://www.emiratespost.ae/"]
   keywords: [parcel, delivery, package, shipment, customs, track]
   category: delivery
   tip_en: "Emirates Post does not ask for a card payment to release a parcel by SMS."
@@ -77,6 +79,7 @@
   names: [ICP, "الهيئة الاتحادية للهوية والجنسية", Emirates ID, "الهوية الإماراتية", emiratesid]
   match_tokens: [icp, emiratesid, emirates-id, icpuae]
   official_domains: [icp.gov.ae]
+  reference_urls: ["https://icp.gov.ae/"]
   keywords: [visa, renew, renewal, emiratesid, residency, id]
   category: identity
   tip_en: "Emirates ID and visa renewals are done on icp.gov.ae or the UAE ICP app only."
@@ -84,6 +87,7 @@
 - id: salik
   names: [Salik, "سالك", salik]
   official_domains: [salik.ae]
+  reference_urls: ["https://www.salik.ae/"]
   keywords: [toll, recharge, topup, fine, balance]
   category: government
   tip_en: "Salik never sends payment links for unpaid tolls by SMS."
@@ -92,6 +96,7 @@
   names: [Darb, "درب"]
   match_tokens: [darb]
   official_domains: [darb.itc.gov.ae, itc.gov.ae]
+  reference_urls: ["https://darb.itc.gov.ae/"]
   keywords: [toll, recharge, fine]
   category: government
   tip_en: "Darb tolls are managed only in the Darb app or TAMM."
@@ -100,6 +105,7 @@
   names: [etisalat, "e&", "اتصالات", eand]
   match_tokens: [etisalat, eand]
   official_domains: [etisalat.ae, eand.com]
+  reference_urls: ["https://www.etisalat.ae/"]
   keywords: [bill, recharge, points, reward, smiles]
   category: telecom
   tip_en: "e& (Etisalat) reward points never expire through an SMS link."
@@ -108,6 +114,7 @@
   names: [du, "دو"]
   match_tokens: [dutelecom, du-telecom]
   official_domains: [du.ae]
+  reference_urls: ["https://www.du.ae/"]
   keywords: [bill, recharge, reward]
   category: telecom
   tip_en: "du rewards and bills are handled in the du app only."
@@ -115,6 +122,7 @@
 - id: dewa
   names: [DEWA, "هيئة كهرباء ومياه دبي", dewa]
   official_domains: [dewa.gov.ae]
+  reference_urls: ["https://www.dewa.gov.ae/"]
   keywords: [bill, refund, disconnect]
   category: utility
   tip_en: "DEWA does not threaten disconnection through SMS payment links."
@@ -122,6 +130,7 @@
 - id: emiratesnbd
   names: [Emirates NBD, "بنك الإمارات دبي الوطني", emiratesnbd, enbd]
   official_domains: [emiratesnbd.com, enbd.com]
+  reference_urls: ["https://www.emiratesnbd.com/en"]
   keywords: [card, account, blocked, verify, otp]
   category: bank
   tip_en: "Your bank will never ask for your OTP or card PIN on a website."
@@ -129,6 +138,7 @@
 - id: adcb
   names: [ADCB, "بنك أبوظبي التجاري", adcb]
   official_domains: [adcb.com]
+  reference_urls: ["https://www.adcb.com/"]
   keywords: [card, account, blocked, verify, otp]
   category: bank
   tip_en: "ADCB will never ask for your OTP over SMS links or calls."
@@ -137,6 +147,7 @@
   names: [First Abu Dhabi Bank, "بنك أبوظبي الأول", bankfab]
   match_tokens: [bankfab, fabbank]
   official_domains: [bankfab.com, fab.ae]
+  reference_urls: ["https://www.bankfab.com/"]
   keywords: [card, account, blocked, verify, otp]
   category: bank
   tip_en: "FAB never asks you to update your account through an SMS link."
@@ -144,6 +155,7 @@
 - id: mashreq
   names: [Mashreq, "المشرق", mashreq]
   official_domains: [mashreq.com, mashreqbank.com]
+  reference_urls: ["https://www.mashreq.com/"]
   keywords: [card, account, blocked, verify, otp]
   category: bank
   tip_en: "Mashreq never asks for your card details on a link sent by SMS."
@@ -152,6 +164,7 @@
   names: [Dubai Islamic Bank, "بنك دبي الإسلامي"]
   match_tokens: [dib, dubaiislamic]
   official_domains: [dib.ae]
+  reference_urls: ["https://www.dib.ae/"]
   keywords: [card, account, blocked, verify, otp]
   category: bank
   tip_en: "Dubai Islamic Bank never asks for your OTP on a website."
@@ -160,6 +173,7 @@
   names: [Ministry of Interior, "وزارة الداخلية"]
   match_tokens: [moiuae, moi-uae]
   official_domains: [moi.gov.ae]
+  reference_urls: ["https://www.moi.gov.ae/"]
   keywords: [fine, fines, police, license]
   category: police
   tip_en: "MOI fines are checked in the MOI UAE app only."

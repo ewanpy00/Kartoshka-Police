@@ -19,11 +19,10 @@ from app.fast.lexical import lexical
 from app.normalize.unshorten import expand, is_shortener
 from app.normalize.url import NormalizedURL, normalize, strip_query
 from app.verdict.bands import band, ordered, source, total
-from app.verdict.reasons import ago_ar, ago_en, reason
+from app.verdict.reasons import KIND_AR, ago_ar, ago_en, reason
 
 log = logging.getLogger("core.fast")
 
-KIND_AR = {"ip": "عنوان IP", "ns": "خادم أسماء", "domain": "النطاق", "kit_hash": "بنية الصفحة", "favicon_hash": "أيقونة"}
 
 
 @dataclass
@@ -215,7 +214,7 @@ async def assess(session: Session, url: str, settings: Settings, budget_ms: int 
         sources["ct"] = source("ct", "unknown", "not seen by the hunter")
 
     ips = results.get("dns", (None, None))[0] or []
-    nodes = [("domain", n.domain)] + [("ip", ip) for ip in ips]
+    nodes = [("domain", intel.site_key(session, n.host, n.domain))] + [("ip", ip) for ip in ips]
     links = intel.campaign_links(session, nodes)
     if links:
         kind, value, campaign = links[0]

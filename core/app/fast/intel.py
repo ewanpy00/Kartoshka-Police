@@ -25,6 +25,23 @@ def lookup_domain(session: Session, host: str) -> Domain | None:
     return max(matches, key=lambda row: (row.status == "confirmed", len(row.domain)), default=None)
 
 
+def site_key(session: Session, host: str, domain: str | None) -> str:
+    """What one operator controls: the registrable domain, or the full host when the domain is a shared
+    platform (an allowlisted site or a free host such as godaddysites.com) that hands out subdomains."""
+    from app.fast.lexical import FREE_HOSTING
+
+    if not domain:
+        return host
+    if host in (domain, f"www.{domain}"):
+        return domain
+    if domain in FREE_HOSTING:
+        return host
+    row = session.get(Domain, domain)
+    if row is not None and row.status in ("allowlisted", "official"):
+        return host
+    return domain
+
+
 def feed_hits(session: Session, domain: str, url: str) -> list[FeedEntry]:
     return session.scalars(
         select(FeedEntry)

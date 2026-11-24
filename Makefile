@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help up up-stretch down logs ps migrate seed reset test eval
+.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs
 
 help: ## Show this help
 	@awk -F ':.*## ' '/^[a-z-]+:.*## /{printf "  make %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,3 +33,6 @@ test: ## Run every test suite
 
 eval: ## Run the evaluation on data/eval/test.csv and holdout.csv
 	./scripts/eval.sh
+
+refs: ## Capture the brands' official pages and store their visual hashes (needs internet)
+	docker compose exec -T worker python -m app.deep.visual refs

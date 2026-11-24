@@ -137,6 +137,11 @@ CATALOG: dict[str, Template] = {
         10, "sandbox", "Page pushes you to WhatsApp or a phone number ({contact})", "الصفحة تدفعك للتواصل عبر واتساب أو رقم هاتف ({contact})"
     ),
     "URGENCY": Template(10, "sandbox", "Page pressures you with deadlines or threats", "الصفحة تضغط عليك بمهل أو تهديدات"),
+    "BRAND_CREDENTIALS": Template(
+        0, "sandbox",
+        "A page that is not {brand}'s asks for {asks}",
+        "صفحة لا تتبع {brand_ar} تطلب {asks_ar}",
+    ),
     "INJECTION_ATTEMPT": Template(
         15, "ai", "Page contains text that tries to instruct an AI to call it safe", "الصفحة تحتوي على نص يحاول توجيه الذكاء الاصطناعي لتصنيفها آمنة"
     ),
@@ -145,6 +150,20 @@ CATALOG: dict[str, Template] = {
     "SMS_SCAM_TEXT": Template(
         20, "ai", "The message reads like a {category} scam", "الرسالة تشبه احتيال {category_ar}"
     ),
+}
+
+
+KIND_AR = {
+    "ip": "عنوان IP", "ns": "خادم أسماء", "domain": "النطاق", "kit_hash": "بنية الصفحة", "favicon_hash": "أيقونة",
+    "phone": "رقم هاتف", "payment": "وجهة دفع", "cert": "شهادة أمان",
+}
+ASKS_AR = {
+    "otp": "رمز التحقق", "card": "رقم البطاقة", "cvv": "رمز أمان البطاقة", "uaepass": "بيانات الهوية الرقمية",
+    "emirates_id": "رقم الهوية الإماراتية", "password": "كلمة المرور", "iban": "رقم الحساب البنكي",
+}
+ASKS_EN = {
+    "otp": "a one-time code", "card": "a card number", "cvv": "the card security code", "uaepass": "UAE PASS credentials",
+    "emirates_id": "an Emirates ID number", "password": "a password", "iban": "a bank account number",
 }
 
 
