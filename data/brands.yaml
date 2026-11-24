@@ -1,7 +1,7 @@
 - id: uaepass
   names: [UAE PASS, "الهوية الرقمية", uaepass, uae-pass]
   official_domains: [uaepass.ae]
-  official_phones: ["<fill from the official website>"]
+  official_phones: ["600561111"]  # https://u.ae/en/about-the-uae/digital-uae/digital-transformation/platforms-and-apps/the-uae-pass-app
   reference_screens: [refs/uaepass_login_ar.png, refs/uaepass_login_en.png]
   keywords: [verify, login, update]
   services:
@@ -13,6 +13,7 @@
 - id: tamm
   names: [TAMM, "تم", tamm]
   official_domains: [tamm.abudhabi]
+  official_phones: ["800555"]  # Abu Dhabi Government Contact Centre, https://www.tamm.abudhabi/en/contact-us
   services:
     - id: traffic_fines
       keywords: [fine, fines, traffic, pay, مخالفة, مخالفات]

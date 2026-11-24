@@ -16,6 +16,7 @@ from app.auth import bearer, require_write_token
 from app.admin import review as review_service
 from app.checks import domain_of, run_check
 from app.config import Settings, get_settings
+from app.csvsafe import cell
 from app.db import get_session
 from app.evidence import routes as evidence_routes
 from app.models import Check, Domain, Evidence, Report
@@ -145,7 +146,9 @@ async def batch(
         out = io.StringIO()
         writer = csv.writer(out)
         writer.writerow(["url", "check_id", "verdict", "score", "timed_out"])
-        writer.writerows([r.url, r.check_id, r.verdict, r.score, r.timed_out] for r in results)
+        writer.writerows(
+            [cell(v) for v in (r.url, r.check_id, r.verdict, r.score, r.timed_out)] for r in results
+        )
         return Response(out.getvalue(), media_type="text/csv")
     return JSONResponse(BatchResponse(cutoff=settings.batch_cutoff, results=results).model_dump())
 
