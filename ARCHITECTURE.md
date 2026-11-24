@@ -95,6 +95,19 @@ Checks in this order, first decisive hit wins:
     {"code": "VISUAL_MATCH", "weight": 35, "source": "sandbox",
      "en": "Page looks 91% like the UAE PASS login page", "ar": "..."}
   ],
+  "sources": [
+    {"id": "allowlist", "status": "clean"},
+    {"id": "police_blocklist", "status": "clean"},
+    {"id": "gsb", "status": "unknown", "detail": "timeout"},
+    {"id": "virustotal", "status": "hit", "detail": "7/94 engines"},
+    {"id": "feeds", "status": "clean"},
+    {"id": "rdap", "status": "hit", "detail": "registered 2 days ago"},
+    {"id": "ct", "status": "hit", "detail": "first certificate 26 h ago"},
+    {"id": "campaign", "status": "hit", "detail": "cmp_17, 14 domains"},
+    {"id": "sandbox", "status": "hit", "detail": "asks for OTP"},
+    {"id": "ai", "status": "skipped"}
+  ],                             // status: hit | clean | unknown | skipped
+  "preview": {"screenshot": "/v1/preview/ev_....png", "asks_for": ["card", "cvv", "otp"]},
   "campaign_id": "cmp_17",
   "evidence_id": "ev_..."
 }
@@ -191,6 +204,58 @@ Limits (say them in the pitch):
 - In-app browsers (Instagram, Telegram, TikTok) bypass the default browser → share button.
 - Users can switch the default back.
 
+### 3.1 Resident app screens (the "wow" layer)
+
+Four screens on top of the same `/v1/check` response. Built once as shared web screens
+(same component library as the Officer Console): shown in a WebView inside Gatekeeper and
+reachable from iPhone as a PWA, so iOS users get the manual check, preview, reports and radar
+even without link interception.
+
+#### Link X-ray — an animation, not a new engine
+- Replaces the "Checking link…" spinner, and plays on the manual "Check a link" screen.
+- A column of source cards ticks in one by one (~150 ms each): Official list → Police-confirmed list →
+  Google Safe Browsing → VirusTotal → Phishing feeds → Domain age → First certificate (CT) →
+  Campaign link → Safe preview → AI explanation. Then the verdict card lands (allow / suspected / blocked)
+  with reasons AR/EN and the `safe_action` button.
+- Timing is cosmetic; results are not. Every card's final state comes from `sources[]` in the real
+  response: `hit` (red), `clean` (green), `unknown` (grey, e.g. timeout), `skipped` (grey "not checked").
+  Never a green tick for a source that was not queried.
+- Never slows the verdict: if the response arrives first, the animation fast-forwards; the 1.5 s
+  budget of section 3 still holds. Deep-path cards (preview, AI) show "running…" and fill in when
+  `GET /v1/check/{id}` returns.
+
+#### Safe preview
+- Shows the page behind the link WITHOUT the user opening it: the sandbox screenshot (Arabic phone
+  profile) as a static image, plus a strip "This page asks for: card number · CVV · OTP" from the
+  captured form fields, the domain, the verdict and the `safe_action` button.
+- Image only: a resized PNG served from our domain; no HTML, no scripts, nothing on it is clickable.
+- Available when deep analysis ran (score ≥30). For a lower score the user can tap "Show safe preview"
+  to queue a deep run on demand.
+- Abuse limits: per-device rate limit (e.g. 10 previews/hour), same query-stripped URL as every check;
+  residents see the preview and reasons, never the score weights or Hunter internals
+  (otherwise the screen becomes a free testing tool for scammers).
+
+#### My reports
+- "Report" from the block page, the X-ray screen or the share button creates a report with a random
+  `report_id` and a secret token kept only on the device. No account, no identity.
+- Timeline per report: Sent → Analysed (verdict) → In police review → Confirmed / Rejected →
+  Site taken down (watchlist re-check sees it offline) → Impact: "blocked N times for other residents".
+- Rejected shows a plain reason ("Reviewed: looks legitimate").
+- Status is pulled with `GET /v1/reports/{id}` + token; optional push on status change (the push token is
+  stored with the report only and deleted at the final status).
+- Impact count = aggregated block counters for that domain (Gatekeeper + DNS), never per-user data.
+
+#### Scam radar
+- Home-screen card + full list of what is active right now in the UAE, grouped by brand:
+  "37 fake fine-payment sites active — imitating RTA, TAMM", "New today: 9", trend vs. yesterday.
+- Each brand row: a one-line tip in AR/EN ("TAMM never asks for card details by SMS") and the
+  brand's `safe_action` button.
+- Data from Hunter + campaigns via `GET /v1/radar` (cached, refreshed every minute, no personal data).
+- Counts include confirmed and high-score suspected sites, labelled as such. Domains appear only when
+  officer-confirmed, defanged (`tamm-pay[.]xyz`) and never clickable, so the radar never advertises
+  a live scam.
+- On stage it is the visible proof of Criterion 2: the radar moves while Hunter finds new domains.
+
 ---
 
 ## 4. DNS SHIELD — always-on, domain-level
@@ -229,6 +294,10 @@ Sign in with UAE PASS — **mock, no real API** (buys the integration time):
 | POST | `/v1/batch` `{urls[]}` → CSV/JSON | judges, eval |
 | POST | `/v1/report` `{url, note}` | browser |
 | GET | `/v1/blocklist?since=ts` | DNS Shield, browser Bloom sync |
+| GET | `/v1/preview/{evidence_id}.png` | resident app: safe preview (image only, rate-limited) |
+| POST | `/v1/preview` `{url}` | resident app: "Show safe preview" for a low-score link |
+| GET | `/v1/reports/{id}` (+ device token) | resident app: My reports timeline |
+| GET | `/v1/radar` | resident app: Scam radar (aggregated, cached) |
 | POST | `/v1/review/{evidence_id}` `{decision}` | console |
 | GET | `/v1/evidence/{id}.pdf` / `.json` | console, takedown |
 | WS | `/v1/events` | console live feed |
@@ -282,6 +351,8 @@ kartoshka/
   gatekeeper/      Android app (Kotlin): intent handler, interstitial, Bloom sync, share target
   dns/             AdGuard Home config + blocklist sync
   console/         web dashboard (RTL); auth/mock UAE PASS sign-in (local session only)
+  resident/        shared web screens: X-ray animation, safe preview, my reports, scam radar
+                   (WebView in Gatekeeper, PWA for iPhone)
   data/            brands.yaml, allowlist.txt, refs/, eval/
   eval/            eval.py
   docker-compose.yml   postgres, redis, core, sandbox workers, certstream-server-go, hunter, adguard
@@ -299,14 +370,21 @@ kartoshka/
 | 16–20 | batch API, metrics | kit fingerprint | backtest: % caught + hours earlier | DNS setup screen | campaign graph |
 | 20–24 | freeze, run eval | — | — | demo device | demo rehearsal, limits slide |
 
+Resident screens (section 3.1), ~5–6 h from hour 16 (Android + Console owners): X-ray animation ~1 h,
+safe preview ~1.5 h, my reports ~1.5 h, scam radar ~1 h. If time runs short, cut in reverse order;
+the X-ray animation and safe preview carry the demo.
+
 ## 10. Demo script (≈3 min)
 1. Hunter live feed: CT shows `uaepass-verify[.]top` seconds after its cert.
 2. Core: sandbox screenshot, 91% visual match to UAE PASS, form asks for OTP → score 92.
 3. Console: officer is already in through the mock UAE PASS button (no real API) → clicks Confirm → evidence PDF with hashes.
 4. Phone: SMS with a fake fine link → tap → Gatekeeper block page in Arabic ("⚠️ Suspected scam") → **Check your real fines in TAMM** opens the official service. A fake UAE PASS link shows **Continue in the official UAE PASS app** instead.
-5. Same domain on home Wi-Fi → blocked by DNS Shield.
-6. Metrics slide: precision / recall / FPR on eval set; "X% of last month's UAE scams caught N h before first report".
-7. Limits slide: iOS, in-app browsers, geofencing, free-tier APIs.
+5. Hand the phone to a judge: "paste any link" → Link X-ray cards tick in → safe preview shows the page
+   and what it asks for → verdict in Arabic. Tap Report → My reports shows the timeline; Scam radar on the
+   home screen has just gone up by one.
+6. Same domain on home Wi-Fi → blocked by DNS Shield.
+7. Metrics slide: precision / recall / FPR on eval set; "X% of last month's UAE scams caught N h before first report".
+8. Limits slide: iOS, in-app browsers, geofencing, free-tier APIs.
 
 ---
 
