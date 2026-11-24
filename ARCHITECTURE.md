@@ -81,6 +81,11 @@ Checks in this order, first decisive hit wins:
   "score": 92,
   "stage": "deep",               // fast | deep | officer
   "brand": "UAE PASS",
+  "safe_action": {
+    "label_en": "Continue in the official UAE PASS app",
+    "label_ar": "المتابعة في تطبيق الهوية الرقمية الرسمي",
+    "url": "https://uaepass.ae"
+  },
   "reasons": [
     {"code": "BRAND_IN_DOMAIN", "weight": 30, "source": "kartoshka",
      "en": "Domain uses 'uaepass' but is not an official UAE PASS domain",
@@ -152,13 +157,22 @@ Gatekeeper receives intent ──► local check (on-device, <10 ms)
 POST /v1/check {mode:"fast"}  (timeout 400 ms)
    │
    ├─ allow  ─► forward to the user's real browser (explicit intent to Chrome/Samsung Internet)
-   ├─ warn   ─► interstitial: score, reasons AR/EN, [Go back] [Open anyway] [Report]
+   ├─ warn   ─► interstitial: score, reasons AR/EN, [Go to the real service]
+   │            [Go back] [Open anyway] [Report]
    │            deep analysis keeps running; if it turns "block", push a notification
-   ├─ block  ─► block page AR-first: reasons, brand being impersonated, official site link,
-   │            [Report to police] button
+   ├─ block  ─► block page AR-first: "⚠️ Suspected scam", reasons, brand being impersonated,
+   │            [Go to the real service] (TAMM / UAE PASS), [Report to police]
    └─ timeout ─► local score low → forward; otherwise "Checking link…" screen up to 3 s,
                  then warn with what we have
 ```
+
+Go to the real service (on the warn interstitial and the block page):
+- The page does not only say "dangerous". It offers the official service the scam was imitating, so the user still finishes the task safely.
+- Example: a fake "pay your traffic fine" link → "⚠️ Suspected scam" and **Check your real fines in TAMM**, which opens `https://www.tamm.abudhabi/wb/adp/pay-traffic-fines`. A fake UAE PASS login → **Continue in the official UAE PASS app** (`https://uaepass.ae`, or the installed app).
+- Which button: verdict `brand` + keywords in the URL or pasted SMS, matched against `services[]` in `data/brands.yaml`. No keyword hit → that brand's homepage (`official_domains[0]`).
+- The button is a normal link (or an Android view intent if the official app is installed). No TAMM API and no UAE PASS API.
+- `safe_action` is filled by Core from `brands.yaml` and returned on `/v1/check`. Offline, Gatekeeper uses the same list bundled in the app.
+- The catalog is collected by opening the public site and copying each service URL. Confirmed seed: pay traffic fines, from [tamm.abudhabi](https://www.tamm.abudhabi/wb/adp/pay-traffic-fines). More TAMM services (renewal, licensing, …) are added the same way. UAE PASS stays the official homepage / app.
 
 Extra entry points in the same app:
 - **Share target** "Check with Kartoshka" (links from any app, incl. in-app browsers).
@@ -190,6 +204,12 @@ Limits (say them in the pitch):
 ---
 
 ## 5. OFFICER CONSOLE (web, RTL)
+
+Sign in with UAE PASS — **mock, no real API** (buys the integration time):
+- The console opens on a UAE PASS button. One tap creates a local demo session `{name: "Demo Officer", role: "officer"}`.
+- No OAuth, no client id, no call to `id.uaepass.ae` or any UAE PASS endpoint. A small banner says "Demo login — not connected to UAE PASS".
+- Confirm / Reject still records that demo name as the reviewer. Residents never sign in; Gatekeeper stays account-free.
+- Later the same button can call real UAE PASS. The queue, evidence, and review API stay as they are.
 
 - Ranked queue: score × reach (how many devices/reports hit it) × freshness.
 - Card: screenshot left, reasons right (AR/EN), infrastructure, discovery source, campaign link.
@@ -231,9 +251,22 @@ Redis: job queue, verdict cache, rate limits. Object storage (local dir for the 
   official_phones: ["<fill from the official website>"]
   reference_screens: [refs/uaepass_login_ar.png, refs/uaepass_login_en.png]
   keywords: [verify, login, update]
+  services:
+    - id: continue
+      keywords: [verify, login, update, pass, هوية]
+      label_en: "Continue in the official UAE PASS app"
+      label_ar: "المتابعة في تطبيق الهوية الرقمية الرسمي"
+      url: "https://uaepass.ae"
 - id: tamm
   names: [TAMM, "تم", tamm]
   official_domains: [tamm.abudhabi]
+  services:
+    - id: traffic_fines
+      keywords: [fine, fines, traffic, pay, مخالفة, مخالفات]
+      label_en: "Check your real fines in TAMM"
+      label_ar: "تحقق من مخالفاتك الحقيقية في تم"
+      url: "https://www.tamm.abudhabi/wb/adp/pay-traffic-fines"  # copied from the public catalog
+      collected_from: "https://www.tamm.abudhabi"
   ...
 ```
 
@@ -248,7 +281,7 @@ kartoshka/
   hunter/          certstream_consumer.py, nrd.py, sweep.py, feeds.py, pivot.py, watchlist.py
   gatekeeper/      Android app (Kotlin): intent handler, interstitial, Bloom sync, share target
   dns/             AdGuard Home config + blocklist sync
-  console/         web dashboard (RTL)
+  console/         web dashboard (RTL); auth/mock UAE PASS sign-in (local session only)
   data/            brands.yaml, allowlist.txt, refs/, eval/
   eval/            eval.py
   docker-compose.yml   postgres, redis, core, sandbox workers, certstream-server-go, hunter, adguard
@@ -261,7 +294,7 @@ kartoshka/
 | Hours | Core / ML | Sandbox / Deep | Hunter | Android | Console / Pitch |
 |---|---|---|---|---|---|
 | 0–4 | normalize, allowlist, brands.yaml, /v1/check fast | Playwright container, capture | certstream-server-go up, name filter | intent handler + forward | eval set collection |
-| 4–10 | features + LightGBM, VT/GSB cache, eval CLI | form/brand rules, screenshot | infra filter, NRD, queue to Core | interstitial + block page AR/EN | console queue + card |
+| 4–10 | features + LightGBM, VT/GSB cache, eval CLI, `safe_action` from brands.yaml | form/brand rules, screenshot | infra filter, NRD, queue to Core | interstitial + block page AR/EN + real-service button | console queue + card, mock UAE PASS sign-in |
 | 10–16 | score fusion, reasons AR/EN | visual similarity, LLM verdict | pivot, watchlist, feeds | share target, Bloom sync | evidence PDF, confirm flow |
 | 16–20 | batch API, metrics | kit fingerprint | backtest: % caught + hours earlier | DNS setup screen | campaign graph |
 | 20–24 | freeze, run eval | — | — | demo device | demo rehearsal, limits slide |
@@ -269,8 +302,8 @@ kartoshka/
 ## 10. Demo script (≈3 min)
 1. Hunter live feed: CT shows `uaepass-verify[.]top` seconds after its cert.
 2. Core: sandbox screenshot, 91% visual match to UAE PASS, form asks for OTP → score 92.
-3. Console: officer clicks Confirm → evidence PDF with hashes.
-4. Phone: SMS with that link → tap → Gatekeeper block page in Arabic.
+3. Console: officer is already in through the mock UAE PASS button (no real API) → clicks Confirm → evidence PDF with hashes.
+4. Phone: SMS with a fake fine link → tap → Gatekeeper block page in Arabic ("⚠️ Suspected scam") → **Check your real fines in TAMM** opens the official service. A fake UAE PASS link shows **Continue in the official UAE PASS app** instead.
 5. Same domain on home Wi-Fi → blocked by DNS Shield.
 6. Metrics slide: precision / recall / FPR on eval set; "X% of last month's UAE scams caught N h before first report".
 7. Limits slide: iOS, in-app browsers, geofencing, free-tier APIs.
