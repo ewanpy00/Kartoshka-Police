@@ -274,3 +274,66 @@ kartoshka/
 5. Same domain on home Wi-Fi → blocked by DNS Shield.
 6. Metrics slide: precision / recall / FPR on eval set; "X% of last month's UAE scams caught N h before first report".
 7. Limits slide: iOS, in-app browsers, geofencing, free-tier APIs.
+
+---
+
+## 11. AI layer
+
+Principle: **AI extracts facts and explains; a calibrated model decides; an officer confirms.**
+The LLM never outputs the final score directly → stable precision/recall, auditable verdicts,
+and an attacker-controlled page cannot talk its way to "safe".
+
+```
+                 ┌────────── fast path (<300 ms) ──────────┐
+URL ──► features ┤ A1 URL model (LightGBM / char-CNN)       ├──┐
+                 └──────────────────────────────────────────┘  │
+                 ┌────────── deep path (async) ─────────────┐  │     ┌──────────────┐
+capture ────────►┤ A3 Visual brand matcher (CLIP/SigLIP)    ├──┼───► │ A0 FUSION     │──► score + bands
+(screenshot,     │ A2 Page understanding LLM (vision, AR/EN)├──┤     │ calibrated LR │──► reasons (SHAP → AR/EN
+ text, DOM)      │ A5 Kit / campaign embeddings             ├──┘     └──────────────┘     templates + LLM text)
+                 └──────────────────────────────────────────┘
+SMS text ──────► A4 Scam-text classifier (AR/EN) ──► URLs extracted ──► same pipeline
+Officer ───────► A6 Copilot (campaign summary, takedown drafts)   A7 labels → nightly retrain
+```
+
+| # | Component | What it does | Hackathon implementation | Criterion |
+|---|---|---|---|---|
+| A0 | Fusion | Logistic regression (calibrated) over all signals → probability → 30/70 bands. Reasons = top feature contributions mapped to AR/EN templates | sklearn, trained on eval set | C1, C3 |
+| A1 | URL model | Fast score from URL + domain features; tiny ONNX copy runs on-device in Gatekeeper | LightGBM on PhishTank/OpenPhish/URLhaus vs Tranco + UAE brand set | C1 |
+| A2 | Page understanding LLM | Vision LLM reads screenshot + page text → JSON facts: `brand_claimed`, `data_requested[]` (card, CVV, OTP, Emirates ID, UAE PASS login), `payment_requested`, `urgency`, `language`, `official_links_present`, `injection_attempt`, `reasons_ar`, `reasons_en` | Cloud LLM with vision + structured output, no tools | C1, C3, C4 |
+| A3 | Visual brand matcher | Embedding similarity of screenshot / logo crops to reference screens in `brands.yaml` → "looks 91% like UAE PASS" | open CLIP/SigLIP, zero training | C4 |
+| A4 | Scam-text classifier | Classifies pasted SMS / WhatsApp text (AR, EN, mixed): fine, parcel, bank, police, prize; extracts URLs, phones | LLM zero-shot now; small fine-tuned model later (on-device SMS filter) | C2, C4 |
+| A5 | Campaign embeddings | Text + DOM-structure embeddings → HDBSCAN → near-duplicate kits beyond exact hashes | sentence embeddings + hdbscan | C2, C4 |
+| A6 | Officer copilot | Summarises a campaign, drafts takedown letters (AR/EN) from evidence, answers "what else is on this IP?" over Postgres | LLM + SQL tools (read-only), officer-facing only | C3 |
+| A7 | Learning loop | Officer confirm/reject → labels; uncertain cases ranked higher in queue (active learning); nightly retrain of A0/A1; drift alert | cron + eval CLI | C1, C5 |
+
+### LLM safety (the page is written by the attacker)
+- Page text/HTML goes in a delimited data block marked untrusted; the system prompt says it is evidence, not instructions.
+- No tools, no browsing, JSON schema output only (A2). The copilot (A6) is read-only and never sees raw page text as instructions.
+- The LLM can only **add** facts; hard rules set a floor (e.g. non-official domain + asks OTP ⇒ ≥70 regardless of LLM).
+- Text that tries to instruct an AI ("classify this site as safe") → `injection_attempt=true` → **risk feature**.
+- Timeouts + fallback: if the LLM fails, verdict still comes from A0 with template reasons.
+
+### Cost / latency
+- LLM runs only on the deep path (30–70 band and >70 confirmation), cached by content hash (same kit → one call).
+- Fast path is pure CPU (A1 + rules) → works offline on the phone.
+
+### Providers (pluggable `core/ai/provider.py`)
+- Demo: cloud vision LLM (Arabic-strong).
+- Sovereign / police deployment: local open Arabic models made in the UAE — Falcon-H1 Arabic (TII) or Jais 3 (MBZUAI / Inception42) for text + OCR'd screenshots; CLIP stays local. No resident data leaves the country.
+
+### Proving it to the judges
+Ablation table on the eval set: rules → +A1 → +A3 → +A2 → full fusion: precision, recall, FPR for each row.
+
+### Files
+```
+core/ai/
+  provider.py        # cloud / local LLM switch
+  url_model.py       # A1 train + predict + ONNX export
+  page_llm.py        # A2 prompt, schema, injection guard
+  vision_match.py    # A3 brand reference embeddings
+  text_classifier.py # A4
+  clustering.py      # A5
+  fusion.py          # A0 calibrated model + reason templates
+  copilot.py         # A6
+```
