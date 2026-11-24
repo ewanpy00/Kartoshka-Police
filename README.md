@@ -79,12 +79,10 @@ All settings live in `.env`; `.env.example` lists each one with its default. `BI
 
 ## Sandbox isolation
 
-The sandbox opens untrusted pages, so it is layered:
+The sandbox opens untrusted pages. What is and is not protected, verified with raw sockets from inside the sandbox container:
 
-- It sits on its own network, shared only with the worker, so it cannot reach core, postgres, redis or the console by container networking.
-- Postgres and redis are never published to the host.
-- The sandbox gets no `.env` file, so API keys and the write token never enter it.
-- A request guard in the sandbox browser aborts requests to internal addresses and counts them.
-- Changing the blocklist needs the write token (`CORE_WRITE_TOKEN`), so an unauthenticated caller who reaches core cannot alter it.
+- **Unreachable:** postgres, redis and certstream publish no host port, so the sandbox cannot reach them by service name or by container IP. The sandbox also gets no `.env` file, so API keys and the write token never enter it.
+- **Reachable:** core and the console publish host ports, and Docker's bridge isolation does not apply to published ports. The sandbox can reach both by container IP and through `host.docker.internal`.
+- **What protects core today:** the request guard in the sandbox's browser, which blocks every browser request to an internal address (including redirect hops and WebSockets), and the write token, without which a write gets 401. A compromised browser process could still call core's open routes. An egress proxy for the sandbox is the planned fix.
 
-The guard has known limits, and the write token is a shared development token rather than officer authentication. See `docs/devops-plan.md` for both.
+See decisions 2 and 3 and the follow-ups in `docs/devops-plan.md` for detail and the guard's known limits.

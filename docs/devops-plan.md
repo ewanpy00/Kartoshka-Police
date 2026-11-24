@@ -42,7 +42,7 @@ Rules for every subagent brief:
 - Compose project name: `kartoshka-police`.
 - Published host ports: core on `${BIND_ADDR}:${CORE_PORT}` (127.0.0.1:8000), console on `127.0.0.1:${CONSOLE_PORT}` (5173). Nothing else.
 - `BIND_ADDR` defaults to `127.0.0.1` and applies to core and, in the stretch profile, AdGuard's DNS port. `0.0.0.0` is for the demo phone only, because it exposes them to the whole LAN. The console port and AdGuard's setup UI are never published beyond localhost.
-- Postgres and redis are never published to the host. They stay on `internal` only. This machine already has another stack on 5432, 6379 and 3000, and unpublished ports cannot be reached from the sandbox through the host.
+- Postgres and redis are never published to the host. They stay on `internal` only. An unpublished port cannot be reached from the sandbox by any route; a published one can (see decision 2), so no service may gain a published port without that in mind.
 - The sandbox gets no `env_file`, only explicit `environment` entries, so API keys and the write token never enter it.
 
 ### Services
@@ -169,7 +169,10 @@ Package details that are not obvious from the table:
 ## Decisions where the spec was open
 
 1. **Blocklist lives in the `domains` table, seeded on core start.** Core runs the idempotent seed after migrations, so `/v1/check` works straight after `make up`; `make seed` re-runs it after someone edits `data/`.
-2. **Sandbox isolation is layered.** Separate bridge networks stop container-to-container traffic. Postgres and redis are unpublished, so no route reaches them. Core is published, and on Docker Desktop `host.docker.internal` reaches host-published ports, so the browser-level guard covers that path and the write token limits what an unauthenticated caller can do if the guard is bypassed.
+2. **Sandbox isolation is layered, and the network layer does not cover core.** Verified on Docker Engine 29.8 (Docker Desktop) with raw sockets from the sandbox container:
+   - Postgres, redis and certstream, which publish no host port, are unreachable by name and by container IP.
+   - Core and console, which publish a host port, are reachable from the sandbox both by container IP and through `host.docker.internal`. Docker's bridge isolation does not apply to published ports.
+   - So for core the protection is the browser-level guard, which blocks both paths for pages, plus the write token, which returns 401 to the sandbox. A compromised browser process can still call core's open routes (`/healthz`, `/v1/check`, `/v1/batch`, `/v1/report`). The egress proxy in the follow-ups is the fix.
 3. **Known limits of the guard.** It runs in the browser's control channel, so a compromised browser process bypasses it. Resolve-then-check has a DNS rebinding race, because Chromium resolves the name again itself. WebRTC and other UDP traffic are not intercepted. Closing these needs an egress proxy with `sandbox_net` set to internal; that is a follow-up, not part of this skeleton.
 4. **The write token is a shared dev token, not officer auth.** It ships in the console's client bundle, so anyone who can open the console can read it. The console login is a mock in the docs; real auth replaces this.
 5. **Unknown URLs return `pending` from `/v1/check`, and a definite answer from `/v1/batch`.**
