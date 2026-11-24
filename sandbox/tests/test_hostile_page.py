@@ -6,7 +6,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from app.capture import capture
+from playwright.async_api import async_playwright
+
+from app.capture import BROWSER_ARGS, BLOCK_POPUPS_FLAG, capture
 from app.guard import Guard
 
 SERVICE_NAMES = ["postgres", "redis", "core", "worker", "hunter", "certstream", "console", "adguard", "sandbox"]
@@ -14,9 +16,9 @@ PRIVATE_IP = "10.20.30.40"
 METADATA_IP = "169.254.169.254"
 EXTRA_HOSTS = ["host.docker.internal", PRIVATE_IP, METADATA_IP, "127.0.0.1"]
 # 13 fetches, 1 image, 1 WebSocket, 1 iframe redirect hop, then cross-site frame fetch,
-# cross-site frame redirect hop and worker fetch
+# cross-site frame redirect hop and worker fetch; popup hops are blocked by the browser itself
 ATTEMPTS = 19
-CANARY_PATHS = ["/image.png", "/socket", "/redirected", "/from-frame", "/redirected-from-frame", "/from-worker"]
+CANARY_PATHS = ["/image.png", "/socket", "/redirected", "/from-frame", "/redirected-from-frame", "/from-worker", "/redirected-popup", "/redirected-link"]
 
 
 class Canary(socketserver.ThreadingTCPServer):
@@ -59,6 +61,7 @@ def main_page(port: int, canary_port: int) -> str:
 <iframe src="/redirect"></iframe>
 <iframe src="http://localhost:{port}/frame"></iframe>
 <iframe src="http://localhost:{port}/redirect-from-frame"></iframe>
+<script src="/popups.js"></script>
 <script>
 const targets = {targets};
 const attempts = targets.map(t => fetch(t, {{mode: "no-cors"}}).catch(() => null));
@@ -78,8 +81,17 @@ attempts.push(new Promise(done => {{
 attempts.push(new Promise(done => {{
   window.onmessage = event => event.data === "frame-done" && done();
 }}));
+attempts.push(new Promise(done => setTimeout(done, 1500)));
 Promise.allSettled(attempts).then(() => fetch("/release"));
 </script>"""
+
+
+POPUPS_SCRIPT = """window.open("/redirect-popup");
+const link = document.createElement("a");
+link.href = "/redirect-link";
+link.target = "_blank";
+document.body.append(link);
+link.click();"""
 
 
 def frame_page(canary_port: int) -> str:
@@ -107,8 +119,8 @@ def servers():
     class Page(BaseHTTPRequestHandler):
         def do_GET(self):
             port = self.server.server_address[1]
-            if self.path in ("/redirect", "/redirect-from-frame"):
-                target = "/redirected" if self.path == "/redirect" else "/redirected-from-frame"
+            if self.path.startswith("/redirect"):
+                target = self.path.replace("/redirect", "/redirected", 1)
                 self.send_response(302)
                 self.send_header("Location", f"http://127.0.0.1:{canary_port}{target}")
                 self.send_header("Content-Length", "0")
@@ -121,6 +133,7 @@ def servers():
             kind, body = {
                 "/": ("text/html", main_page(port, canary_port)),
                 "/frame": ("text/html", frame_page(canary_port)),
+                "/popups.js": ("text/javascript", POPUPS_SCRIPT),
                 "/worker.js": ("text/javascript", worker_script(canary_port)),
             }.get(self.path, ("text/plain", "ok"))
             self.send_response(200)
@@ -168,7 +181,7 @@ async def test_hostile_page_reaches_nothing_internal(browser, servers, caplog, t
         assert any(f"//{host}" in line and origins[0] in line for line in logged), host
 
 
-async def test_unguarded_page_reaches_the_canary_everywhere(browser, servers, tmp_path, monkeypatch):
+async def test_unguarded_page_reaches_the_canary_everywhere(servers, tmp_path, monkeypatch):
     canary, origins = servers
     monkeypatch.setattr("app.capture.CAPTURES_DIR", tmp_path)
 
@@ -176,9 +189,14 @@ async def test_unguarded_page_reaches_the_canary_everywhere(browser, servers, tm
         return False
 
     monkeypatch.setattr(Guard, "blocks", allow_everything)
+    monkeypatch.setattr("app.capture.CAPTURE_TIMEOUT_MS", 60000)
     prove_canary_reachable(canary)
 
-    await capture(browser, origins[0] + "/", allowed_origins=origins)
+    popup_friendly_args = [arg for arg in BROWSER_ARGS if arg != BLOCK_POPUPS_FLAG]
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(args=popup_friendly_args)
+        await capture(browser, origins[0] + "/", allowed_origins=origins)
+        await browser.close()
 
     assert set(CANARY_PATHS) <= set(canary.paths)
 

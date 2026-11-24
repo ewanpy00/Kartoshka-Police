@@ -13,7 +13,9 @@ CAPTURES_DIR = Path(os.environ.get("CAPTURES_DIR", "/captures"))
 CAPTURE_TIMEOUT_MS = int(os.environ.get("CAPTURE_TIMEOUT_MS", "15000"))
 
 
-BROWSER_ARGS = ["--disable-site-isolation-trials"]
+SITE_ISOLATION_FLAG = "--disable-site-isolation-trials"
+BLOCK_POPUPS_FLAG = "--block-new-web-contents"
+BROWSER_ARGS = [SITE_ISOLATION_FLAG, BLOCK_POPUPS_FLAG]
 
 
 class InvalidUrl(Exception):
