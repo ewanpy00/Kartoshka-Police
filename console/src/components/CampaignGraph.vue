@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import cytoscape from 'cytoscape'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { defang } from '../defang'
 import { t } from '../i18n'
+import { theme } from '../theme'
 import type { Graph } from '../types'
 
 const props = defineProps<{ graph: Graph }>()
@@ -23,13 +24,21 @@ function token(name: string, fallback: string): string {
   }
 }
 
-onMounted(() => {
+function graphStyle(): cytoscape.StylesheetJson {
   const ink = token('--c-ink', '#1f2933')
   const muted = token('--c-muted', '#52606d')
   const hairline = token('--c-hairline', '#9aa5b1')
   const risk = token('--c-risk', '#b42318')
-  token('--c-accent', '#2563eb')
   const surface = token('--c-surface', '#ffffff')
+  return [
+    { selector: 'node', style: { label: 'data(label)', 'font-size': 10, 'background-color': muted, color: ink, 'text-background-color': surface, 'text-background-opacity': 0.7 } },
+    { selector: 'node[kind = "domain"]', style: { 'background-color': risk } },
+    { selector: 'edge', style: { width: 2, 'line-color': muted, 'line-style': 'solid' } },
+    { selector: 'edge[strength = "weak"]', style: { 'line-style': 'dashed', 'line-color': hairline, display: showWeak.value ? 'element' : 'none' } },
+  ] as unknown as cytoscape.StylesheetJson
+}
+
+onMounted(() => {
   cy = cytoscape({
     container: container.value,
     elements: [
@@ -40,16 +49,14 @@ onMounted(() => {
         data: { ...data, id: `e:${data.id}`, source: `n:${data.source}`, target: `n:${data.target}` },
       })),
     ],
-    style: [
-      { selector: 'node', style: { label: 'data(label)', 'font-size': 10, 'background-color': muted, color: ink, 'text-background-color': surface, 'text-background-opacity': 0.7 } },
-      { selector: 'node[kind = "domain"]', style: { 'background-color': risk } },
-      { selector: 'edge', style: { width: 2, 'line-color': muted, 'line-style': 'solid' } },
-      { selector: 'edge[strength = "weak"]', style: { 'line-style': 'dashed', 'line-color': hairline, display: 'none' } },
-    ],
+    style: graphStyle(),
     layout: { name: 'cose' },
   })
 })
 
+watch(theme, () => {
+  void nextTick(() => cy?.style(graphStyle()))
+})
 watch(showWeak, applyWeak)
 onBeforeUnmount(() => cy?.destroy())
 </script>

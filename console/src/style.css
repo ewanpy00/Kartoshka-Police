@@ -39,7 +39,8 @@ Legacy (still supported): .banner .topbar .topbar-end .panel .split .filters .ca
 */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+  --head-h: 94px;
 
   --c-page: #f5f6f8;
   --c-surface: #ffffff;
@@ -95,8 +96,9 @@ Legacy (still supported): .banner .topbar .topbar-end .panel .split .filters .ca
   background: var(--c-page);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+@media all {
+  :root[data-theme='dark'] {
+    color-scheme: dark;
     --c-page: #0b1320;
     --c-surface: #111a2b;
     --c-raised: #131e30;
@@ -151,6 +153,13 @@ body {
 }
 
 /* ---------- shell ---------- */
+
+.app-head {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 30;
+  background: var(--c-surface);
+}
 
 .banner {
   padding: 6px var(--space-4);
@@ -267,11 +276,14 @@ body {
 
 .sidenav {
   position: sticky;
-  inset-block-start: 0;
+  inset-block-start: var(--head-h);
+  z-index: 20;
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-block-size: calc(100vh - 64px - 30px);
+  block-size: calc(100dvh - var(--head-h));
+  overflow-y: auto;
   padding: var(--space-3);
   background: var(--c-surface);
   border-inline-end: 1px solid var(--c-hairline);
@@ -339,19 +351,34 @@ body {
   }
 
   .sidenav {
-    position: relative;
+    position: sticky;
+    inset-block-start: var(--head-h);
+    z-index: 20;
     flex-direction: row;
+    block-size: auto;
     min-block-size: 0;
     overflow-x: auto;
+    overflow-y: hidden;
     padding: var(--space-2) var(--space-3);
     scrollbar-width: none;
     border-inline-end: 0;
     border-block-end: 1px solid var(--c-hairline);
-    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
   }
 
-  .sidenav:dir(rtl) {
-    mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+  .sidenav::after {
+    content: '';
+    position: sticky;
+    inset-inline-end: calc(-1 * var(--space-3));
+    flex: none;
+    align-self: stretch;
+    inline-size: 32px;
+    margin-inline-start: -32px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--c-surface));
+  }
+
+  .sidenav:dir(rtl)::after {
+    background: linear-gradient(to left, transparent, var(--c-surface));
   }
 
   .sidenav::-webkit-scrollbar {
@@ -393,6 +420,37 @@ body {
 
   .topbar-end button.secondary {
     margin-inline-start: auto;
+  }
+
+  /* The header is sticky, so keep it to two rows on a phone: the name stays, the
+     initials chip goes, and the controls are sized to fit one line in both languages. */
+  .topbar .avatar {
+    display: none;
+  }
+
+  .topbar .topbar-end {
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+  }
+
+  .topbar .user-name {
+    overflow: hidden;
+    font-size: var(--fs-13);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar .topbar-end button.secondary {
+    flex: none;
+    min-block-size: 32px;
+    padding: 5px 10px;
+    font-size: var(--fs-13);
+    white-space: nowrap;
+  }
+
+  .topbar .seg,
+  .topbar .theme-toggle {
+    flex: none;
   }
 }
 
@@ -475,8 +533,8 @@ button.danger {
   background: var(--c-risk);
 }
 
-@media (prefers-color-scheme: dark) {
-  button.danger {
+@media all {
+  :root[data-theme='dark'] button.danger {
     color: #1a0b0a;
   }
 }
@@ -757,6 +815,7 @@ button:disabled {
 }
 
 .q-row {
+  scroll-margin-block-start: calc(var(--head-h) + 8px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px var(--space-3);
@@ -1235,5 +1294,29 @@ dl {
 
   .seg button {
     min-block-size: 36px;
+  }
+}
+
+.theme-toggle {
+  min-block-size: 32px;
+  min-inline-size: 36px;
+  padding: 0 var(--space-2);
+  color: var(--c-muted);
+}
+
+.theme-toggle svg {
+  inline-size: 16px;
+  block-size: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 700px) {
+  .theme-toggle {
+    min-block-size: 38px;
+    min-inline-size: 38px;
   }
 }
