@@ -239,6 +239,17 @@ async def fetch_page(page: Page) -> dict:
     """Text through Playwright's own world and the DOM over CDP; no script of the page is evaluated."""
     session = await page.context.new_cdp_session(page)
     try:
+        # The size is checked before the tree or the text is requested: a huge document must be refused before
+        # Chromium serialises it and Python parses it. Nodes counts the page's live DOM (text nodes and detached
+        # ones included, and possibly other pages in the same renderer process), so it can over-count, which only
+        # makes the refusal come sooner. No count means no fetch.
+        await session.send("Performance.enable")
+        counts = {item.get("name"): item.get("value") for item in (await session.send("Performance.getMetrics")).get("metrics", [])}
+        nodes = counts.get("Nodes")
+        if not isinstance(nodes, (int, float)):
+            raise ValueError("node count unavailable")
+        if nodes > MAX_DOM_NODES:
+            raise DomTooLarge
         text, document, metrics = await asyncio.gather(
             page.locator("body").inner_text(timeout=FACTS_TIMEOUT_S * 1000),
             session.send("DOM.getDocument", {"depth": -1, "pierce": True}),

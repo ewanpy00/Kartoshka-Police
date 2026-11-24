@@ -225,12 +225,18 @@ async def capture(
             width = collect.PROFILES[profile]["viewport"]["width"]
             # Without readable facts the page height is unknown: take the largest allowed capture.
             height = min(max(int(data["height"] or 0), 1), collect.FULL_PAGE_MAX_HEIGHT) if data["facts_available"] else collect.FULL_PAGE_MAX_HEIGHT
+            # Without readable facts (hung, unreadable or oversized page) the heavy reads below are skipped: they
+            # allocate in proportion to the page, which is exactly what cannot be trusted here.
             try:
+                if not data["facts_available"]:
+                    raise asyncio.TimeoutError
                 full = await page.screenshot(full_page=True, clip={"x": 0, "y": 0, "width": width, "height": height}, timeout=PAGE_CALL_TIMEOUT_S * 1000)
                 extra["full_screenshot"] = write(CAPTURES_DIR / f"{capture_id}.full.png", full)
             except (PlaywrightError, asyncio.TimeoutError):
                 pass
             try:
+                if not data["facts_available"]:
+                    raise asyncio.TimeoutError
                 html = (await asyncio.wait_for(page.content(), PAGE_CALL_TIMEOUT_S)).encode("utf-8", errors="replace")[: collect.HTML_LIMIT]
                 extra["html"] = write(CAPTURES_DIR / f"{capture_id}.html", html)
             except (PlaywrightError, asyncio.TimeoutError):

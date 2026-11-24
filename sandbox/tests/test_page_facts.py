@@ -265,3 +265,48 @@ async def test_favicon_answer_from_the_page_is_bounded_and_time_limited(browser,
         assert got is None or len(got[0]) <= collect.FAVICON_LIMIT
     finally:
         await context.close()
+
+
+@pytest.fixture
+def cdp_calls(monkeypatch):
+    """The CDP methods sent, with an optional rewrite of the answer to the node count."""
+    from playwright.async_api import CDPSession
+
+    calls, rewrite = [], {}
+    original = CDPSession.send
+
+    async def spy(self, method, params=None):
+        calls.append(method)
+        result = await original(self, method, params)
+        return rewrite[method](result) if method in rewrite else result
+
+    monkeypatch.setattr(CDPSession, "send", spy)
+    return calls, rewrite
+
+
+async def test_dom_above_the_real_bound_is_refused_before_the_tree_is_requested(browser, serve, tmp_path, monkeypatch, cdp_calls):
+    calls, _ = cdp_calls
+    body = "<title>big</title>" + "<p>x</p>" * (collect.MAX_DOM_NODES // 2 + 1000)
+    result = await capture_html(browser, serve, tmp_path, monkeypatch, body)
+    assert "Performance.getMetrics" in calls
+    assert "DOM.getDocument" not in calls
+    assert result.facts_available is False
+    assert (result.text, result.forms, result.skeleton) == ("", [], "")
+    assert result.html is None and result.full_screenshot is None
+    assert result.screenshot_path
+
+
+async def test_normal_page_passes_the_node_precheck(browser, serve, tmp_path, monkeypatch, cdp_calls):
+    calls, _ = cdp_calls
+    result = await capture_html(browser, serve, tmp_path, monkeypatch, '<form><input type="password" name="pw"></form>')
+    assert calls.index("Performance.getMetrics") < calls.index("DOM.getDocument")
+    assert result.facts_available and result.html is not None
+
+
+async def test_unavailable_node_count_means_no_facts_and_no_fetch(browser, serve, tmp_path, monkeypatch, cdp_calls):
+    calls, rewrite = cdp_calls
+    rewrite["Performance.getMetrics"] = lambda result: {"metrics": []}
+    result = await capture_html(browser, serve, tmp_path, monkeypatch, "<title>x</title>hello")
+    assert "DOM.getDocument" not in calls
+    assert result.facts_available is False
+    assert result.title == "x"
