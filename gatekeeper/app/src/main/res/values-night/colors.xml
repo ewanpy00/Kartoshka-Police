@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="page">#0B1320</color>
+    <color name="surface">#111A2B</color>
+    <color name="raised">#131E30</color>
+    <color name="hairline">#1E2A40</color>
+    <color name="selected">#192741</color>
+    <color name="ink">#E8EDF5</color>
+    <color name="muted">#93A0B5</color>
+    <color name="primary">#D7B14E</color>
+    <color name="on_primary">#151925</color>
+    <color name="gold">#D7B14E</color>
+    <color name="risk">#FF9483</color>
+    <color name="risk_bg">#2A1518</color>
+    <color name="amber">#F0B35A</color>
+    <color name="amber_bg">#2A2010</color>
+    <color name="ok">#5FD19A</color>
+    <color name="ok_bg">#11271F</color>
+    <color name="on_ok">#0B1320</color>
+    <color name="banner_bg">#1A1708</color>
+    <color name="banner_text">#D7B14E</color>
+    <color name="hero">#0B1320</color>
+    <color name="hero_2">#16233A</color>
+    <color name="on_hero">#E8EDF5</color>
+    <color name="on_hero_muted">#93A0B5</color>
+    <color name="hero_gold">#D7B14E</color>
+    <color name="block_hero">#7A1F17</color>
+    <color name="warn_hero">#7A4210</color>
+</resources>

@@ -51,6 +51,7 @@ On first run this creates `.env` from `.env.example` with a generated `CORE_WRIT
 | Core API | http://127.0.0.1:8000 (interactive docs at `/docs`) |
 | Officer console | http://127.0.0.1:5173 (mock sign-in, clearly labelled as a demo) |
 | Resident PWA | http://127.0.0.1:5174 |
+| Product tour (for the pitch) | http://127.0.0.1:5174/showcase?lang=en (or `?lang=ar`) |
 | AdGuard admin (`make up-stretch` only) | http://127.0.0.1:3001 (user and password in `.env`) |
 | AdGuard DNS (`make up-stretch` only) | port 5335 |
 
@@ -110,6 +111,8 @@ Put API keys (Anthropic, VirusTotal, Google Safe Browsing, search, URLhaus) in `
 
 - Register the team's own look-alike test domain and host the demo kit on it. Never use a real scam site on stage.
 - Set `TAKEDOWN_RECHECK_MIN=1` in `.env` so "Check now" twice can close a takedown during the demo.
+- Product tour: `/showcase` on the resident PWA plays every resident feature in 24 s and loops, with no API calls (sample data, labelled). Keys: Space pause, ← → scene, R restart, L language, F full screen; `?t=12000` starts at 12 s, `?paused` holds the first frame. `?phone` shows only the phone screen, full window, for a vertical recording. Add `?demo=1` to the other resident pages to click through them with the same sample data.
+- Recording the tour on a phone: the Gatekeeper APK carries the same tour offline (long press the app icon → Product tour, or long press the Home header). `make record-tour lang=ar` opens it on the emulator or a USB phone, records the screen and saves `showcase-video/kartoshka-tour-phone-<lang>.mp4`.
 - For the phone, follow `gatekeeper/README.md`. Without the APK, the resident PWA on the phone (`adb reverse tcp:5174 tcp:5174`) shows the same screens.
 
 ## Configuration

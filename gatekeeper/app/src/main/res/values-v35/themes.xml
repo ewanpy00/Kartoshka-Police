@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 15 draws targetSdk 35 apps edge to edge; these screens keep the system bars as coloured bands. -->
+<resources>
+    <style name="Theme.Gatekeeper" parent="Base.Theme.Gatekeeper">
+        <item name="android:windowLightNavigationBar">@bool/light_bars</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>

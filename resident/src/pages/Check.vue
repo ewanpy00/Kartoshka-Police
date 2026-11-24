@@ -5,6 +5,8 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { askPreview, checkLink, getCheck, previewSrc, sendReport, type Verdict } from '../api'
 import XRay from '../components/XRay.vue'
+import { demo } from '../demo'
+import { embedded } from '../embedded'
 import { ASKS, lang, tr } from '../i18n'
 import { defang, hostOf, saveReport } from '../store'
 
@@ -17,6 +19,16 @@ const error = ref('')
 const note = ref('')
 const reported = ref<string | null>(null)
 const busy = ref(false)
+// Demo mode only: one sample link per verdict, so each result screen is one tap away.
+const SAMPLES: [string, string, string, string][] = [
+  ['block', 'Scam', 'احتيال', 'https://rta-fine-ae.xyz/payment'],
+  ['warn', 'Suspicious', 'مشبوه', 'https://secure-update.online/'],
+  ['allow', 'Official', 'رسمي', 'https://www.tamm.abudhabi/'],
+]
+function sample(url: string) {
+  input.value = url
+  router.push({ name: 'check', query: { ...route.query, url } })
+}
 let poll: number | undefined
 let polls = 0
 
@@ -67,6 +79,19 @@ function follow() {
 }
 
 watch(target, (url) => { if (url) run(url) }, { immediate: true })
+
+// Inside Gatekeeper: hand each final verdict to the app, which lists it under Recent checks on Home.
+type Bridge = { recordCheck?: (url: string, verdict: string, brand: string) => void }
+watch(() => [result.value?.verdict, result.value?.check_id], () => {
+  const r = result.value
+  const app = (window as unknown as { KartoshkaApp?: Bridge }).KartoshkaApp
+  if (!r || r.verdict === 'pending' || !target.value || !app?.recordCheck) return
+  try {
+    app.recordCheck(target.value, r.verdict, r.brand ?? '')
+  } catch {
+    /* the bridge is a convenience */
+  }
+})
 onUnmounted(() => window.clearTimeout(poll))
 
 function submit() {
@@ -119,10 +144,15 @@ const asks = computed(() => (result.value?.preview?.asks_for ?? []).map((a) => A
 
 <template>
   <main>
-    <form class="card stack" @submit.prevent="submit">
+    <!-- Inside Gatekeeper the link is typed on Home, so a result screen shows just the result. -->
+    <form v-if="!(embedded && target)" class="card stack" @submit.prevent="submit">
       <label for="u"><strong>{{ tr('Check a link before you open it', 'افحص الرابط قبل فتحه') }}</strong></label>
       <input id="u" v-model="input" dir="ltr" inputmode="url" autocomplete="off" placeholder="https://…" />
       <button class="primary" :disabled="checking">{{ tr('Check', 'افحص') }}</button>
+      <div v-if="demo" class="samples">
+        <span class="small muted">{{ tr('Try a sample:', 'جرّب مثالًا:') }}</span>
+        <button v-for="[kind, en, ar, url] in SAMPLES" :key="kind" type="button" class="sample" :class="kind" @click="sample(url)">{{ tr(en, ar) }}</button>
+      </div>
     </form>
 
     <template v-if="target">
@@ -168,11 +198,16 @@ const asks = computed(() => (result.value?.preview?.asks_for ?? []).map((a) => A
 </template>
 
 <style scoped>
-.verdict.block { border-color: var(--c-risk); background: var(--c-risk-bg); }
-.verdict.warn { border-color: var(--c-amber); background: var(--c-amber-bg); }
-.verdict.allow { border-color: var(--c-ok); background: var(--c-ok-bg); }
-.verdict.block h1 { color: var(--c-risk); }
-.reasons { padding-inline-start: 1.2rem; margin: var(--space-2) 0 var(--space-4); }
-.shot { width: 100%; border: 1px solid var(--c-hairline); border-radius: var(--radius-2); pointer-events: none; user-select: none; }
-.asks { background: var(--c-risk-bg); color: var(--c-risk); font-weight: 600; padding: var(--space-2) var(--space-3); border-radius: var(--radius-1); }
+.samples { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.sample { padding: 0.3rem 0.75rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; font-size: 0.85rem; }
+.sample.block { border-color: var(--block); color: var(--block); }
+.sample.warn { border-color: var(--warn); color: var(--warn); }
+.sample.allow { border-color: var(--allow); color: var(--allow); }
+.verdict.block { border-color: var(--block); background: var(--block-soft); }
+.verdict.warn { border-color: var(--warn); background: var(--warn-soft); }
+.verdict.allow { border-color: var(--allow); background: var(--allow-soft); }
+.verdict.block h1 { color: var(--block); }
+.reasons { padding-inline-start: 1.2rem; margin: 0.5rem 0 0.9rem; }
+.shot { width: 100%; border: 1px solid var(--line); border-radius: 10px; pointer-events: none; user-select: none; }
+.asks { background: var(--block-soft); color: var(--block); font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 10px; }
 </style>

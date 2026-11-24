@@ -17,7 +17,10 @@ data class SafeAction(val labelEn: String, val labelAr: String, val url: String)
 
 /** The offline copy of data/brands.yaml (assets/brands.json, written by tools/brands_json.py). */
 class Catalog(val brands: List<Brand>) {
-    fun brand(id: String?): Brand? = brands.firstOrNull { it.id == id }
+    /** By id (`tamm`) or by display name (`TAMM`): core's verdict carries the display name. */
+    fun brand(id: String?): Brand? = id?.let { key ->
+        brands.firstOrNull { it.id == key } ?: brands.firstOrNull { it.nameEn.equals(key, ignoreCase = true) || it.nameAr == key }
+    }
 
     fun official(host: String): Brand? = brands.firstOrNull { b -> b.officialDomains.any { host == it || host.endsWith(".$it") } }
 

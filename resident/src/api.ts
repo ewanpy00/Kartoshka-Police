@@ -1,3 +1,5 @@
+import { demo, handle } from './demo'
+
 // Resident routes only. No write token: the device sends a random id for rate limits (not an identity).
 export interface Reason { code: string; weight: null; source: string; en: string; ar: string }
 export interface Source { id: string; status: 'hit' | 'clean' | 'unknown' | 'skipped'; detail?: string | null }
@@ -32,6 +34,8 @@ export interface RadarBrand {
   brand_id: string
   brand: string
   brand_ar: string
+  /** data/brands.yaml category: police, government, identity, delivery, bank, telecom, utility (or null). */
+  category: string | null
   confirmed: number
   suspected: number
   active: number
@@ -44,8 +48,9 @@ export interface RadarBrand {
 }
 export interface Radar {
   generated_at: string
+  window_days?: number
   totals: { active: number; confirmed: number; suspected: number; new_today: number; yesterday: number }
-  headlines: { category: string; active: number; new_today: number; en: string; ar: string }[]
+  headlines: { category: string; active: number; new_today: number; brands?: string[]; en: string; ar: string }[]
   brands: RadarBrand[]
 }
 export interface SmsResult {
@@ -76,6 +81,11 @@ export class ApiError extends Error {
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (demo) {
+    const answer = await handle(path, init)
+    if (answer === null) throw new ApiError(404, 'Not found')
+    return answer as T
+  }
   const headers = new Headers(init.headers)
   headers.set('X-Device-Id', deviceId())
   if (init.body) headers.set('Content-Type', 'application/json')

@@ -21,3 +21,5 @@ dns/conf/*
 !dns/conf/.gitkeep
 
 docs/design
+# Product tour built into the APK by make tour (resident/vite.tour.config.ts)
+gatekeeper/app/src/main/assets/tour/
