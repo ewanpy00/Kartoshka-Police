@@ -114,6 +114,9 @@ CATALOG: dict[str, Template] = {
     "ASKS_UAEPASS": Template(35, "sandbox", "Page asks for UAE PASS credentials", "الصفحة تطلب بيانات دخول الهوية الرقمية"),
     "ASKS_PASSWORD": Template(15, "sandbox", "Page asks for a password", "الصفحة تطلب كلمة مرور"),
     "ASKS_IBAN": Template(20, "sandbox", "Page asks for a bank account (IBAN)", "الصفحة تطلب رقم الحساب البنكي (IBAN)"),
+    "PAGE_FACTS_UNAVAILABLE": Template(
+        30, "sandbox", "The page prevented inspection of its forms and text", "الصفحة منعت فحص نماذجها ونصها"
+    ),
     "BRAND_MISMATCH": Template(
         30, "sandbox", "Page shows {brand} branding on a domain that is not {brand}'s", "الصفحة تعرض علامة {brand_ar} على نطاق لا يتبع لها"
     ),

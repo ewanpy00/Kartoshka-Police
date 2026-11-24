@@ -1,8 +1,0 @@
-{
-  "name": "EXAMPLE-NET",
-  "country": "NL",
-  "entities": [
-    {"roles": ["registrant"], "vcardArray": ["vcard", [["fn", {}, "text", "Example Hosting BV"]]]},
-    {"roles": ["abuse"], "vcardArray": ["vcard", [["email", {}, "text", "abuse@hosting.example"]]]}
-  ]
-}

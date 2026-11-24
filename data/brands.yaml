@@ -5,6 +5,7 @@
 #   match_tokens     what to look for inside a domain; tokens shorter than 5 letters match a whole
 #                    word only (rta-fines.top matches "rta", portal.top does not)
 #   official_domains the brand's own domains; every subdomain is official
+#   official_phones  the brand's published phone numbers; they never link campaigns (app.brands.official_phones)
 #   reference_urls   official pages whose phone screenshots `make refs` hashes for the visual match
 #   services         safe_action catalog, collected by opening the public site and copying the URL
 #   tip_en / tip_ar  one-line advice shown on the scam radar
@@ -16,7 +17,7 @@
   names: [UAE PASS, "الهوية الرقمية", uaepass, uae-pass]
   official_domains: [uaepass.ae]
   reference_urls: ["https://uaepass.ae/"]
-  official_phones: ["<fill from the official website>"]
+  official_phones: ["600561111"]  # https://u.ae/en/about-the-uae/digital-uae/digital-transformation/platforms-and-apps/the-uae-pass-app
   keywords: [verify, login, update]
   category: identity
   tip_en: "UAE PASS never asks for your OTP or password through a link in an SMS."
@@ -30,6 +31,7 @@
 - id: tamm
   names: [TAMM, "تم", tamm]
   official_domains: [tamm.abudhabi]
+  official_phones: ["800555"]  # Abu Dhabi Government Contact Centre, https://www.tamm.abudhabi/en/contact-us
   reference_urls: ["https://www.tamm.abudhabi/wb/adp/pay-traffic-fines"]
   keywords: [fine, fines, pay, service]
   category: government

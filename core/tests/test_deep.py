@@ -194,7 +194,7 @@ def test_evidence_is_chained_and_append_only(session):
 
 
 def test_shared_infrastructure_with_a_confirmed_scam_forms_a_campaign(session):
-    session.add(Domain(domain="old-scam.top", status="confirmed", brand_id="tamm", source="officer"))
+    session.add(Domain(domain="old-scam.top", status="confirmed", brand_id="tamm", source="officer", confirmed_by="officer"))
     old = make_check(session, url="https://old-scam.top/", host="old-scam.top", domain="old-scam.top")
     new = make_check(session)
     graph.record(session, "old-scam.top", [("ip", "203.0.113.7"), ("asn", "AS64500 EXAMPLE")], None)
@@ -378,3 +378,216 @@ def test_one_cdn_address_makes_the_whole_set_shared(monkeypatch):
     found = {"asn": {"212.104.128.1": {"asn": "13335"}}}
     assert infra.shared_ip("212.104.128.2", found)
     assert not infra.shared_ip("198.51.100.4", {"asn": {"198.51.100.4": {"asn": "64500"}}})
+
+
+# ---- credential cap -------------------------------------------------------------------------------------------
+
+import sys  # noqa: E402
+from datetime import UTC, datetime, timedelta  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+from app.verdict.bands import total  # noqa: E402
+from app.verdict.reasons import CATALOG, reason  # noqa: E402
+
+PASSWORD_FORM = [{"action": "", "method": "post", "fields": [
+    {"tag": "input", "type": "text", "name": "username", "label": "Username"},
+    {"tag": "input", "type": "password", "name": "password"},
+]}]
+CARD_CVV_FORM = [{"action": "", "method": "post", "fields": [
+    {"tag": "input", "type": "text", "name": "cardnumber", "label": "Card number", "maxlength": 19},
+    {"tag": "input", "type": "text", "name": "cvv", "placeholder": "CVV", "maxlength": 3},
+]}]
+OTP_FORM = [{"action": "", "method": "post", "fields": [
+    {"tag": "input", "type": "text", "name": "code", "placeholder": "رمز التحقق", "autocomplete": "one-time-code"},
+]}]
+PLAIN = dict(final_url="https://newshop.example/login", title="Sign in", text="Sign in to your account.", links=[])
+
+
+def days_ago(days: float) -> str:
+    return (datetime.now(UTC) - timedelta(days=days)).isoformat().replace("+00:00", "Z")
+
+
+def plain_check(session, **fields):
+    """A check with no brand and no fast reasons: nothing impersonates anyone."""
+    values = dict(url="https://newshop.example/login", host="newshop.example", domain="newshop.example",
+                  brand=None, brand_id=None, reasons=[])
+    values.update(fields)
+    return make_check(session, **values)
+
+
+def run_deep(session, deep_env, check, age_days=400, **overrides):
+    deep_env["capture"] = page(**{**PLAIN, **overrides}, screenshot=None)
+    deep_env["infra"]["rdap"] = {"found": True, "registered": days_ago(age_days), "registrar": "Example Registrar"}
+    job.analyse(session, check, get_settings())
+    return {item["code"]: item for item in check.reasons}
+
+
+def credential_points(reasons):
+    return sum(item["weight"] for code, item in reasons.items() if code in signals.CREDENTIAL_CODES)
+
+
+def test_lifting_codes_are_catalog_reasons_and_exclude_age_tld_and_registrar():
+    assert signals.CAP_LIFTING_CODES <= set(CATALOG)
+    assert not signals.CAP_LIFTING_CODES & {"DOMAIN_AGE", "RISKY_TLD", "FRESH_CERT", "FREE_HOSTING", "RANDOM_NAME"}
+    assert signals.CREDENTIAL_CODES >= {"ASKS_OTP", "ASKS_CARD", "ASKS_CVV", "ASKS_EMIRATES_ID", "ASKS_IBAN", "ASKS_PASSWORD"}
+
+
+def test_new_domain_with_a_plain_login_page_is_not_pushed_up_by_credentials(session, deep_env):
+    # Password only: 15 points, below the cap, and nothing impersonates a brand.
+    older = run_deep(session, deep_env, plain_check(session), age_days=45, forms=PASSWORD_FORM)
+    assert credential_points(older) == 15 and "BRAND_CREDENTIALS" not in older
+    assert older["DOMAIN_AGE"]["weight"] == 5
+
+    check = plain_check(session)
+    fresh = run_deep(session, deep_env, check, age_days=3, forms=PASSWORD_FORM)
+    assert credential_points(fresh) == 15 and not any(item.get("capped") for item in fresh.values())
+    assert check.verdict == "warn" and check.score == 40  # 25 for a domain younger than a week, 15 for the password
+
+
+def test_new_risky_tld_card_page_without_a_brand_signal_keeps_credentials_at_25(session, deep_env):
+    risky = [reason("RISKY_TLD")]
+    check = plain_check(session, host="newshop.top", domain="newshop.top", reasons=risky)
+    found = run_deep(session, deep_env, check, age_days=2, forms=CARD_CVV_FORM, final_url="https://newshop.top/pay")
+    assert {"ASKS_CARD", "ASKS_CVV", "DOMAIN_AGE", "RISKY_TLD"} <= set(found)
+    assert (found["ASKS_CARD"]["weight_full"], found["ASKS_CVV"]["weight_full"]) == (35, 30)
+    assert credential_points(found) == signals.CREDENTIAL_CAP == 25
+    assert all(item["capped"] for code, item in found.items() if code in ("ASKS_CARD", "ASKS_CVV"))
+    assert "BRAND_CREDENTIALS" not in found
+    assert check.score == total(check.reasons) == 25 + 25 + 15  # credentials 25, young domain 25, risky TLD 15
+    assert check.verdict == "warn"
+
+
+def test_lookalike_domain_with_a_credential_form_reaches_the_75_floor(session, deep_env):
+    check = make_check(session, reasons=[reason("LOOKALIKE", official="tamm.abudhabi", distance=1)])
+    found = run_deep(session, deep_env, check, forms=OTP_FORM, final_url="https://tamm-fines.top/pay")
+    assert found["BRAND_CREDENTIALS"]["weight"] == 75 - (35 + 35)
+    assert check.score == 75 and check.verdict == "block"
+    assert total(check.reasons) == 75  # every point comes from a reason
+
+
+def test_with_a_lifting_signal_every_credential_weight_applies_in_full(session, deep_env):
+    for code, params in (("BRAND_IN_DOMAIN", dict(token="tamm", brand="TAMM", brand_ar="تم")),
+                         ("GSB_HIT", dict(threat="phishing")), ("CAMPAIGN_LINK", dict(kind="ip", kind_ar="", value="x", campaign="k_1"))):
+        check = plain_check(session, reasons=[reason(code, **params)])
+        found = run_deep(session, deep_env, check, forms=CARD_CVV_FORM)
+        assert (found["ASKS_CARD"]["weight"], found["ASKS_CVV"]["weight"]) == (35, 30), code
+        assert not any(item.get("capped") for item in found.values())
+
+
+@pytest.mark.parametrize("code", sorted(signals.CAP_LIFTING_CODES))
+def test_each_lifting_code_lifts_the_cap(code):
+    asks = [reason("ASKS_CARD"), reason("ASKS_CVV"), reason("ASKS_OTP")]
+    assert signals.cap_credentials([*asks, reason(code)])[:3] == asks
+
+
+@pytest.mark.parametrize("code", ["DOMAIN_AGE", "RISKY_TLD", "FRESH_CERT", "FREE_HOSTING"])
+def test_age_tld_and_registrar_reasons_do_not_lift_the_cap(code):
+    capped = signals.cap_credentials([reason("ASKS_CARD"), reason("ASKS_CVV"), reason("ASKS_OTP"), reason(code)])
+    assert sum(item["weight"] for item in capped if item["code"].startswith("ASKS_")) == 25
+
+
+def test_cap_scales_weights_to_exactly_the_cap_and_is_stable():
+    kinds = ["ASKS_OTP", "ASKS_CARD", "ASKS_CVV", "ASKS_EMIRATES_ID", "ASKS_IBAN", "ASKS_PASSWORD"]
+    capped = signals.cap_credentials([reason(code) for code in kinds])
+    assert [item["code"] for item in capped] == kinds  # the explanation keeps every kind
+    assert total(capped) == 25 and all(item["weight"] > 0 for item in capped)
+    assert signals.cap_credentials(capped) == capped  # a second pass changes nothing
+
+
+def test_below_the_cap_nothing_changes():
+    reasons = [reason("ASKS_IBAN"), reason("RISKY_TLD")]
+    assert signals.cap_credentials(reasons) is reasons
+
+
+# ---- page facts, auto-confirm, phones -------------------------------------------------------------------------
+
+def test_page_facts_unavailable_is_a_catalog_reason_in_both_languages():
+    item = reason("PAGE_FACTS_UNAVAILABLE")
+    assert (item["weight"], item["source"]) == (30, "sandbox") and item["en"] and item["ar"]
+
+
+def test_facts_unavailable_adds_the_reason_and_is_not_read_as_parked():
+    blank = dict(forms=[], text="", title="", links=[])
+    found = signals.analyse(page(**blank, facts_available=False), "x.top", None, BRANDS)
+    assert "PAGE_FACTS_UNAVAILABLE" in codes(found.reasons) and not found.parked and "PARKED" not in codes(found.reasons)
+    for capture in (page(**blank), page(**blank, facts_available=True)):  # a missing key means true
+        again = signals.analyse(capture, "x.top", None, BRANDS)
+        assert "PAGE_FACTS_UNAVAILABLE" not in codes(again.reasons) and again.parked
+
+
+def test_deep_job_scores_a_page_that_hid_its_facts(session, deep_env):
+    check = plain_check(session)
+    found = run_deep(session, deep_env, check, forms=[], text="", title="", facts_available=False)
+    assert found["PAGE_FACTS_UNAVAILABLE"]["weight"] == 30
+    assert check.score == 30 and check.verdict == "warn"
+    assert session.get(Evidence, check.evidence_id).payload["page"]["facts_available"] is False
+
+
+@pytest.fixture
+def review_stub(monkeypatch):
+    calls = []
+    monkeypatch.setitem(sys.modules, "app.review", SimpleNamespace(auto_confirm=lambda *args: calls.append(args)))
+    return calls
+
+
+def test_score_above_90_with_a_credential_ask_is_auto_confirmed(session, deep_env, review_stub):
+    check = make_check(session)
+    job.analyse(session, check, get_settings())
+    assert check.score > 90
+    assert review_stub == [(session, "tamm-fines.top", "tamm", check.evidence_id)]
+
+
+def test_no_auto_confirm_at_90_or_below_or_without_a_credential_ask(session, deep_env, review_stub):
+    run_deep(session, deep_env, plain_check(session), forms=PASSWORD_FORM)  # a password and nothing else: far below 90
+    run_deep(session, deep_env, make_check(session), forms=[], text="", final_url="https://tamm-fines.top/pay")
+    assert review_stub == []
+
+
+def test_auto_confirm_failure_does_not_fail_the_deep_check(session, deep_env, monkeypatch):
+    def boom(*args):
+        raise RuntimeError("review down")
+
+    monkeypatch.setitem(sys.modules, "app.review", SimpleNamespace(auto_confirm=boom))
+    check = make_check(session)
+    job.analyse(session, check, get_settings())
+    assert check.deep_status == "done" and check.evidence_id
+
+
+def test_phones_are_e164_from_text_and_tel_links_without_duplicates():
+    cap = page(text="Call us on 050 123 4567 or +971 4 223 4567.", links=["tel:+971501234567", "tel:not-a-number"], forms=[])
+    assert signals.contacts(cap) == ["+971501234567", "+97142234567"]
+
+
+def test_whatsapp_numbers_come_from_both_link_shapes():
+    links = ["https://wa.me/971501234567", "https://api.whatsapp.com/send?phone=971509876543&text=hi",
+             "https://wa.me/971501234567", "https://wa.me/12"]
+    assert signals.whatsapp(page(links=links)) == ["+971501234567", "+971509876543"]
+
+
+# ---- lead-time hook -------------------------------------------------------------------------------------------
+
+def test_watchlist_run_polls_first_hits_and_survives_a_failure(session, monkeypatch):
+    import asyncio
+
+    from app.deep import watchlist
+    from app.takedown import tracker
+    from app.verdict import service
+
+    now = datetime.now(UTC)
+    for name in ("poll-a.top", "poll-b.top"):
+        watchlist.add(session, name, f"https://{name}/", "PARKED", None, now - timedelta(days=1))
+    polled = []
+
+    def first_hits(db, domain, url, settings, at):
+        polled.append((domain, url, at))
+        if domain == "poll-a.top":
+            raise RuntimeError("lookup down")
+
+    async def fake_run_check(db, url, source, mode, settings, force_deep=False):
+        return SimpleNamespace(id=f"c_{url}")
+
+    monkeypatch.setattr(tracker, "first_hits", first_hits)
+    monkeypatch.setattr(service, "run_check", fake_run_check)
+    ids = asyncio.run(watchlist.run_due(session, get_settings(), now))
+    assert {d for d, _, _ in polled} == {"poll-a.top", "poll-b.top"} and all(at == now for _, _, at in polled)
+    assert len(ids) == 2

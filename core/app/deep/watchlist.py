@@ -4,6 +4,7 @@
     python -m app.deep.watchlist
 """
 import asyncio
+import logging
 import sys
 from datetime import UTC, datetime, timedelta
 
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.models import Watchlist
+
+log = logging.getLogger("core.watchlist")
 
 EVERY = timedelta(hours=6)
 WATCH_FOR = timedelta(days=14)
@@ -48,6 +51,21 @@ def due(session: Session, now: datetime | None = None, limit: int = 50) -> list[
     ))
 
 
+def record_first_hits(session: Session, row: Watchlist, settings: Settings, now: datetime) -> None:
+    """Lead time: ask the takedown tracker whether Safe Browsing or VirusTotal list this domain yet.
+
+    The tracker is imported here and a failure in it never breaks the re-check.
+    """
+    try:
+        from app.takedown import tracker
+
+        with session.begin_nested():
+            tracker.first_hits(session, row.domain, row.url, settings, now)
+        session.commit()
+    except Exception:
+        log.exception("first-hit poll failed for %s", row.domain)
+
+
 async def run_due(session: Session, settings: Settings, now: datetime | None = None, limit: int = 50) -> list[str]:
     """Queue a deep re-check of every due domain, or a takedown re-check when one is open. Returns the new check ids."""
     from app import queue
@@ -67,8 +85,9 @@ async def run_due(session: Session, settings: Settings, now: datetime | None = N
     ids = []
     for row in rows:
         if row.domain in takedowns:
-            queue.enqueue("app.jobs.takedown_recheck", row.domain, timeout=400)
+            queue.enqueue("app.jobs.takedown_recheck", row.domain, timeout=400)  # that job polls first hits itself
             continue
+        record_first_hits(session, row, settings, now)
         check = await run_check(session, row.url or f"https://{row.domain}/", "watchlist", "deep", settings, force_deep=True)
         ids.append(check.id)
     return ids

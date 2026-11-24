@@ -128,6 +128,8 @@ def sandbox_detail(found: signals.Signals, visual_hit: dict | None, kit_found: l
         parts.append("known kit")
     if found.cloaking:
         parts.append("cloaking")
+    if not found.facts_available:
+        parts.append("page facts unavailable")
     if found.parked:
         parts.append("parked; on the watchlist")
     return "; ".join(parts) or "nothing suspicious on the page"
@@ -182,6 +184,7 @@ def deterministic(check: Check, finding: Finding) -> list[dict]:
     """Fast and deep reasons with the hard floor, without the AI: the score the AI is gated and bounded by."""
     reasons = [item for item in merge(check.reasons or [], finding.reasons)
                if item["code"] not in ("BRAND_CREDENTIALS", "AI_ASSESSMENT")]
+    reasons = signals.cap_credentials(reasons)
     floor = signals.credential_floor(reasons, finding.page, finding.host or check.host or "")
     if floor:
         reasons.append(floor)
@@ -259,6 +262,7 @@ def payload(check: Check, finding: Finding, infra_data: dict, kit_hash: str | No
             "asks_for": found.asks_for, "phones": found.phones, "payment_hosts": found.payment_hosts,
             "tls": cap.get("tls"), "server_ip": cap.get("server_ip"), "parked": found.parked,
             "cloaking": found.cloaking, "bot_visit": cap.get("bot_visit"),
+            "facts_available": found.facts_available,
         },
         "visual": {"brand_id": visual_hit["brand"]["id"], "similarity": visual_hit["similarity"],
                    "reference_url": visual_hit["reference_url"], "phash": visual_hit["hash"]} if visual_hit else None,
@@ -356,6 +360,8 @@ def analyse(session: Session, check: Check, settings: Settings) -> list[Check]:
         if had_campaign != campaign.id:
             finding.events.append({"type": "campaign.new_domain", "campaign_id": campaign.id, "domain": site})
 
+    maybe_auto_confirm(session, check, site, finding)
+
     updated = [check]
     joined = session.scalars(select(Check).where(Check.host == check.host, Check.deep_status == "joined", Check.id != check.id))
     for other in joined:
@@ -365,6 +371,25 @@ def analyse(session: Session, check: Check, settings: Settings) -> list[Check]:
         session.add(Verdict(check_id=item.id, verdict=item.verdict, score=item.score, stage=item.stage, reasons=item.reasons))
     session.info["deep_events"] = finding.events
     return updated
+
+
+AUTO_CONFIRM_ABOVE = 90
+
+
+def maybe_auto_confirm(session: Session, check: Check, site: str, finding: Finding) -> None:
+    """A final score above 90 on a page that asks for a credential confirms the site without an officer.
+
+    A failure here is logged and never fails the deep check: the case stays in the queue for an officer.
+    """
+    if check.score <= AUTO_CONFIRM_ABOVE or not finding.page.asks_for:
+        return
+    from app.review import auto_confirm  # imported here so module import order does not matter
+
+    try:
+        with session.begin_nested():
+            auto_confirm(session, site, check.brand_id, finding.evidence_id)
+    except Exception:
+        log.exception("auto-confirm failed for %s", site)
 
 
 def deep_check(check_id: str) -> None:

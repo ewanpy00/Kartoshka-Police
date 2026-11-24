@@ -5,11 +5,13 @@ The page is written by the attacker. Nothing here executes or trusts it; it is m
 """
 import re
 from dataclasses import dataclass, field
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
+
+import phonenumbers
 
 from app.brands import arabic_name, display_name, find_brand_in_text, is_official
 from app.normalize.url import extractor
-from app.verdict.reasons import ASKS_AR, ASKS_EN, reason
+from app.verdict.reasons import ASKS_AR, ASKS_EN, CATALOG, reason
 
 # Field hints: matched against name, id, placeholder, label, autocomplete and aria-label of each input.
 FIELD_PATTERNS = {
@@ -45,6 +47,21 @@ WHATSAPP_HOSTS = ("wa.me", "api.whatsapp.com", "chat.whatsapp.com", "whatsapp.co
 CREDENTIALS = ("otp", "card", "cvv", "uaepass")
 PAYMENT_DATA = ("card", "cvv", "otp", "iban")
 
+# Credential cap. The per-kind ASKS_* reasons stay in the explanation, but together they add at most
+# CREDENTIAL_CAP points unless one of CAP_LIFTING_CODES is present: an impersonation signal (brand in the
+# domain or subdomain, lookalike, visual match, brand shown on a domain that is not the brand's, a link to a
+# confirmed campaign) or a reputation hit (police blocklist, officer confirmation, Safe Browsing, VirusTotal).
+# Domain age, TLD risk and registrar reasons are deliberately not in this set.
+CREDENTIAL_CAP = 25
+CREDENTIAL_CODES = frozenset(code for code in CATALOG if code.startswith("ASKS_"))
+CAP_LIFTING_CODES = frozenset({
+    "BRAND_IN_DOMAIN", "BRAND_IN_SUBDOMAIN",
+    "LOOKALIKE", "HOMOGLYPH", "MIXED_SCRIPTS", "PUNYCODE",
+    "VISUAL_MATCH", "BRAND_MISMATCH",
+    "CAMPAIGN_LINK",
+    "BLOCKLISTED", "OFFICER_CONFIRMED", "GSB_HIT", "VT_HIT",
+})
+
 
 @dataclass
 class Signals:
@@ -58,6 +75,7 @@ class Signals:
     parked: bool = False
     cloaking: dict | None = None
     injection: bool = False
+    facts_available: bool = True
 
 
 def field_text(item: dict) -> str:
@@ -117,13 +135,31 @@ def endpoint(url: str) -> str | None:
     return f"{parts.hostname.lower()}{parts.path or '/'}"[:300]
 
 
-def e164(digits: str) -> str | None:
-    digits = re.sub(r"\D", "", digits)
+def e164(raw: str) -> str | None:
+    """E.164 for a number as written on a page: a valid number through phonenumbers (default region AE),
+    else the digits with the UAE national prefix mapped, so a malformed number is still comparable."""
+    text = raw.strip()
+    digits = re.sub(r"\D", "", text)
     if digits.startswith("00"):
         digits = digits[2:]
+        text = "+" + digits
+    if not text.startswith("+") and digits.startswith("971") and len(digits) >= 11:
+        text = "+" + digits
+    try:
+        number = phonenumbers.parse(text if text.startswith("+") else digits, "AE")
+        if phonenumbers.is_valid_number(number):
+            return phonenumbers.format_number(number, phonenumbers.PhoneNumberFormat.E164)
+    except phonenumbers.NumberParseException:
+        pass
     if digits.startswith("05"):
         digits = "971" + digits[1:]
     return f"+{digits}" if len(digits) >= 9 else None
+
+
+def wa_digits(parts) -> str:
+    """The number in a wa.me/<number> or api.whatsapp.com/send?phone=<number> link."""
+    phone = "".join(parse_qs(parts.query).get("phone", []))
+    return re.sub(r"\D", "", phone) or re.sub(r"\D", "", parts.path)
 
 
 def whatsapp(capture: dict) -> list[str]:
@@ -131,7 +167,8 @@ def whatsapp(capture: dict) -> list[str]:
     for link in capture.get("links") or []:
         parts = urlsplit(link)
         if (parts.hostname or "") in WHATSAPP_HOSTS:
-            number = e164(re.sub(r"\D", "", parts.path) or re.sub(r"\D", "", parts.query))
+            digits = wa_digits(parts)
+            number = e164("+" + digits) if digits else None
             if number and number not in found:
                 found.append(number)
     return found[:10]
@@ -144,20 +181,16 @@ def contacts(capture: dict) -> list[str]:
         if parts.scheme == "tel":
             found.append(re.sub(r"[^\d+]", "", parts.path))
         elif (parts.hostname or "") in WHATSAPP_HOSTS:
-            digits = re.sub(r"\D", "", parts.path) or re.sub(r"\D", "", parts.query)
+            digits = wa_digits(parts)
             if digits:
-                found.append("+" + digits.lstrip("+"))
+                found.append("+" + digits)
     for match in PHONE.findall(capture.get("text") or ""):
         found.append(re.sub(r"[^\d+]", "", match))
     normalized = []
     for number in found:
-        digits = re.sub(r"\D", "", number)
-        if digits.startswith("00"):
-            digits = digits[2:]
-        if digits.startswith("05"):
-            digits = "971" + digits[1:]
-        if len(digits) >= 9 and f"+{digits}" not in normalized:
-            normalized.append(f"+{digits}")
+        value = e164(number)
+        if value and value not in normalized:
+            normalized.append(value)
     return normalized[:10]
 
 
@@ -177,6 +210,9 @@ def page_brand(capture: dict, host: str, claimed: dict | None, brands: list[dict
 
 def analyse(capture: dict, host: str, claimed_brand: dict | None, brands: list[dict]) -> Signals:
     result = Signals()
+    result.facts_available = capture.get("facts_available", True) is not False  # a missing key means true
+    if not result.facts_available:
+        result.reasons.append(reason("PAGE_FACTS_UNAVAILABLE"))
     text = capture.get("text") or ""
     forms = capture.get("forms") or []
     brand = page_brand(capture, host, claimed_brand, brands)
@@ -211,7 +247,7 @@ def analyse(capture: dict, host: str, claimed_brand: dict | None, brands: list[d
         result.reasons.append(reason("PAYMENT_ENDPOINT", host=result.payment_hosts[0]))
 
     no_inputs = not any(form.get("fields") for form in forms)
-    if no_inputs and (len(text.strip()) < 80 or PARKED.search(text[:2000])):
+    if result.facts_available and no_inputs and (len(text.strip()) < 80 or PARKED.search(text[:2000])):
         result.parked = True
         result.reasons.append(reason("PARKED"))
 
@@ -223,6 +259,27 @@ def analyse(capture: dict, host: str, claimed_brand: dict | None, brands: list[d
         result.injection = True
         result.reasons.append(reason("INJECTION_ATTEMPT"))
     return result
+
+
+def cap_credentials(reasons: list[dict]) -> list[dict]:
+    """Apply the credential cap to a merged reason list and return the list to score.
+
+    The per-kind ASKS_* reasons stay in the list. When they add more than CREDENTIAL_CAP points and no
+    CAP_LIFTING_CODES reason is present, their weights are scaled down (largest remainder, so the integers
+    sum to exactly CREDENTIAL_CAP) and each scaled reason records `weight_full` and `capped`. The reasons'
+    weights then still sum to the score, which `verdict.bands.total` relies on.
+    """
+    asks = [item for item in reasons if item["code"] in CREDENTIAL_CODES and (item["weight"] or 0) > 0]
+    full = sum(item["weight"] for item in asks)
+    if full <= CREDENTIAL_CAP or any(item["code"] in CAP_LIFTING_CODES for item in reasons):
+        return reasons
+    shares = [item["weight"] * CREDENTIAL_CAP / full for item in asks]
+    scaled = [int(share) for share in shares]
+    by_remainder = sorted(range(len(asks)), key=lambda i: shares[i] - scaled[i], reverse=True)
+    for i in by_remainder[: CREDENTIAL_CAP - sum(scaled)]:
+        scaled[i] += 1
+    capped = {id(item): {**item, "weight": weight, "weight_full": item["weight"], "capped": True} for item, weight in zip(asks, scaled)}
+    return [capped.get(id(item), item) for item in reasons]
 
 
 def credential_floor(reasons: list[dict], signals: Signals, host: str, floor: int = 75) -> dict | None:

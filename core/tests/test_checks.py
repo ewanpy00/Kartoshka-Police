@@ -105,7 +105,8 @@ def test_deep_mode_enqueues_even_a_low_score(client, enqueued):
     assert enqueued == [body["check_id"]]
 
 
-def test_sources_cover_every_layer_in_order(client):
+def test_sources_cover_every_layer_in_order(client, settings):
+    settings.google_safe_browsing_api_key = settings.virustotal_api_key = None  # the container env may hold real keys
     body = check(client, "https://uaepass-verify.top/login")
     assert [s["id"] for s in body["sources"]] == [
         "allowlist", "police_blocklist", "gsb", "virustotal", "feeds", "rdap", "ct", "campaign", "sandbox", "ai",
@@ -170,7 +171,8 @@ def test_blocklist_txt_is_adblock_syntax(client):
 def test_backslash_url_is_not_allowed_through_the_official_domain(client):
     url = "https://evil.example\\@uaepass.ae/"
     assert host_and_parents(url) == ["evil.example"]
-    assert check(client, url)["verdict"] != "allow" or "ALLOWLISTED" not in codes(check(client, url))
+    assert "ALLOWLISTED" not in codes(check(client, url))
+    assert host_and_parents("https://evil.example\\path\\@uaepass.ae/") == ["evil.example"]
 
 
 def test_host_case_and_trailing_dot_are_normalised(client):
@@ -263,3 +265,23 @@ def test_a_blocklist_hit_shows_the_preview_of_the_last_deep_analysis(client, ses
     body = check(client, "https://shown-before.example/pay", source="resident")
     assert body["reasons"][0]["code"] == "BLOCKLISTED" and body["verdict"] == "block"
     assert body["preview"]["asks_for"] == ["card"] and body["evidence_id"] == evidence_id
+
+
+def test_host_parsing_trailing_dot_case_and_per_label_punycode():
+    assert host_and_parents("https://A.UAEPASS.ae./x") == ["a.uaepass.ae", "uaepass.ae"]
+    assert host_and_parents("https://sub.bücher.例え.example/") == ["sub.xn--bcher-kva.xn--r8jz45g.example", "xn--bcher-kva.xn--r8jz45g.example",
+                                                                 "xn--r8jz45g.example"]
+    assert host_and_parents("uaepass.ae") == ["uaepass.ae"]  # a bare host is read as a host
+
+
+def test_allowlisted_host_matches_only_itself_and_its_www_form(client):
+    assert check(client, "https://google.com/")["verdict"] == "allow"
+    assert check(client, "https://www.google.com/")["verdict"] == "allow"
+    for url in ("https://accounts.google.com/", "https://google.com.evil.example/", "https://evilgoogle.com/"):
+        assert "ALLOWLISTED" not in codes(check(client, url)), url
+
+
+def test_official_and_confirmed_domains_match_their_parent_domains(client, session):
+    assert codes(check(client, "https://a.b.c.uaepass.ae/"))[0] == "ALLOWLISTED"
+    session.add(Domain(domain="scam-parent.example", status="confirmed", brand_id="tamm"))
+    assert codes(check(client, "https://x.y.scam-parent.example/"))[0] == "BLOCKLISTED"

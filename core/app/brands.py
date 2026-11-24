@@ -4,10 +4,18 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+import phonenumbers
 import yaml
 
 SHORT_TOKEN = 5
 WORD_SPLIT = re.compile(r"[^a-z]+")
+# Work bounds: the host and the page text are written by the attacker.
+MAX_LABEL = 100        # characters of one label looked at; a DNS label is at most 63
+MAX_LABELS = 10        # labels of the domain part and of the subdomain part looked at
+MAX_WORDS = 16         # hyphen-separated words of one label looked at
+MAX_AFFIX = 32         # longest run of fillers and action words around a token (the DP is quadratic in it)
+MAX_TEXT = 20_000      # characters of page text looked at
+SEPARATORS = r"[\s\-_.&]"
 
 
 @lru_cache
@@ -55,6 +63,31 @@ def tokens(brand: dict) -> list[str]:
         if len(token) >= 3 and token not in found:
             found.append(token)
     return found
+
+
+@lru_cache
+def official_phones(data_dir: str | None = None) -> frozenset[str]:
+    """Every brand's official phone numbers as E.164 strings, so an official number never links campaigns."""
+    if data_dir is None:
+        from app.config import get_settings
+
+        data_dir = get_settings().data_dir
+    found = set()
+    for brand in scoring_brands(data_dir):
+        for raw in brand.get("official_phones") or []:
+            digits = re.sub(r"\D", "", str(raw))
+            if not digits:
+                continue  # a placeholder such as "<fill from the official website>"
+            try:
+                number = phonenumbers.parse(str(raw), None if str(raw).strip().startswith("+") else "AE")
+                valid = phonenumbers.is_valid_number(number)
+            except phonenumbers.NumberParseException:
+                valid = False
+            found.add(
+                phonenumbers.format_number(number, phonenumbers.PhoneNumberFormat.E164) if valid
+                else "+" + (digits if str(raw).strip().startswith("+") or digits.startswith("971") else "971" + digits.lstrip("0"))
+            )
+    return frozenset(found)
 
 
 def official_labels(brand: dict) -> list[str]:
@@ -112,6 +145,8 @@ def affix_ok(affix: str, action_words: frozenset[str], long_token: bool) -> bool
     fillers (uaepassverifylogin). A long token may also carry one stray letter (emiratespostt)."""
     if not affix:
         return True
+    if len(affix) > MAX_AFFIX:
+        return False
     allowed = FILLERS | action_words
     reachable = [True] + [False] * len(affix)
     for end in range(1, len(affix) + 1):
@@ -127,7 +162,8 @@ def token_in_label(token: str, label: str, action_words: frozenset[str], whole_w
     plus action words or fillers (uaepassverify, my-tammpay, uae-pass-login). mashreqia and salikhan
     do not match."""
     long_token = len(token) >= SHORT_TOKEN and not whole_word
-    words = [w for w in WORD_SPLIT.split(label) if w]
+    label = label[:MAX_LABEL]
+    words = [w for w in WORD_SPLIT.split(label) if w][:MAX_WORDS]
     for word in [*words, label.replace("-", "")]:
         start = word.find(token)
         while start != -1:
@@ -150,21 +186,33 @@ def find_brand_in_host(
                 continue
             for token in tokens(brand):
                 whole = bool(brand.get("whole_word"))
-                if any(token_in_label(token, label, action_words, whole) for label in text.split(".")):
+                if any(token_in_label(token, label, action_words, whole) for label in text.split(".")[:MAX_LABELS]):
                     return BrandHit(brand, token, where)
     return None
 
 
+@lru_cache(maxsize=512)
+def name_pattern(raw: str) -> re.Pattern | None:
+    """An ASCII brand name as a whole word: "UAE PASS" also matches "uae-pass" and "uaepass", "Tammer" does not match "TAMM"."""
+    parts = [re.escape(part) for part in re.split(SEPARATORS + "+", raw.lower()) if part]
+    if len("".join(parts)) < 3 or not parts:
+        return None
+    return re.compile(rf"(?<![^\W_]){f'{SEPARATORS}*'.join(parts)}(?![^\W_])")
+
+
 def find_brand_in_text(text: str, brands: list[dict]) -> BrandHit | None:
-    """Brand names in page text, title or a URL path: ASCII tokens as words, Arabic names as substrings."""
+    """Brand names in page text, title or a URL path. ASCII names match as whole words, whatever their length
+    ("Tammer" is not TAMM). Arabic names have no case and take attached prefixes (بالهوية), so they match as substrings."""
+    text = text[:MAX_TEXT]
     lowered = text.lower()
-    words = set(filter(None, WORD_SPLIT.split(lowered)))
-    squashed = re.sub(r"[\s\-_]", "", lowered)
     for brand in brands:
-        for token in tokens(brand):
-            long_match = len(token) >= SHORT_TOKEN and not brand.get("whole_word") and token in squashed
-            if long_match or token in words:
-                return BrandHit(brand, token, "text")
+        raw_names = brand.get("match_tokens") or [brand["id"], *brand.get("names", [])]
+        for raw in raw_names:
+            if not raw.isascii():
+                continue
+            pattern = name_pattern(raw)
+            if pattern is not None and pattern.search(lowered):
+                return BrandHit(brand, re.sub(r"[\s\-_.&]", "", raw.lower()), "text")
         for name in brand.get("names", []):
             if not name.isascii() and len(name) >= 3 and name in text:
                 return BrandHit(brand, name, "text")
