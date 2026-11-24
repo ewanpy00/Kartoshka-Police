@@ -1,6 +1,6 @@
 from typing import Literal
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import events
@@ -70,14 +70,17 @@ def apply_decision(
     session.add(review)
     audit.record(session, reviewer, f"case.{decision}", domain, before, snapshot(row), reason)
     session.flush()
-    events.publish("case.reviewed", {"domain": domain, "decision": decision, "reviewer": reviewer})
+    events.publish_after_commit(session, "case.reviewed", {"domain": domain, "decision": decision, "reviewer": reviewer})
     return review
 
 
 def auto_confirm(session: Session, domain: str, brand_id: str | None, evidence_id: str) -> None:
-    """Confirm a domain without an officer, unless it is protected or already confirmed. The caller commits."""
+    """Confirm a domain without an officer, unless it is protected, already confirmed or last rejected by an officer. The caller commits."""
     row = session.get(Domain, domain)
     if row is not None and row.status in (*PROTECTED, "confirmed"):
+        return
+    latest = session.scalars(select(Review).where(Review.domain == domain).order_by(Review.id.desc())).first()
+    if latest is not None and latest.decision == "reject":
         return
     before = snapshot(row)
     after = snapshot(mark_confirmed(session, domain, brand_id, "auto"))

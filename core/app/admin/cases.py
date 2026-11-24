@@ -72,7 +72,7 @@ def group(rows, key) -> defaultdict:
 
 
 def collect(session: Session, only: str | None = None) -> list[Case]:
-    """Every domain with a warn or block check or a report, minus official and allowlisted ones."""
+    """Every domain whose latest evidence-bearing check is warn or block, or that has a report, minus official and allowlisted ones."""
     candidates = set(session.scalars(select(Check.domain).where(Check.verdict.in_(("warn", "block")))))
     candidates |= set(session.scalars(select(Report.domain)))
     candidates.discard(None)
@@ -103,7 +103,7 @@ def collect(session: Session, only: str | None = None) -> list[Case]:
                 latest_evidence[with_evidence.id] if with_evidence else None,
             )
         )
-    return cases
+    return [case for case in cases if case.reports or representative(case).verdict in ("warn", "block")]
 
 
 def representative(case: Case) -> Check:

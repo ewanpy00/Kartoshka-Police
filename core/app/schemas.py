@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def require_http_url(value: str) -> str:
@@ -27,7 +27,7 @@ class SafeAction(BaseModel):
 
 
 class CheckRequest(BaseModel):
-    url: str
+    url: str = Field(max_length=2000)
     source: str = "api"
     mode: Literal["fast", "deep"] = "fast"
 
@@ -70,8 +70,8 @@ class BatchResponse(BaseModel):
 
 
 class ReportRequest(BaseModel):
-    url: str
-    note: str = ""
+    url: str = Field(max_length=2000)
+    note: str = Field("", max_length=1000)
 
     _url = field_validator("url")(require_http_url)
 
@@ -102,17 +102,6 @@ class BlocklistEntry(BaseModel):
 
 class BlocklistResponse(BaseModel):
     domains: list[BlocklistEntry]
-
-
-class EvidenceResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    check_id: str
-    prev_hash: str | None
-    hash: str
-    payload: dict
-    created_at: datetime
 
 
 class Health(BaseModel):

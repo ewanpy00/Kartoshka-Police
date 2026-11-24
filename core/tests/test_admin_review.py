@@ -1,4 +1,5 @@
 from admin_factories import AUTH, add_check, add_evidence
+from app.admin.review import auto_confirm
 from app.models import AuditLog, Check, Domain, Report, Review
 
 
@@ -89,3 +90,24 @@ def test_anonymous_check_with_an_ordinary_source_still_works(client, published):
     response = client.post("/v1/check", json={"url": "https://other.example/", "source": "gatekeeper"})
     assert response.status_code == 200
     assert published == []
+
+
+def test_auto_confirm_respects_an_earlier_officer_reject(client, session):
+    evidence = scam_case(session)
+    decide(client, evidence, decision="reject", reason="legitimate_site")
+    auto_confirm(session, "uaepass-login.example", "uaepass", evidence.id)
+    assert session.get(Domain, "uaepass-login.example") is None
+    assert session.query(AuditLog).filter_by(action="case.auto_confirm").count() == 0
+
+
+def test_auto_confirm_confirms_a_fresh_domain(session):
+    evidence = scam_case(session)
+    auto_confirm(session, "uaepass-login.example", "uaepass", evidence.id)
+    assert session.get(Domain, "uaepass-login.example").confirmed_by == "auto"
+
+
+def test_report_and_check_inputs_are_length_limited(client):
+    long_url = "https://a.example/" + "x" * 2000
+    assert client.post("/v1/report", json={"url": long_url}).status_code == 422
+    assert client.post("/v1/report", json={"url": "https://a.example/", "note": "n" * 1001}).status_code == 422
+    assert client.post("/v1/check", json={"url": long_url}).status_code == 422

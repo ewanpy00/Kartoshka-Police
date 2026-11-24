@@ -64,6 +64,17 @@ def test_queue_skips_allow_checks_official_and_allowlisted_domains(client, sessi
     assert queue(client, state="all") == []
 
 
+def test_a_cleared_domain_leaves_the_queue_unless_it_has_a_report(client, session):
+    older = datetime.now(UTC) - timedelta(days=1)
+    flagged = add_check(session, "cleared.example", 85, created_at=older)
+    add_evidence(session, flagged)
+    add_evidence(session, add_check(session, "cleared.example", 5))
+    assert queue(client, state="all") == []
+    session.add(Report(domain="cleared.example", url="https://cleared.example/"))
+    session.flush()
+    assert [c["domain"] for c in queue(client)] == ["cleared.example"]
+
+
 def test_report_alone_makes_a_case(client, session):
     add_check(session, "reported.example", 0, verdict="pending")
     session.add(Report(domain="reported.example", url="https://reported.example/", note="odd sms"))
