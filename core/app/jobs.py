@@ -13,6 +13,7 @@ from app.db import get_engine
 from app.deep import extract, rdap
 from app.deep.score import score
 from app.evidence.store import append_evidence
+from app.graph.cluster import ingest_evidence
 from app.models import Check
 
 SANDBOX_TIMEOUT = 30
@@ -70,6 +71,8 @@ def run_deep_check(session: Session, check_id: str, sandbox: httpx.Client, rdap_
     }
     screenshot = capture["screenshot_path"]
     evidence = append_evidence(session, check.id, payload, Path(screenshot).name if screenshot else None)
+    if result["verdict"] in ("warn", "block"):
+        ingest_evidence(session, evidence.id)
 
     check.domain = domain
     check.verdict, check.score, check.stage, check.reasons = result["verdict"], result["score"], "deep", result["reasons"]
