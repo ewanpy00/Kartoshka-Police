@@ -87,7 +87,17 @@ async function computeMedianLead(): Promise<void> {
       cached = null
     }
     if (cached !== null) {
-      medianLead.value = JSON.parse(cached) as { hours: number; cases: number } | null
+      let parsed: unknown = null
+      try {
+        parsed = JSON.parse(cached)
+      } catch {
+        parsed = null
+      }
+      const value = parsed as { hours?: unknown; cases?: unknown } | null
+      medianLead.value =
+        value && typeof value.hours === 'number' && typeof value.cases === 'number' && value.cases > 0
+          ? { hours: value.hours, cases: value.cases }
+          : null
       return
     }
     const data = await apiJson<{ entries: AuditEntry[] }>('/v1/admin/audit?limit=500')
@@ -97,12 +107,14 @@ async function computeMedianLead(): Promise<void> {
       if (targets.length >= MAX_CASES) break
     }
     const values: number[] = []
+    let answered = 0
     let next = 0
     const worker = async () => {
       while (next < targets.length) {
         const target = targets[next++]
         try {
           const detail = await apiJson<CaseDetail>(`/v1/admin/cases/${encodeURIComponent(target)}`)
+          answered++
           const h = leadHours(detail.lead_time)
           if (h !== null) values.push(h)
         } catch {
@@ -113,7 +125,8 @@ async function computeMedianLead(): Promise<void> {
     await Promise.all(Array.from({ length: CONCURRENCY }, worker))
     const result = values.length ? { hours: median(values), cases: values.length } : null
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result))
+      // Cache for the session, unless every lookup failed: that says nothing about the data.
+      if (!targets.length || answered > 0) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result))
     } catch {
       // Storage may be blocked.
     }

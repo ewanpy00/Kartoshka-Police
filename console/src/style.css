@@ -255,7 +255,7 @@ body {
 .shell {
   display: grid;
   grid-template-columns: 256px minmax(0, 1fr);
-  align-items: start;
+  align-items: stretch;
   min-block-size: calc(100vh - 64px - 30px);
 }
 
@@ -692,9 +692,9 @@ button:disabled {
 
 .q-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: var(--space-3);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--space-3);
+  align-items: baseline;
   inline-size: 100%;
   padding: var(--space-3) var(--space-4);
   font: inherit;
@@ -702,6 +702,7 @@ button:disabled {
   text-align: start;
   background: transparent;
   border: 0;
+  border-inline-start: 3px solid transparent;
   border-block-end: 1px solid var(--c-hairline);
   border-radius: 0;
   cursor: pointer;
@@ -713,7 +714,7 @@ button:disabled {
 
 .q-row.selected {
   background: var(--c-selected);
-  box-shadow: inset 3px 0 0 var(--c-accent);
+  border-inline-start-color: var(--c-accent);
 }
 
 .q-row.dim {
@@ -729,6 +730,28 @@ button:disabled {
 .q-sub {
   font-size: var(--fs-13);
   color: var(--c-muted);
+}
+
+/* Row grid: domain and score on the first line, detail and age on the second. */
+.q-row > .q-domain,
+.q-row > .q-sub {
+  grid-column: 1;
+}
+
+.q-row > .q-score,
+.q-row > .q-age {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.q-row > .q-domain,
+.q-row > .q-score {
+  grid-row: 1;
+}
+
+.q-row > .q-sub,
+.q-row > .q-age {
+  grid-row: 2;
 }
 
 .q-score {

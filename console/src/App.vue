@@ -24,7 +24,7 @@ watch(officer, (value) => {
       <strong class="brand">{{ t('appTitle') }}</strong>
     </div>
     <div class="topbar-end">
-      <div class="seg" role="group" aria-label="Language">
+      <div class="seg" role="group" :aria-label="t('languageLabel')">
         <button type="button" :aria-pressed="locale === 'en'" @click="setLocale('en')">{{ t('langEn') }}</button>
         <button type="button" :aria-pressed="locale === 'ar'" @click="setLocale('ar')">{{ t('langAr') }}</button>
       </div>
@@ -38,7 +38,7 @@ watch(officer, (value) => {
     </div>
   </header>
   <div v-if="officer" class="shell">
-    <nav class="sidenav" aria-label="Main">
+    <nav class="sidenav" :aria-label="t('navLabel')">
       <RouterLink to="/queue" :class="{ 'router-link-active': route.path.startsWith('/queue') }">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12M2 8h12M2 12.5h8" /></svg>
         <span>{{ t('navQueue') }}</span>
