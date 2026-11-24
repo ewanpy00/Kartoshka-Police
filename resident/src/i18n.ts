@@ -3,12 +3,17 @@ import { ref, watchEffect } from 'vue'
 
 export type Lang = 'ar' | 'en'
 function initial(): Lang {
+  // Gatekeeper passes the language chosen in the app (?lang=), which wins over everything else.
+  const fromApp = new URLSearchParams(location.search).get('lang')
+  if (fromApp === 'en' || fromApp === 'ar') return fromApp
   try {
     const saved = localStorage.getItem('kp.lang')
     if (saved === 'en' || saved === 'ar') return saved
   } catch {
     /* ignore */
   }
+  // Inside the Gatekeeper app the screens follow the phone's language; elsewhere Arabic comes first.
+  if (navigator.userAgent.includes('KartoshkaGatekeeper')) return navigator.language.toLowerCase().startsWith('ar') ? 'ar' : 'en'
   return 'ar'
 }
 export const lang = ref<Lang>(initial())

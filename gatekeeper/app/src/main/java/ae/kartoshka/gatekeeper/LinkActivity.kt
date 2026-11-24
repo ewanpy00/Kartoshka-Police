@@ -60,6 +60,8 @@ class LinkActivity : AppCompatActivity() {
         var action = Decision.decide(url, local, listed, first, app.catalog, text)
         if (action == Action.Checking) {
             findViewById<View>(R.id.checking).visibility = View.VISIBLE
+            Motion.pulse(findViewById(R.id.checking_ring))
+            Motion.popIn(findViewById(R.id.checking_shield))
             val checkId = (first as? Remote.Answer)?.verdict?.checkId
             val second = withContext(Dispatchers.IO) {
                 if (checkId != null) Remote.Answer(runCatching { app.core.get(checkId, 2600) }.getOrElse { return@withContext Remote.Timeout })
@@ -78,11 +80,13 @@ class LinkActivity : AppCompatActivity() {
         when (action) {
             is Action.Forward -> if (!Browsers.open(this, url)) Toast.makeText(this, R.string.no_browser, Toast.LENGTH_LONG).show()
             is Action.Warn -> {
+                app.store.addCheck(url, "warn", action.page.brandId?.let { app.catalog.brand(it)?.nameEn })
                 startActivity(VerdictActivity.intent(this, action.page, blocked = false))
                 if (action.page.deepRunning) action.page.checkId?.let { DeepWatchWorker.start(this, it) }
             }
             is Action.Block -> {
                 app.store.countBlock()
+                app.store.addCheck(url, "block", action.page.brandId?.let { app.catalog.brand(it)?.nameEn })
                 startActivity(VerdictActivity.intent(this, action.page, blocked = true))
             }
             is Action.Checking -> Unit

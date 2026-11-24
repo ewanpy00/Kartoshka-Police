@@ -26,6 +26,8 @@ class GatekeeperApp : Application() {
         catalog = Catalog.fromJson(assets.open("brands.json").bufferedReader().use { it.readText() })
         lexical = Lexical(catalog)
         store = Store(this)
+        if (BuildConfig.DEMO) store.seedDemo()
+        Appearance.applyAtStart(store)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_ALERTS, getString(R.string.channel_alerts), NotificationManager.IMPORTANCE_HIGH)
         )

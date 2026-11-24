@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs retrain
+.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs retrain apk android android-demo tour record-tour
 
 help: ## Show this help
 	@awk -F ':.*## ' '/^[a-z-]+:.*## /{printf "  make %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -39,3 +39,18 @@ refs: ## Capture the brands' official pages and store their visual hashes (needs
 
 retrain: ## Retrain the URL model with officer decisions added as labels (A7)
 	./scripts/retrain.sh
+
+apk: ## Build the Gatekeeper debug APK in Docker (make apk host=<laptop IP> for Wi-Fi)
+	./scripts/apk.sh $(host)
+
+android: ## Build Gatekeeper natively and run it on the Android emulator (needs Android Studio's SDK)
+	./scripts/android.sh run
+
+android-demo: ## Same, with sample data in every tab (resident pages answer from resident/src/demo.ts)
+	GRADLE_ARGS="-Pdemo=true $(if $(resident),-PresidentUrl=$(resident))" ./scripts/android.sh run
+
+tour: ## Build the offline product tour into the Gatekeeper APK (make android does this too)
+	cd resident && npx vite build -c vite.tour.config.ts
+
+record-tour: ## Record the 24 s product tour (light theme) from the emulator or a USB phone: make record-tour lang=ar theme=dark
+	./scripts/android.sh tour $(or $(lang),en) $(or $(theme),light)
