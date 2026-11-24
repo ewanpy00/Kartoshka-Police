@@ -18,6 +18,7 @@ BATCH = 100
 FLUSH_S = 5.0
 SEEN_FOR_S = 24 * 3600
 MAX_PENDING = 5000
+SUBMIT_PER_MINUTE = int(os.environ["HUNTER_SUBMIT_PER_MINUTE"]) if os.environ.get("HUNTER_SUBMIT_PER_MINUTE") else None
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ class Submitter:
         self.seen: dict[tuple[str, str], float] = {}
         self.sent = 0
         self.dropped = 0
+        self._window_start = time.monotonic()
+        self._window_sent = 0
         self._post = post or self._http_post
         if post is None and not TOKEN:
             log.warning("CORE_WRITE_TOKEN is empty, submission to core will be refused")
@@ -60,10 +63,22 @@ class Submitter:
         self.pending.append(entry)
         return True
 
+    def _allowance(self) -> int:
+        """How many entries the next chunk may hold; with HUNTER_SUBMIT_PER_MINUTE set, what is left of this minute."""
+        if SUBMIT_PER_MINUTE is None:
+            return BATCH
+        now = time.monotonic()
+        if now - self._window_start >= 60:
+            self._window_start, self._window_sent = now, 0
+        return min(BATCH, SUBMIT_PER_MINUTE - self._window_sent)
+
     async def flush(self) -> int:
         sent = 0
         while self.pending:
-            chunk, self.pending = self.pending[:BATCH], self.pending[BATCH:]
+            size = self._allowance()
+            if size <= 0:
+                break
+            chunk, self.pending = self.pending[:size], self.pending[size:]
             groups = [g for g in ([e for e in chunk if e.deep], [e for e in chunk if not e.deep]) if g]
             for index, group in enumerate(groups):
                 body = {"entries": [{"source": e.source, "url": e.url, "brand_id": e.brand_id, "detail": e.detail}
@@ -78,6 +93,7 @@ class Submitter:
                     self.sent += sent
                     return sent
                 sent += len(group)
+                self._window_sent += len(group)
         self.sent += sent
         return sent
 
