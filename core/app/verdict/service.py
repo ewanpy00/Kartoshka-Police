@@ -11,7 +11,7 @@ from app.brands import display_name
 from app.config import Settings
 from app.fast.score import Assessment, assess, cache_key
 from app.models import Check, Hit, Verdict
-from app.verdict.bands import needs_deep, source
+from app.verdict.bands import band, needs_deep, source, total
 
 DEEP_SOURCES = ("hunter", "user_report", "preview", "pivot", "watchlist")
 BLOCK_CHANNELS = {"browser": "browser", "gatekeeper": "browser", "share": "share", "dns": "dns", "sms": "share"}
@@ -78,9 +78,14 @@ async def run_check(
     text: str = "",
     enqueue: bool = True,
     force_deep: bool = False,
+    extra_reasons: list[dict] | None = None,
 ) -> Check:
     assessment = await assess(session, url, settings, budget_ms, text)
     check = check_from(assessment, url, source_name, mode)
+    if extra_reasons and assessment.decided_by == "score":
+        check.reasons = check.reasons + extra_reasons
+        check.score = total(check.reasons)
+        check.verdict = band(check.score)
 
     reused = None
     if assessment.decided_by not in ("allowlist", "blocklist"):
@@ -115,14 +120,16 @@ async def run_check(
         else:
             check.deep_status = "joined"
             session.commit()
-    cache.publish({
-        "type": "check.created",
-        "check_id": check.id,
-        "domain": check.domain,
-        "verdict": check.verdict,
-        "score": check.score,
-        "source": source_name,
-        "brand": check.brand,
-        "at": datetime.now(UTC).isoformat(),
-    })
+    publish_verdict(check)
     return check
+
+
+def publish_verdict(check: Check) -> None:
+    """`check.verdict` for the console live feed, whenever a check reaches warn or block (fast or deep)."""
+    if check.verdict not in ("warn", "block"):
+        return
+    cache.publish({
+        "type": "check.verdict", "check_id": check.id, "domain": check.domain, "host": check.host,
+        "verdict": check.verdict, "score": check.score, "stage": check.stage, "source": check.source,
+        "brand": check.brand, "at": datetime.now(UTC).isoformat(),
+    })

@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.deep import infra, job, kit, signals, visual
 from app.evidence import store
 from app.graph import build as graph
-from app.models import Artifact, Campaign, Check, Domain, Evidence, Watchlist
+from app.models import Artifact, Check, Domain, Evidence, Watchlist
 from app.verdict.service import new_check_id
 
 BRANDS = scoring_brands(get_settings().data_dir)

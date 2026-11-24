@@ -36,6 +36,8 @@ Each slice is verified in the running stack and committed on its own.
 13. **The URL model (A1) is stored in the database** (`model_state`, key `url_model`), because `data/` is mounted read-only. Core and worker reload it every 5 minutes. The benign training URLs are bare Tranco domains, so training gives about two thirds of them a realistic subdomain and path; without that the model learned "has a path" as a phishing signal and rated `dubaimall.com/` 95% phishing. Tests stub the model out, so their scores do not depend on whichever model is in the shared database.
 14. **The deep path keys graph nodes, watchlist rows and kit owners by site**, not always by registrable domain. On a shared platform that hands out subdomains (an allowlisted domain such as `godaddysites.com`, or a free host), the site is the full host; otherwise it is the registrable domain. Without this one phishing page on GoDaddy Sites would watchlist and link every GoDaddy site.
 15. **Only the worker reaches the sandbox** (decision 2 of the DevOps plan). Anything that needs a capture, including `make refs` and the safe preview, runs through the worker.
+16. **The judges' batch traffic is evaluation, not intelligence.** Checks from `/v1/batch` stay out of the officer queue (except under `source=batch`) and out of the scam radar, so running `make eval` does not fill either with test-set URLs.
+17. **The officer side follows `docs/admin-dashboard.md`** (slices D1 to D7). Slice 3 builds the D1 backend; campaigns move to D2 and D3, takedown packs to D4 and D5.
 
 ## Progress
 
@@ -63,3 +65,12 @@ Each slice is verified in the running stack and committed on its own.
   - Visual references: `make refs` stored 15 of 18 brands. TAMM and DEWA render blank to the sandbox and Dubai Police times out from this network; `python -m app.deep.visual refs --missing` (in the worker) retries only those.
   - Live run on three OpenPhish URLs: a Facebook kit went from 73 to 100 (asks for a password; the crawler saw a different page); two were already down and went on the watchlist. crt.sh timed out on all three, so `ct` stays `unknown` from the fast path.
   - Unreachable and parked pages go on the watchlist (every 6 h for 14 days); `run_due` queues the re-checks and is exposed to the hunter in slice 3.
+- 2026-11-24: slice 3 done (resident API and the D1 backend). Migration `0003_admin` (takedown requests, append-only `audit_log`, edge strength and exclusion, entity degree, GSB and VirusTotal first-hit times, review reason). `make test`: core 112 passed.
+  - Review: reject needs a reason (`legitimate_site`, `not_a_scam`, `insufficient_evidence`, `duplicate`); only the first two clear the site. Confirm refuses official and allowlisted sites and, on a shared platform, blocks only the one site. Every decision writes a review, an officer verdict and an audit row, bumps the blocklist version and publishes `case.reviewed`.
+  - `/v1/admin/*` (all behind the write token): ranked queue, case card, recheck, watch, Hunter feed, watchlist, chain check, health. Domains and URLs come with a defanged `display`.
+  - Resident: `POST /v1/report` returns a report id and a token; `GET /v1/reports/{id}` with `X-Report-Token` gives the timeline (sent, analysed, in review, confirmed or rejected, taken down, blocks for others). Safe preview (`POST /v1/preview`, `GET /v1/preview/{evidence_id}.png`), scam radar, SMS paste. Each is rate-limited per `X-Device-Id`.
+  - Evidence PDF (`/v1/evidence/{id}.pdf`): Arabic shaped with HarfBuzz, links defanged, artifact hashes and the recomputed chain hash.
+  - `WS /v1/events` forwards `kp:events` (token as a query parameter). Events now use the contract names (`check.verdict`, `case.reviewed`, `hunter.candidate`, `brand.spike`, `watchlist.woke`, `campaign.new_domain`).
+  - Hunter intake: `POST /v1/intel/feeds`, `POST /v1/watchlist/run`, `POST /v1/hits`.
+  - Live run: the queue went from 496 cases to 8 once batch checks were left out; the live report of a TAMM look-alike showed "in police review" with one DNS block; the PDF and the preview image served; a wrong WebSocket token was refused.
+  - Health shows `deep_stale`: three checks queued before the deep job existed are still `queued`.

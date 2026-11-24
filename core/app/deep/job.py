@@ -23,10 +23,11 @@ from app.evidence import store
 from app.fast import intel, rdap
 from app.fast.score import age_reason
 from app.graph import build as graph
-from app.models import Check, Domain, Verdict
+from app.models import Check, Domain, Verdict, Watchlist
 from app.normalize.url import normalize
 from app.verdict.bands import band, ordered, source, total
 from app.verdict.reasons import KIND_AR, ago_ar, ago_en, reason
+from app.verdict.service import publish_verdict
 
 log = logging.getLogger("core.deep")
 
@@ -80,6 +81,7 @@ class Finding:
     campaign_id: str | None = None
     capture: dict | None = None
     visual: dict | None = None
+    events: list[dict] = field(default_factory=list)
 
 
 def graph_nodes(session: Session, cap: dict | None, found: signals.Signals, infra_data: dict,
@@ -277,9 +279,13 @@ def analyse(session: Session, check: Check, settings: Settings) -> list[Check]:
         finding.sources["sandbox"] = source("sandbox", "unknown", "page redirects to an internal address")
     else:
         kit_hash, kit_sim = analyse_page(session, cap, site, claimed, brands, finding)
+        watched = session.get(Watchlist, site)
         if finding.page.parked:
             watchlist.add(session, site, target, "PARKED", check.brand_id)
         else:
+            serves_form = any(form.get("fields") for form in cap.get("forms") or [])
+            if watched is not None and watched.last_status in ("parked", "unreachable") and serves_form:
+                finding.events.append({"type": "watchlist.woke", "domain": site, "check_id": check.id})
             watchlist.seen_live(session, site)
 
     fast_codes = {item["code"] for item in check.reasons or []}
@@ -308,10 +314,13 @@ def analyse(session: Session, check: Check, settings: Settings) -> list[Check]:
         if len(cap.get("chain") or []) > len(check.chain or []):
             check.chain = cap["chain"]
 
+    had_campaign = graph.campaign_of(session, site)
     graph.record(session, site, nodes, evidence.id)
     campaign = graph.refresh(session, site)
     if campaign is not None:
         finding.campaign_id = check.campaign_id = campaign.id
+        if had_campaign != campaign.id:
+            finding.events.append({"type": "campaign.new_domain", "campaign_id": campaign.id, "domain": site})
 
     updated = [check]
     joined = session.scalars(select(Check).where(Check.host == check.host, Check.deep_status == "joined", Check.id != check.id))
@@ -320,6 +329,7 @@ def analyse(session: Session, check: Check, settings: Settings) -> list[Check]:
         updated.append(other)
     for item in updated:
         session.add(Verdict(check_id=item.id, verdict=item.verdict, score=item.score, stage=item.stage, reasons=item.reasons))
+    session.info["deep_events"] = finding.events
     return updated
 
 
@@ -342,8 +352,6 @@ def deep_check(check_id: str) -> None:
         finally:
             queue.release_deep(host)
         for item in updated:
-            cache.publish({
-                "type": "check.updated", "check_id": item.id, "domain": item.domain, "verdict": item.verdict,
-                "score": item.score, "stage": item.stage, "brand": item.brand, "campaign_id": item.campaign_id,
-                "evidence_id": item.evidence_id, "at": datetime.now(UTC).isoformat(),
-            })
+            publish_verdict(item)
+        for event in session.info.pop("deep_events", []):
+            cache.publish({**event, "at": datetime.now(UTC).isoformat()})

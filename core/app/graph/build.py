@@ -83,6 +83,13 @@ def shared_nodes(session: Session, domain_id: int, others: set[int]) -> list[tup
     return [tuple(row) for row in rows]
 
 
+def campaign_of(session: Session, domain: str) -> str | None:
+    return session.scalar(
+        select(Edge.campaign_id).join(Entity, Entity.id == Edge.src_id)
+        .where(Entity.kind == "domain", Entity.value == domain, Edge.campaign_id.is_not(None)).limit(1)
+    )
+
+
 def refresh(session: Session, domain: str) -> Campaign | None:
     """Recompute the campaign of the domain's component and stamp it on edges and checks. The caller commits."""
     session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": GRAPH_LOCK})

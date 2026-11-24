@@ -14,6 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -67,6 +68,9 @@ class Domain(Base):
     brand_id: Mapped[str | None] = mapped_column(String)
     source: Mapped[str] = mapped_column(String, server_default="seed")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    # When GSB or VirusTotal first flagged a domain we already had: the lead-time number.
+    gsb_first_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    vt_first_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Verdict(Base):
@@ -117,6 +121,7 @@ class Entity(Base):
     kind: Mapped[str] = mapped_column(String)
     value: Mapped[str] = mapped_column(Text)
     first_seen: Mapped[datetime] = now_column()
+    domain_count: Mapped[int] = mapped_column(Integer, server_default="0")
 
 
 class Campaign(Base):
@@ -130,6 +135,7 @@ class Campaign(Base):
     summary: Mapped[str | None] = mapped_column(Text)
     first_seen: Mapped[datetime] = now_column()
     updated_at: Mapped[datetime] = now_column(onupdate=func.now())
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Edge(Base):
@@ -141,6 +147,8 @@ class Edge(Base):
     dst_id: Mapped[int] = mapped_column(ForeignKey("entities.id"), index=True)
     evidence_id: Mapped[str | None] = mapped_column(ForeignKey("evidence.id"))
     campaign_id: Mapped[str | None] = mapped_column(ForeignKey("campaigns.id"))
+    strength: Mapped[str] = mapped_column(String, server_default="weak")
+    excluded: Mapped[bool] = mapped_column(Boolean, server_default=sa_false())
 
 
 class Watchlist(Base):
@@ -166,6 +174,7 @@ class Review(Base):
     evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id"), index=True)
     decision: Mapped[str] = mapped_column(String)
     reviewer: Mapped[str] = mapped_column(String)
+    reason: Mapped[str | None] = mapped_column(String)
     note: Mapped[str | None] = mapped_column(Text)
     reviewed_at: Mapped[datetime] = now_column()
 
@@ -221,3 +230,40 @@ class ModelState(Base):
     value: Mapped[dict] = mapped_column(JSON)
     score: Mapped[float | None] = mapped_column(Float)
     updated_at: Mapped[datetime] = now_column(onupdate=func.now())
+
+
+class TakedownRequest(Base):
+    """One request to one recipient (registrar, host, Cloudflare, aeDA, GSB) for one domain."""
+
+    __tablename__ = "takedown_requests"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    domain: Mapped[str] = mapped_column(String, index=True)
+    campaign_id: Mapped[str | None] = mapped_column(String)
+    recipient_kind: Mapped[str] = mapped_column(String)
+    recipient: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, index=True)
+    pack_sha256: Mapped[str | None] = mapped_column(String(64))
+    generated_at: Mapped[datetime] = now_column()
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_by: Mapped[str | None] = mapped_column(String)
+    offline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    offline_reason: Mapped[str | None] = mapped_column(String)
+    checks_offline: Mapped[int] = mapped_column(Integer, server_default="0")
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class AuditLog(Base):
+    """Every officer and system decision. Append-only (trigger in migration 0003)."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    actor: Mapped[str] = mapped_column(String)
+    action: Mapped[str] = mapped_column(String, index=True)
+    target_kind: Mapped[str] = mapped_column(String)
+    target: Mapped[str] = mapped_column(String, index=True)
+    before: Mapped[dict | None] = mapped_column(JSON)
+    after: Mapped[dict | None] = mapped_column(JSON)
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = now_column()

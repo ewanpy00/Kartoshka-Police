@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     deep_reuse_hours: int = 6
     preview_rate_per_hour: int = 10
 
+    # Admin dashboard (docs/admin-dashboard.md)
+    takedown_sla_h: int = 48
+    takedown_recheck_min: int = 60
+    takedown_offline_checks: int = 2
+    graph_hub_degree: int = 50
+    brand_spike_per_hour: int = 10
+    report_rate_per_hour: int = 20
+
     virustotal_api_key: str = ""
     google_safe_browsing_api_key: str = ""
 

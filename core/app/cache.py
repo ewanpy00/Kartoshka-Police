@@ -92,3 +92,11 @@ def publish(event: dict) -> None:
         sync_client().publish(EVENTS_CHANNEL, json.dumps(event, default=str))
     except redis.RedisError:
         pass
+
+
+def sync_client_once(key: str, ttl_s: int) -> bool:
+    """True the first time `key` is claimed within `ttl_s` (used to announce a brand spike once an hour)."""
+    try:
+        return bool(sync_client().set(key, "1", nx=True, ex=ttl_s))
+    except redis.RedisError:
+        return False

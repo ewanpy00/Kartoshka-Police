@@ -129,7 +129,10 @@ class ReportResponse(BaseModel):
 class ReviewRequest(BaseModel):
     decision: Literal["confirm", "reject"]
     reviewer: str = Field("Demo Officer", max_length=200)
-    note: str = Field("", max_length=2000)
+    reason: Literal["legitimate_site", "not_a_scam", "insufficient_evidence", "duplicate"] | None = Field(
+        None, description="Required on reject. Shown to the resident as a plain status."
+    )
+    note: str = Field("", max_length=2000, description="Officer-only free text; never leaves the console.")
 
 
 class ReviewResponse(BaseModel):
@@ -138,6 +141,8 @@ class ReviewResponse(BaseModel):
     reviewer: str
     reviewed_at: datetime
     domain: str | None = None
+    status: str | None = Field(None, description="New domain status: confirmed, cleared, or null when unchanged")
+    reason: str | None = None
     blocklist_version: int | None = None
 
 
