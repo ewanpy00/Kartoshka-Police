@@ -4,4 +4,4 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ./scripts/env.sh
 
-docker compose --profile stretch down
+docker compose -p kartoshka-police --profile stretch down

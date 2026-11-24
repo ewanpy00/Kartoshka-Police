@@ -4,4 +4,4 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ./scripts/env.sh
 
-docker compose exec -T core alembic upgrade head
+docker compose -p kartoshka-police exec -T core alembic upgrade head

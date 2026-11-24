@@ -4,16 +4,18 @@ import io
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app import queue
+from app import events, queue
+from app.admin.router import router as admin_router
 from app.auth import require_write_token
 from app.checks import run_check
 from app.config import Settings, get_settings
 from app.db import get_session
+from app.evidence import routes as evidence_routes
 from app.models import Check, Domain, Evidence, Review
 from app.schemas import (
     BatchRequest,
@@ -22,7 +24,6 @@ from app.schemas import (
     BlocklistEntry,
     BlocklistResponse,
     CheckRequest,
-    EvidenceResponse,
     Health,
     ReportRequest,
     ReportResponse,
@@ -160,28 +161,7 @@ def review(evidence_id: str, body: ReviewRequest, session: SessionDep) -> Review
     )
 
 
-@v1.get("/evidence/{evidence_id}.pdf", status_code=501)
-def evidence_pdf(evidence_id: str) -> None:
-    raise HTTPException(501, "PDF export is not implemented yet")
-
-
-@v1.get("/evidence/{evidence_id}.json", response_model=EvidenceResponse)
-def evidence_json(evidence_id: str, session: SessionDep) -> Evidence:
-    evidence = session.get(Evidence, evidence_id)
-    if evidence is None:
-        raise HTTPException(404, "Unknown evidence id")
-    return evidence
-
-
-@v1.websocket("/events")
-async def events(websocket: WebSocket) -> None:
-    await websocket.accept()
-    await websocket.send_json({"type": "hello"})
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        return
-
-
 app.include_router(v1)
+app.include_router(evidence_routes.export_router)
+app.include_router(events.ws_router)
+app.include_router(admin_router)

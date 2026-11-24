@@ -4,4 +4,4 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ./scripts/env.sh
 
-docker compose ps
+docker compose -p kartoshka-police ps

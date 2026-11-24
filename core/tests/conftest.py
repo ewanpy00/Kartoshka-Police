@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app import queue
+from app import events, queue
 from app.config import Settings, get_settings
 from app.db import get_engine, get_session
 from app.main import app
@@ -26,6 +26,13 @@ def enqueued(monkeypatch):
     jobs = []
     monkeypatch.setattr(queue, "enqueue_deep_check", jobs.append)
     return jobs
+
+
+@pytest.fixture
+def published(monkeypatch):
+    messages = []
+    monkeypatch.setattr(events, "publish", lambda type, data: messages.append((type, data)))
+    return messages
 
 
 @pytest.fixture

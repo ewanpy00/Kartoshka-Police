@@ -4,4 +4,4 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ./scripts/env.sh
 
-docker compose exec -T -w /srv core python -m eval data/eval/sample.csv
+docker compose -p kartoshka-police exec -T -w /srv core python -m eval data/eval/sample.csv
