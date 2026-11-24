@@ -324,3 +324,23 @@ Scope: `console/` only, on `feat/console-stage2` from `main` after the feat/app 
 8. Takedown extras: stats, states after "sent", a detail panel with the request's audit rows, and "Check now". "Verifying, N of 2" until the backend closes the request; the 2 mirrors `TAKEDOWN_OFFLINE_CHECKS`, which the API does not expose.
 9. No drawer or modal exists in the design: detail panels use the two-column `.split` layout, confirmations use the armed-button pattern with a reason field.
 10. Tests: one vitest file per package, run once. One review pass, one round of fixes, then `make test` once.
+
+### Verification (stage 2)
+
+- `make test`, one run after the review fixes: all suites passed (core 462, sandbox 57, hunter 39, console 168 in 17 files with the build, resident build, dns 3, gatekeeper).
+- Browser, English at 1440px: all six screens show live data with no console errors. Arabic at 390px in dark theme: right-to-left, stacked tables, the health strip reduced to one status mark.
+- Empty states seen on Impact's lead-time table and Model quality's URL model (the dev data has neither).
+- A campaign name and a related-site domain containing `<img src=x onerror=alert(1)>` render as text.
+- With intercepted responses, because the dev data lacks these states: a takedown request with one offline check reads "Verifying, 1 of 2" and never "Offline"; exclude sends nothing without a reason or before the second confirmation; allowlisted and official domains show as refused.
+- Not checked live: a campaign action writing its audit row. No campaign in the dev data contains a reserved `.example` domain and exclude has no undo, so no real campaign was changed.
+
+### Known limits (stage 2)
+
+- Lead time on Impact looks up at most the first 30 confirmed cases, one request per case.
+- The disagreement list covers the newest 500 audit entries, not the 30-day window of the band table.
+- The credential-form mark on the watchlist looks up at most 20 `live` rows; other rows are marked only by a `watchlist.woke` event while the page is open.
+- "Check now" has no running flag from the API. The button stays disabled until the request changes, a new audit row appears, or 180 seconds pass; a re-check that finds the site live changes neither, so the button waits out the 180 seconds.
+- The "2" in "Verifying, N of 2" mirrors the backend default `TAKEDOWN_OFFLINE_CHECKS`; a deployment that changes it will show the wrong total.
+- Health reports only the AI key state. Safe Browsing and VirusTotal key states show "not stated".
+- Pivot is a search only. Sending related sites to the queue with a reason and an audit row needs a backend route.
+- There is no unmerge and no undo for exclude.
