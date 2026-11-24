@@ -58,7 +58,7 @@ Set these on the app service. Names in the first group are Railway's; the rest a
 | `ANTHROPIC_API_KEY` | optional | unset | Turns on the AI layer. Without it the app uses rules and the brand catalogue only. |
 | `AI_DAILY_CALLS` | optional | `200` | Daily cap on AI calls (UTC day). Unset means no cap. Over the cap, verdicts fall back to rules. |
 | `DEEP_DAILY_CHECKS` | optional | `300` | Daily cap on deep browser checks. Unset means no cap. Over it, a check keeps its fast verdict and is not queued. |
-| `BATCH_MAX_URLS` | optional | `200` suggested, code default 5000 | Most URLs one batch call accepts. It can be lowered but not raised above 5000. |
+| `BATCH_MAX_URLS` | optional | leave unset (5000) unless you need to restrict it | Most URLs one batch call accepts. It can be lowered but not raised above 5000. |
 | `CHECK_RATE_PER_MIN` | optional | default 120 | `POST /v1/check` per client address, without a write token. |
 | `READ_RATE_PER_MIN` | optional | default 300 | Public reads per client address. |
 | `BLOCKLIST_RATE_PER_MIN` | optional | default 60 | `/v1/blocklist` and `/v1/blocklist.txt` per client address. |
@@ -66,7 +66,7 @@ Set these on the app service. Names in the first group are Railway's; the rest a
 | `PREVIEW_IP_RATE_PER_HOUR` | optional | default 30 | `POST /v1/preview` per client address. |
 | `SMS_IP_RATE_PER_HOUR` | optional | default 120 | `POST /v1/sms` per client address. |
 | `BATCH_RATE_PER_HOUR` | optional | default 20 | `POST /v1/batch` per client address, without a write token. |
-| `AUTH_FAIL_PER_10MIN` | optional | default 10 | Wrong bearer tokens per client address before every token from that address, right or wrong, gets 429 for the rest of the window. |
+| `AUTH_FAIL_PER_10MIN` | optional | default 10 | Wrong bearer tokens per client address before further wrong ones get 429 for the rest of the window. The right token is always accepted. |
 | `HUNTER_ENABLED` | optional | `false` (image default) | `true` starts hunter inside the service. |
 | `HUNTER_SOURCES` | optional | `feeds,nrd,watchlist` | Hunter sources. A value containing `ct` stops the service from starting. |
 | `HUNTER_SUBMIT_PER_MINUTE` | optional | `20` | Most entries hunter sends to core per minute; the rest wait. |
@@ -114,6 +114,6 @@ Set the path to `/healthz` in service settings. Railway uses the injected `PORT`
 - The guard has a documented DNS-rebinding race: a name can resolve to a public address when checked and a private one when the browser connects.
 - Compose-level limits have no Railway equivalent here: `cap_drop`, read-only root filesystem, memory and pid caps.
 - The health check runs only at deploy start. A process that dies later is caught by the start script, which exits non-zero when any child exits; whether the service then restarts depends on its restart policy in service settings. A hung process is not caught.
-- Sign-in lockout is per address. After `AUTH_FAIL_PER_10MIN` wrong codes from one address, the right code is refused from that address too until the window ends, so someone on the same office or carrier address can lock officers out for up to ten minutes. The alternative, letting the right code through, would let guessing continue, so the lockout is kept.
+- Wrong access codes are limited per address: after `AUTH_FAIL_PER_10MIN` wrong codes, further wrong ones from that address get 429 until the window ends. The right code is always accepted, so nobody sharing an office or carrier address can lock officers out. This leaves guessing possible in principle, which is why the start script refuses a `CORE_WRITE_TOKEN` shorter than 32 characters: a random code of that length is not practical to guess.
 - Client addresses come from `X-Real-IP`. Railway documents that header but not `X-Forwarded-For`, so the latter is not trusted. Many phones on one mobile carrier can share an address, which is why the per-address limits are well above one phone's use.
 - Not verified locally: that the edge overwrites `X-Real-IP`, Chromium start-up and memory under Railway's limits, and the dashboard steps.
