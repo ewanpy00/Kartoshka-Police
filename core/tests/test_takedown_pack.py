@@ -2,7 +2,6 @@ import hashlib
 import io
 import zipfile
 
-import pytest
 from admin_factories import AUTH
 from app.models import AuditLog, Domain, Report, TakedownPack, TakedownRequest
 from sqlalchemy import func, select
@@ -130,9 +129,11 @@ def test_malformed_abuse_addresses_are_dropped(client, session):
     assert body["packs"] == [] and body["without_recipient"] == ["evil-one.example"]
 
 
-def test_registrar_name_with_a_line_break_is_refused(client, session):
-    infra = {**REGISTRAR, "registrar": "Reg Inc\nBcc: x@y.example"}
+def test_registrar_name_with_a_line_break_is_flattened_to_one_line(client, session):
+    infra = {**REGISTRAR, "registrar": "Reg Inc\r\nBcc: x@y.example\tmore\u2028one\x85two\x0bthree\x1cfour"}
     confirmed_case(session, "evil-one.example", infrastructure=infra)
-    with pytest.raises(ValueError, match="Line break"):
-        build(client, ["evil-one.example"])
-    assert session.scalar(select(func.count()).select_from(TakedownPack)) == 0
+    pack = build(client, ["evil-one.example"]).json()["packs"][0]
+    _, archive = zip_of(client, pack["id"])
+    email = archive.read("email.txt").decode()
+    assert "registrar Reg Inc Bcc: x@y.example more one two three four |" in email
+    assert not any(line.startswith("Bcc:") for line in email.splitlines())

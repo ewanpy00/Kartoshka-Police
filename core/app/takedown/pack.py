@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import re
+import unicodedata
 import zipfile
 
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from app.evidence.export import defang, export_json, render_pdf
 from app.evidence.store import screenshot_png
 from app.models import Evidence
 
+MAX_FIELD = 200
 DOMAIN_PATTERN = r"^[a-z0-9][a-z0-9.-]*$"
 
 REQUEST_EN = (
@@ -31,11 +33,9 @@ def check_domain(domain: str) -> str:
 
 
 def one_line(value: object) -> str:
-    """The value as text for email.txt; a line break would let third-party data inject header or body lines."""
-    text = str(value or "-")
-    if "\r" in text or "\n" in text:
-        raise ValueError(f"Line break in email field: {text[:80]!r}")
-    return text
+    """The value as one short line for email.txt; third-party data must not be able to add lines."""
+    text = "".join(" " if unicodedata.category(c)[0] == "C" or unicodedata.category(c) in ("Zl", "Zp") else c for c in str(value or "-"))
+    return re.sub(r" {2,}", " ", text).strip()[:MAX_FIELD]
 
 
 def email_text(recipient: str, items: list[tuple[str, Evidence]]) -> str:
