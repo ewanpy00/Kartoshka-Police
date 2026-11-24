@@ -1,6 +1,23 @@
 # Officer Console (admin panel) plan
 
-On approval this file is copied to `docs/admin-plan.md` on the new branch and kept up to date as the progress log.
+This is the build plan and progress log for branch `feat/admin-console`.
+
+## Status (2026-11-24)
+
+All seven steps are built, committed and verified on the running stack. `make up` ends healthy and `make test` is green: core 259, sandbox 50, hunter 29, console 10 plus the type-checked build.
+
+Verified live, not only in tests:
+
+- A reported URL goes through the deep check and appears as a case with its screenshot.
+- Confirm in the console puts the domain on `/v1/blocklist`, writes a `case.confirm` audit row, and `/v1/check` then returns block.
+- Reject with a reason stores the reason and leaves the domain off the blocklist.
+- Chain verify returns intact; the evidence PDF downloads with the token and is refused without it.
+- A takedown pack for a confirmed domain unzips and `shasum -c manifest.sha256` passes; the stored hash equals the file's; an unconfirmed domain gets 409; resident notes are absent from the pack.
+- Console in a browser: sign-in banner, queue, case card, defanged domains, HTML in a report note shown as text, AR/EN switch to RTL, live feed connected and receiving Hunter events, chain check, no console errors.
+
+Not verified live: a campaign with real data (no two real domains shared a strong link; covered by tests), the campaign graph in a browser, Safe Browsing and VirusTotal calls against the real services (no keys set; mocked in tests).
+
+Changes from the plan below, made during the build, are marked "changed" in the decisions table.
 
 ## Context
 
@@ -20,7 +37,13 @@ Branch: `feat/admin-console`, created from `main`. No push, no rename.
 |---|---|
 | Score of exactly 70 | Block. `>= 70` block, `30..69` warn, `< 30` allow (matches `BATCH_CUTOFF`). |
 | Case key | `checks.domain` = normalised host with a leading `www.` removed. No public-suffix handling tonight. |
-| Queue membership | A domain with a warn or block check, or at least one resident report. Official and allowlisted domains never appear. Hunter candidates that score allow show in the live feed only. |
+| Queue membership (changed) | A domain with a resident report, or whose representative check is warn or block. The representative is the highest-scoring evidence since the last officer re-run, so a cloaking site cannot clear itself with an anonymous clean check; only an officer re-run of the flagged URL can. Official and allowlisted domains never appear. |
+| Reserved sources (added) | `hunter`, `watchlist`, `user_report` and `officer` on `/v1/check` need the write token, so a caller cannot forge where a check came from. |
+| Lookalike rule (added) | A brand name must be a whole dot- or hyphen-separated token of the host, a run of adjacent tokens joined, or the name joined to one of the brand's keywords. Bare substrings do not match (`rustammullagaliev.ru` is not TAMM). |
+| Page facts (added) | Forms, inputs and links are read over the browser's debugging protocol, outside the page's script world. If they cannot be read the record says `capture.facts_available: false` and the score gains `PAGE_FACTS_UNAVAILABLE` (30). |
+| Campaign (changed) | Two or more domains joined by a strong link. A single domain has no campaign. Official phone numbers and official payment hosts are never links. Status is `campaign` only after an officer confirm. |
+| Events (added) | Review and campaign events are sent only after the database commit succeeds. |
+| Helpline numbers (changed) | Taken from each case's representative evidence when it names a brand and is warn or block. Each row has `confirmed`; the CSV exports officer-confirmed rows only. |
 | Ranking | `score × ln(1 + reports + hits) × freshness × boost`. `hits` = number of checks on the domain. `freshness = 1 / (1 + days since last seen)`. `boost = 1.5` when score is 30 to 69. Computed in Python. |
 | Reject reasons | `legitimate_site`, `parked_or_empty`, `already_offline`, `not_enough_evidence`, `test_or_internal`. The server validates the code; AR/EN labels live in the console. |
 | Auto-confirm | Deep score above 90 and a credential form. Sets `domains.confirmed_by='auto'`. Undo deletes that row and writes an audit entry; the case returns to the open queue. |
@@ -29,7 +52,7 @@ Branch: `feat/admin-console`, created from `main`. No push, no rename.
 | Review and the chain | The officer decision is not part of the hashed payload. It is joined from `reviews` at export time, so evidence rows are never updated. |
 | PDF library | WeasyPrint (BSD) with Jinja2 autoescape. Its `url_fetcher` hook is what fix 1 asks for. |
 | Evidence exports | `/v1/evidence/{id}.pdf` and `.json` both go behind the write token. |
-| WS auth | `WS /v1/events?token=…`, because a browser cannot set a header on a WebSocket. |
+| WS auth (changed) | The client connects to `WS /v1/events` and sends `{"type":"auth","token"}` as its first message; the server answers `{"type":"hello"}` or closes with 4401. A token in the URL does not authenticate, because the access log records URLs. |
 | Top-site list | `data/allowlist.txt` is the stand-in, as the code already says. Tranco import is a next step. |
 | Takedown tables | Two tables (`takedown_packs`, `takedown_requests`) instead of the proposal's one, so the zip and its hash are stored once per recipient. The zip is stored in Postgres. |
 | Takedown recipients | Registrar abuse, host abuse, Cloudflare. aeDA and the Safe Browsing report are next steps. |
@@ -87,7 +110,8 @@ Audit actions: `case.confirm`, `case.reject`, `case.auto_confirm`, `case.undo_au
   "capture": {"title": "", "text": "up to 20000 chars",
               "forms": [{"action": "", "inputs": [{"type": "", "name": ""}]}],
               "screenshot": {"file": "<uuid>.png", "sha256": ""},
-              "internal_requests_blocked": 0, "navigation_blocked": false},
+              "internal_requests_blocked": 0, "navigation_blocked": false,
+              "facts_available": true},
   "risk": {"score": 0, "verdict": "allow|warn|block", "credential_form": false,
            "reasons": [{"code": "", "weight": 0, "source": "", "en": "", "ar": ""}]},
   "infrastructure": {"rdap_status": "ok|failed", "registrar": null, "registered_at": null,
@@ -138,14 +162,14 @@ All under `/v1/admin` require the write token unless marked.
 | `GET /campaigns/{id}` | C | `{…header, domains: [{domain, state, score, evidence_id, excluded}], shared: [{kind, value, strength, domain_count}], locations: [{…location, domains}]}` |
 | `GET /campaigns/{id}/graph` | C | `{nodes: [{data: {id, label, kind}}], edges: [{data: {id, source, target, strength}}]}` |
 | `POST /campaigns/{id}/confirm` | C | body `{domains[], reviewer}`; `{confirmed[], skipped: [{domain, reason}]}` |
-| `POST /takedowns` | D | body `{domains[], generated_by}`; 201 `{packs: [Pack]}`, or 409 `{refused: [{domain, reason}]}` and nothing built |
+| `POST /takedowns` | D | body `{domains[], generated_by}`; 201 `{packs: [Pack], without_recipient: [domain]}`, or 409 `{refused: [{domain, reason}]}` and nothing built |
 | `GET /takedowns` | D | `{packs: [Pack]}` where Pack is `{id, recipient_kind, recipient, domains[], sha256, generated_at, sent_at, sent_by}` |
 | `GET /takedowns/{id}/pack.zip` | D | zip |
 | `POST /takedowns/{id}/sent` | D | body `{sent_by}`; Pack |
-| `GET /helplines`, `GET /helplines.csv` | D | `{numbers: [{phone, brand, source, domain, evidence_id, first_seen}]}` |
+| `GET /helplines`, `GET /helplines.csv` | D | `{numbers: [{phone, brand, source, domain, evidence_id, first_seen, confirmed}]}`; the CSV has confirmed rows only |
 | `GET /feed?limit=` | F | `{items: [{check_id, domain, url, brand, verdict, score, created_at}]}` |
 | `POST /watchlist/run` | F | 202 `{queued}` |
-| `WS /v1/events?token=` | F | stream of events |
+| `WS /v1/events` (first message carries the token) | F | stream of events |
 
 `CaseSummary`: `{domain, state, score, verdict, brand, sources[], reports, hits, first_seen, last_seen, evidence_id, campaign_id, rank}`. `state` is `open`, `auto_confirmed`, `confirmed` or `rejected`.
 
@@ -166,7 +190,7 @@ Envelope `{type, at, data}` on Redis channel `kp:events`.
 
 ## Package notes
 
-**P, deep pipeline.** The sandbox additionally returns page text, form fields, and `tel:` and WhatsApp links. Reasons and weights: brand name in a non-official domain 40, credential form 30, brand named in the page 20, registered under 30 days ago 15; a brand lookalike with a credential form scores at least 70. RDAP comes from `rdap.org` for the domain and the resolved IP. Cloudflare is detected from its published IP ranges or `*.ns.cloudflare.com` name servers. If RDAP fails the record says `rdap_status: failed` and the fields stay null. `/v1/report` also queues a deep check.
+**P, deep pipeline.** The sandbox additionally returns page text, form fields, and `tel:` and WhatsApp links. Reasons and weights: brand name in a non-official domain 40, credential form 25 (changed from 30 so that a login page alone is not "warn"), brand named as a whole word in the page 20, registered under 30 days ago 15, page facts unavailable 30; a brand lookalike with a credential form scores at least 70. RDAP comes from `rdap.org` for the domain and the resolved IP. Cloudflare is detected from its published IP ranges or `*.ns.cloudflare.com` name servers. If RDAP fails the record says `rdap_status: failed` and the fields stay null. `/v1/report` also queues a deep check.
 
 **A, evidence, fix 1.** The Jinja2 environment uses autoescape. The WeasyPrint URL fetcher refuses every URL except the `data:` URI our own code builds from the local screenshot file. The agent must confirm against the installed WeasyPrint version how `data:` URIs reach the fetcher. Tests: a title of `<script>` and `<img src="http://169.254.169.254/…">` renders as text and the fetcher records zero outside requests; altering one stored row makes verify name that row.
 
@@ -201,18 +225,25 @@ Run by the main session; only failing output is read.
 ## Known limits
 
 - The console is bound to 127.0.0.1 and the shared write token ships in its bundle. It is not officer authentication.
-- The WebSocket token travels in the URL.
+- The Safe Browsing key travels as a URL query parameter to Google, because that endpoint ignores the header. It is kept out of our logs.
+- Clustering uses features the attacker controls (phone numbers, payment hosts, addresses). A campaign is advice for the officer: membership never blocks a domain, and "Confirm all" writes one decision per ticked domain.
+- The lookalike rule misses a brand glued to a non-keyword (`tammpay.xyz`), character swaps and non-ASCII names in the domain. Those sites still score through the credential-form and page-text signals.
+- A deep check that raises (sandbox error, code reload) is not retried and its check stays `pending`.
+- One worker handles about two to four deep checks a minute; Hunter submits at most `HUNTER_SUBMIT_PER_MIN`.
+- The evidence PDF has Latin and Arabic fonts only; other scripts in captured page text print as boxes.
+- `data/brands.yaml` official phone numbers were read from the web and need a human check (TAMM `800555` is weakly sourced).
 - One case per host; no public-suffix grouping.
 - Evidence is append-only by convention and detected by verify; there is no database trigger.
 - No scheduler: watchlist checks run on demand.
 - Arabic email and label text is machine-written and needs a native proofread.
 - Helpline numbers come from captured pages only.
 
-## Open items for you (none block the build)
+## Open items for the team
 
-- **Official phone numbers.** `data/brands.yaml` has a placeholder for UAE PASS. No number will be invented. I will look the numbers up on the official sites and list them with their source URLs in the report for you to confirm.
-- **Test URL.** If the team has its own lookalike test domain, give it to me and verification steps 2 to 4 use it instead of `example.com`.
-- **Optional, yours to write.** The scoring weights in `core/app/deep/score.py` and the ranking function in `core/app/admin/cases.py` are short and are product decisions. Say so if you want to write either; otherwise the agents use the values above.
+- **Official phone numbers.** Confirm UAE PASS `600561111` (read on the u.ae page for the UAE PASS app) and TAMM `800555` (seen only on an error page of tamm.abudhabi/en/contact-us) against the official sites.
+- **Arabic text.** Console labels, scoring reasons and the takedown email need a native proofread.
+- **Scoring weights and ranking.** `core/app/deep/score.py` and `rank_case` in `core/app/admin/cases.py` are short and are product decisions; review the values.
+- **Demo data.** The dev database holds real Hunter candidates and the `example.com` and `example.org` verification cases (both rejected as `test_or_internal`). The team's own lookalike test domain is still needed for a block-level demo case.
 
 ## Next steps (out of scope tonight)
 
