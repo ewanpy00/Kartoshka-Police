@@ -591,3 +591,23 @@ def test_watchlist_run_polls_first_hits_and_survives_a_failure(session, monkeypa
     ids = asyncio.run(watchlist.run_due(session, get_settings(), now))
     assert {d for d, _, _ in polled} == {"poll-a.top", "poll-b.top"} and all(at == now for _, _, at in polled)
     assert len(ids) == 2
+
+
+def test_hidden_facts_on_a_lookalike_reach_the_floor_and_block(session, deep_env):
+    hidden = dict(forms=[], text="", title="", facts_available=False, final_url="https://tamm-fines.top/pay")
+    check = make_check(session, reasons=[reason("LOOKALIKE", official="tamm.abudhabi", distance=1)])
+    found = run_deep(session, deep_env, check, **hidden)
+    assert "BRAND_FACTS_HIDDEN" in found and found["PAGE_FACTS_UNAVAILABLE"]["weight"] == 30
+    assert check.score == total(check.reasons) == 75 and check.verdict == "block"
+
+
+def test_hidden_facts_on_a_plain_domain_stay_at_30(session, deep_env):
+    check = plain_check(session)
+    found = run_deep(session, deep_env, check, forms=[], text="", title="", facts_available=False)
+    assert "BRAND_FACTS_HIDDEN" not in found and check.score == 30 and check.verdict == "warn"
+
+
+def test_lookalike_with_visible_facts_and_no_credential_fields_is_unchanged(session, deep_env):
+    check = make_check(session, reasons=[reason("LOOKALIKE", official="tamm.abudhabi", distance=1)])
+    found = run_deep(session, deep_env, check, forms=[], text="Welcome to our long page " * 10, final_url="https://tamm-fines.top/pay")
+    assert "BRAND_FACTS_HIDDEN" not in found and "PAGE_FACTS_UNAVAILABLE" not in found and "BRAND_CREDENTIALS" not in found

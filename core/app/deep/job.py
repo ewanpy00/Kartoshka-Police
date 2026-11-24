@@ -183,11 +183,14 @@ def infra_reasons(infra_data: dict, fast_codes: set[str], finding: Finding) -> N
 def deterministic(check: Check, finding: Finding) -> list[dict]:
     """Fast and deep reasons with the hard floor, without the AI: the score the AI is gated and bounded by."""
     reasons = [item for item in merge(check.reasons or [], finding.reasons)
-               if item["code"] not in ("BRAND_CREDENTIALS", "AI_ASSESSMENT")]
+               if item["code"] not in ("BRAND_CREDENTIALS", "BRAND_FACTS_HIDDEN", "AI_ASSESSMENT")]
     reasons = signals.cap_credentials(reasons)
     floor = signals.credential_floor(reasons, finding.page, finding.host or check.host or "")
     if floor:
         reasons.append(floor)
+    hidden = signals.hidden_facts_floor(reasons, finding.page)
+    if hidden:
+        reasons.append(hidden)
     return reasons
 
 

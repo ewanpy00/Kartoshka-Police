@@ -282,6 +282,24 @@ def cap_credentials(reasons: list[dict]) -> list[dict]:
     return [capped.get(id(item), item) for item in reasons]
 
 
+# Impersonation signals only (no reputation hits): a page that hides its facts while one of these is present
+# is scored as if it had shown its credential form.
+IMPERSONATION_CODES = frozenset({
+    "BRAND_IN_DOMAIN", "BRAND_IN_SUBDOMAIN", "LOOKALIKE", "HOMOGLYPH", "MIXED_SCRIPTS", "PUNYCODE",
+    "VISUAL_MATCH", "BRAND_MISMATCH",
+})
+
+
+def hidden_facts_floor(reasons: list[dict], signals: "Signals", floor: int = 75) -> dict | None:
+    """Hiding the page's facts must not be cheaper than showing its credential form."""
+    if signals.facts_available or not any(item["code"] in IMPERSONATION_CODES for item in reasons):
+        return None
+    current = max(0, min(100, sum(r["weight"] or 0 for r in reasons)))
+    brand = signals.brand
+    return reason("BRAND_FACTS_HIDDEN", weight=max(0, floor - current),
+                  brand=display_name(brand) if brand else "a brand", brand_ar=arabic_name(brand) if brand else "جهة")
+
+
 def credential_floor(reasons: list[dict], signals: Signals, host: str, floor: int = 75) -> dict | None:
     """A page that is not the brand's and asks for a code, a card or UAE PASS credentials scores at least `floor`."""
     brand = signals.brand

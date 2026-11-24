@@ -10,11 +10,10 @@ import yaml
 SHORT_TOKEN = 5
 WORD_SPLIT = re.compile(r"[^a-z]+")
 # Work bounds: the host and the page text are written by the attacker.
-MAX_LABEL = 100        # characters of one label looked at; a DNS label is at most 63
-MAX_LABELS = 10        # labels of the domain part and of the subdomain part looked at
-MAX_WORDS = 16         # hyphen-separated words of one label looked at
-MAX_AFFIX = 32         # longest run of fillers and action words around a token (the DP is quadratic in it)
-MAX_TEXT = 20_000      # characters of page text looked at
+MAX_HOST = 253         # a longer host is not a hostname: it is not matched (callers flag it as suspicious)
+MAX_LABEL = 63         # a longer label is not a DNS label: it is not matched. Every label and word within the limits is scanned.
+MAX_AFFIX = MAX_LABEL  # the filler check is quadratic in the affix, so its work is bounded by the label length
+MAX_TEXT = 20_000      # page text beyond this is not scanned; equals the sandbox's TEXT_LIMIT, so nothing it captures is dropped
 SEPARATORS = r"[\s\-_.&]"
 
 
@@ -162,8 +161,9 @@ def token_in_label(token: str, label: str, action_words: frozenset[str], whole_w
     plus action words or fillers (uaepassverify, my-tammpay, uae-pass-login). mashreqia and salikhan
     do not match."""
     long_token = len(token) >= SHORT_TOKEN and not whole_word
-    label = label[:MAX_LABEL]
-    words = [w for w in WORD_SPLIT.split(label) if w][:MAX_WORDS]
+    if len(label) > MAX_LABEL:
+        return False
+    words = [w for w in WORD_SPLIT.split(label) if w]
     for word in [*words, label.replace("-", "")]:
         start = word.find(token)
         while start != -1:
@@ -173,20 +173,24 @@ def token_in_label(token: str, label: str, action_words: frozenset[str], whole_w
     return False
 
 
+def invalid_host(text: str) -> bool:
+    return len(text) > MAX_HOST or any(len(label) > MAX_LABEL for label in text.split("."))
+
+
 def find_brand_in_host(
     labels_domain: str, labels_sub: str, brands: list[dict], action_words: frozenset[str], host: str = ""
 ) -> BrandHit | None:
     """The first brand named in the registrable label, then in the subdomain. A brand on its own
     official domain is not an impersonation (global brands are not in the domains table)."""
     for where, text in (("domain", labels_domain), ("subdomain", labels_sub)):
-        if not text:
+        if not text or invalid_host(text):
             continue
         for brand in brands:
             if host and is_official(host, brand):
                 continue
             for token in tokens(brand):
                 whole = bool(brand.get("whole_word"))
-                if any(token_in_label(token, label, action_words, whole) for label in text.split(".")[:MAX_LABELS]):
+                if any(token_in_label(token, label, action_words, whole) for label in text.split(".")):
                     return BrandHit(brand, token, where)
     return None
 

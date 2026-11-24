@@ -213,3 +213,22 @@ def test_official_phones_are_e164_and_skip_placeholders():
     assert "+971600561111" in phones
     assert all(number.startswith("+971") and number[1:].isdigit() for number in phones)
     assert len(phones) >= 2
+
+
+def test_brand_is_matched_in_any_label_and_any_word():
+    deep = ".".join("abcdefghij") + ".tamm-pay.xyz"          # the brand is the 11th label from the left
+    assert find_brand_in_host("tamm-pay", ".".join("abcdefghij"), BRANDS, ACTION_WORDS)  # in the domain part
+    assert analyse(f"https://{deep}/")[2]["id"] == "tamm"
+    assert find_brand_in_host("", "a.b.c.d.e.f.g.h.i.j.k.tamm-pay", BRANDS, ACTION_WORDS)  # last label of the subdomain
+    assert find_brand_in_host("-".join(["a"] * 19 + ["tamm"]), "", BRANDS, ACTION_WORDS)  # last of 20 hyphenated words
+
+
+def test_overlong_host_is_not_matched_but_is_flagged():
+    from app.brands import invalid_host
+
+    host = "x" * 300
+    assert invalid_host(host) and invalid_host("a." + "b" * 64 + ".com")
+    assert find_brand_in_host(host + "tamm", host + "tamm", BRANDS, ACTION_WORDS) is None
+    n = normalize("https://" + host + ".example/")
+    codes_, _, _ = lexical(n, BRANDS)
+    assert any(r["code"] == "LONG_HOST" and r["weight"] == 30 for r in codes_)

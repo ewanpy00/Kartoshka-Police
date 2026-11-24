@@ -5,7 +5,7 @@ from collections import Counter
 
 from rapidfuzz.distance import Levenshtein
 
-from app.brands import arabic_name, display_name, find_brand_in_host, find_brand_in_text, is_official, official_labels, tokens
+from app.brands import arabic_name, display_name, find_brand_in_host, find_brand_in_text, invalid_host, is_official, official_labels, tokens
 from app.fast.homoglyph import mixed_scripts, skeleton
 from app.normalize.url import NormalizedURL
 from app.verdict.reasons import reason
@@ -188,7 +188,9 @@ def lexical(n: NormalizedURL, brands: list[dict]) -> tuple[list[dict], dict, dic
         reasons.append(reason("REDIRECT_CHAIN", hops=hops))
 
     features["host_length"] = len(n.host)
-    if len(n.host) > 45:
+    if invalid_host(n.host):  # not a hostname, so brand matching skips it: never clean
+        reasons.append(reason("LONG_HOST", weight=30))
+    elif len(n.host) > 45:
         reasons.append(reason("LONG_HOST"))
     depth = len(n.subdomain.split(".")) if n.subdomain else 0
     features["subdomain_depth"] = depth

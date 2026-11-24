@@ -117,6 +117,11 @@ CATALOG: dict[str, Template] = {
     "PAGE_FACTS_UNAVAILABLE": Template(
         30, "sandbox", "The page prevented inspection of its forms and text", "الصفحة منعت فحص نماذجها ونصها"
     ),
+    "BRAND_FACTS_HIDDEN": Template(
+        0, "sandbox",
+        "A page that imitates {brand} hides its forms and text from inspection",
+        "صفحة تقلّد {brand_ar} تمنع فحص نماذجها ونصها",
+    ),
     "BRAND_MISMATCH": Template(
         30, "sandbox", "Page shows {brand} branding on a domain that is not {brand}'s", "الصفحة تعرض علامة {brand_ar} على نطاق لا يتبع لها"
     ),
