@@ -28,6 +28,7 @@ function health(over: Partial<Health> = {}): Health {
     evidence_records: 7,
     blocklist_version: 'v1',
     ai_key_set: true,
+    budget: { ai: { used: 0, limit: null, reached: false }, deep: { used: 0, limit: null, reached: false } },
     ...over,
   }
 }

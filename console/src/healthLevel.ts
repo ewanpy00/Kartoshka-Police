@@ -11,7 +11,7 @@ const RANK: Record<HealthLevel, number> = { ok: 0, degraded: 1, down: 2 }
 /**
  * The state of each part the strip shows. Down means checks cannot run at all: Redis is failing or no
  * worker serves the deep queue. Degraded means the system runs but an officer should look: deep checks
- * are stale or failed, Hunter has gone quiet, or no AI key is set.
+ * are stale or failed, Hunter has gone quiet, no AI key is set, or the daily AI limit is reached.
  */
 export function healthParts(health: Health, now: number = Date.now()): Record<HealthPart, HealthLevel> {
   const queue = health.deep_queue
@@ -23,7 +23,7 @@ export function healthParts(health: Health, now: number = Date.now()): Record<He
     redis: health.redis_ok ? 'ok' : 'down',
     deep,
     hunter: hunterFresh ? 'ok' : 'degraded',
-    ai: health.ai_key_set ? 'ok' : 'degraded',
+    ai: health.ai_key_set && !health.budget.ai.reached ? 'ok' : 'degraded',
   }
 }
 

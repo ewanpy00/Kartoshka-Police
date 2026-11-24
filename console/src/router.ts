@@ -12,7 +12,7 @@ import QualityView from './views/QualityView.vue'
 import HealthView from './views/HealthView.vue'
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', redirect: '/queue' },
     { path: '/queue/:domain?', component: QueueView },

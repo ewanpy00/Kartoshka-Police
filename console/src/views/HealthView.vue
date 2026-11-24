@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { refreshHealth, startHealth, useHealth } from '../health'
 import { healthLevel, type HealthLevel } from '../healthLevel'
 import { formatTime, t, type Key } from '../i18n'
+import type { Budget } from '../types'
 
 const { health, reachable } = useHealth()
 
@@ -13,6 +14,12 @@ const level = computed(() => healthLevel(health.value))
 
 function modelName(name: string): string {
   return KNOWN_MODELS.has(name) ? t(`healthModel_${name}` as Key) : name
+}
+
+function budgetText(budget: Budget): string {
+  return budget.limit === null
+    ? t('healthBudgetUnlimited', { used: budget.used })
+    : t('healthBudgetUsed', { used: budget.used, limit: budget.limit })
 }
 
 onMounted(startHealth)
@@ -110,6 +117,24 @@ onMounted(startHealth)
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-section">
+        <h2 class="section-title">{{ t('healthBudgets') }}</h2>
+        <dl class="kv">
+          <dt>{{ t('healthBudgetAi') }}</dt>
+          <dd>
+            {{ budgetText(health.budget.ai) }}
+            <span v-if="health.budget.ai.reached" class="badge warn">{{ t('healthBudgetAiReached') }}</span>
+          </dd>
+          <dt>{{ t('healthBudgetDeep') }}</dt>
+          <dd>
+            {{ budgetText(health.budget.deep) }}
+            <span v-if="health.budget.deep.reached" class="badge warn">{{ t('healthBudgetDeepReached') }}</span>
+          </dd>
+        </dl>
       </div>
     </div>
 

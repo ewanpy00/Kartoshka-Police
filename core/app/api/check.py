@@ -3,19 +3,20 @@ import csv
 import io
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.auth import bearer, require_write_token
+from app.auth import address_limit, bearer, require_write_token
 from app.csvsafe import cell
-from app.deps import SessionDep, SettingsDep
+from app.deps import HOUR, SessionDep, SettingsDep
 from app.models import Check
 from app.schemas import BatchRequest, BatchResponse, BatchResult, CheckRequest, Verdict, for_resident
 from app.verdict.service import run_check
 
 router = APIRouter()
 
+MINUTE = 60
 RESIDENT_SOURCES = ("browser", "gatekeeper", "share", "resident", "sms")
 # The only sources an open caller may claim. Every other value (hunter, watchlist, user_report, officer, batch,
 # preview, pivot, or any made-up name) is assigned by internal code and needs the write token, so a forged
@@ -41,19 +42,23 @@ def shape(check: Check, resident: bool) -> dict | Verdict:
 
 @router.post("/check", response_model=Verdict, description=CHECK_NOTE)
 async def create_check(
+    request: Request,
     body: CheckRequest,
     session: SessionDep,
     settings: SettingsDep,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
 ):
+    address_limit(request, settings, "check", settings.check_rate_per_min, MINUTE)
     if body.source not in OPEN_SOURCES:
-        require_write_token(credentials, settings)
+        require_write_token(request, credentials, settings)
     check = await run_check(session, body.url, body.source, body.mode, settings, text=body.text)
     return shape(check, body.source in RESIDENT_SOURCES)
 
 
 @router.get("/check/{check_id}", response_model=Verdict, description="Fetch a stored check, including its deep result once ready.")
-def get_check(check_id: str, session: SessionDep, view: Annotated[str, Query(pattern="^(full|resident)$")] = "full"):
+def get_check(check_id: str, request: Request, session: SessionDep, settings: SettingsDep,
+              view: Annotated[str, Query(pattern="^(full|resident)$")] = "full"):
+    address_limit(request, settings, "read", settings.read_rate_per_min, MINUTE)
     check = session.get(Check, check_id)
     if check is None:
         raise HTTPException(404, "Unknown check id")
@@ -68,13 +73,20 @@ def get_check(check_id: str, session: SessionDep, view: Annotated[str, Query(pat
     "per-URL budget. `explain=true` adds the band, brand and reasons. Use `?format=csv` for CSV.",
 )
 async def batch(
+    request: Request,
     body: BatchRequest,
     session: SessionDep,
     settings: SettingsDep,
     format: Annotated[str, Query(pattern="^(json|csv)$")] = "json",
     explain: bool = False,
     deep: bool = False,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
 ) -> Response:
+    if deep:
+        require_write_token(request, credentials, settings)
+    if len(body.urls) > settings.batch_max_urls:
+        raise HTTPException(422, f"At most {settings.batch_max_urls} URLs per batch")
+    address_limit(request, settings, "batch", settings.batch_rate_per_hour, HOUR)
     slots = asyncio.Semaphore(settings.batch_concurrency)
 
     async def check_one(url: str) -> BatchResult:

@@ -4,6 +4,7 @@
 // value and drop `display`, `display_url` and `display_final_url`; views defang once with `defang()`.
 import type {
   AuditEntry,
+  Budget,
   CampaignDetail,
   CampaignHeader,
   CaseDetail,
@@ -481,6 +482,11 @@ export function adaptWatchlist(body: Raw): Watchlist {
   }
 }
 
+/** An older backend sends no budget: that reads as no limit and not reached. */
+function adaptBudget(raw: Raw | null | undefined): Budget {
+  return { used: num(raw?.used), limit: nullableNum(raw?.limit), reached: raw?.reached === true }
+}
+
 /** Built field by field: nothing the backend might add (a key, a token) can reach a view. */
 export function adaptHealth(raw: Raw): Health {
   const queue: Raw | null = raw.deep_queue ?? null
@@ -509,6 +515,7 @@ export function adaptHealth(raw: Raw): Health {
     evidence_records: num(raw.evidence?.records),
     blocklist_version: typeof version === 'string' || typeof version === 'number' ? String(version) : null,
     ai_key_set: raw.ai === 'configured',
+    budget: { ai: adaptBudget(raw.budget?.ai), deep: adaptBudget(raw.budget?.deep) },
   }
 }
 

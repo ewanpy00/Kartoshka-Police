@@ -4,8 +4,9 @@ from fastapi import APIRouter, FastAPI
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
-from app import events, queue
+from app import events, queue, static
 from app.api import admin, admin_campaigns, admin_takedowns, blocklist, check, evidence, intel, resident, review
+from app.config import get_settings
 from app.deps import SessionDep
 from app.schemas import Health
 
@@ -42,3 +43,5 @@ for module in (check, blocklist, resident, review, evidence, intel, admin, admin
     v1.include_router(module.router)
 app.include_router(v1)
 app.include_router(events.ws_router)  # WS /v1/events, the only events route
+if get_settings().static_dir:
+    static.install(app, get_settings().static_dir)

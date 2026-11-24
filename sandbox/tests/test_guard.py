@@ -24,6 +24,12 @@ async def test_compose_service_names_are_internal(host):
         "::ffff:127.0.0.1",
         "100.64.0.1",
         "fd00::1",
+        "postgres.railway.internal",
+        "redis.railway.internal",
+        "localhost",
+        "127.0.0.1",
+        "10.0.0.5",
+        "fd12::1",
     ],
 )
 async def test_internal_names_and_addresses(host):

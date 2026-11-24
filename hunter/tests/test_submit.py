@@ -77,3 +77,21 @@ def test_an_empty_write_token_is_warned_about(monkeypatch, caplog):
     with caplog.at_level(logging.WARNING, logger="hunter"):
         Submitter()
     assert "CORE_WRITE_TOKEN is empty" in caplog.text
+
+
+def test_the_per_minute_cap_keeps_the_rest_pending_until_the_minute_passes(monkeypatch):
+    monkeypatch.setattr(submit, "SUBMIT_PER_MINUTE", 2)
+    bodies = []
+
+    async def post(body):
+        bodies.append(body)
+
+    submitter = Submitter(post=post)
+    for n in range(5):
+        submitter.add(entry(n))
+    assert asyncio.run(submitter.flush()) == 2
+    assert asyncio.run(submitter.flush()) == 0
+    assert len(submitter.pending) == 3
+    submitter._window_start -= 61
+    assert asyncio.run(submitter.flush()) == 2
+    assert len(submitter.pending) == 1

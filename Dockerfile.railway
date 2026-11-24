@@ -1,0 +1,65 @@
+FROM node:24.22.3-alpine3.24 AS web
+
+ARG DEMO_BANNER=false
+ENV VITE_SAME_ORIGIN_API=true \
+    VITE_DEMO_BANNER=${DEMO_BANNER}
+
+WORKDIR /build
+COPY design design
+
+COPY console/package.json console/package-lock.json console/
+RUN cd console && npm ci
+COPY console console
+RUN cd console && npm run build -- --base=/console/
+
+COPY resident/package.json resident/package-lock.json resident/
+RUN cd resident && npm ci
+COPY resident resident
+RUN cd resident && npm run build
+
+
+FROM mcr.microsoft.com/playwright/python:v1.65.2-noble
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    STATIC_DIR=/srv/static \
+    TRUST_PROXY=true \
+    SANDBOX_URL=http://127.0.0.1:8001 \
+    DATA_DIR=/srv/data \
+    CAPTURES_DIR=/captures \
+    HUNTER_ENABLED=false
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 fonts-dejavu-core fonts-noto-core tini python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --system --create-home --shell /usr/sbin/nologin core
+
+COPY core/requirements.txt /tmp/core-requirements.txt
+COPY sandbox/requirements.txt /tmp/sandbox-requirements.txt
+COPY hunter/requirements.txt /tmp/hunter-requirements.txt
+RUN python3 -m venv /opt/core && /opt/core/bin/pip install -r /tmp/core-requirements.txt \
+    && python3 -m venv /opt/sandbox && /opt/sandbox/bin/pip install -r /tmp/sandbox-requirements.txt \
+    && python3 -m venv /opt/hunter && /opt/hunter/bin/pip install -r /tmp/hunter-requirements.txt \
+    && rm /tmp/*-requirements.txt
+
+COPY core/alembic.ini /srv/core/alembic.ini
+COPY core/alembic /srv/core/alembic
+COPY core/app /srv/core/app
+COPY hunter/app /srv/hunter/app
+COPY sandbox/app /srv/sandbox/app
+COPY data /srv/data
+COPY --from=web /build/resident/dist /srv/static/resident
+COPY --from=web /build/console/dist /srv/static/console
+COPY deploy/railway/start.sh /srv/start.sh
+
+RUN mkdir /captures \
+    && chown pwuser:pwuser /captures \
+    && chmod 755 /captures /srv/start.sh \
+    && chown -R root:core /srv/core /srv/hunter /srv/data \
+    && chmod -R o-rwx /srv/core /srv/hunter /srv/data
+
+WORKDIR /srv
+EXPOSE 8000
+ENTRYPOINT ["tini", "-g", "--", "/srv/start.sh"]

@@ -11,6 +11,15 @@ import { theme, toggleTheme } from './theme'
 const route = useRoute()
 const { awaiting } = useStats()
 
+const code = ref('')
+const signInError = ref('')
+const demoEnvironment = import.meta.env.VITE_DEMO_BANNER === 'true'
+
+async function submitCode(): Promise<void> {
+  signInError.value = (await signIn(code.value)) ?? ''
+  if (!signInError.value) code.value = ''
+}
+
 const head = ref<HTMLElement | null>(null)
 let headObserver: ResizeObserver | null = null
 
@@ -43,7 +52,10 @@ watch(officer, (value) => {
 
 <template>
   <div ref="head" class="app-head">
-  <div class="banner" role="status">{{ t('demoBanner') }}</div>
+  <div class="banner" role="status">
+    {{ t('demoBanner') }}
+    <template v-if="demoEnvironment"><br />{{ t('demoEnvironment') }}</template>
+  </div>
   <header class="topbar">
     <div class="brand-block">
       <span class="mark" aria-hidden="true">KP</span>
@@ -101,7 +113,13 @@ watch(officer, (value) => {
   <main v-else class="signed-out">
     <section class="panel signin">
       <h1>{{ t('signInTitle') }}</h1>
-      <button @click="signIn">{{ t('signInButton') }}</button>
+      <p class="muted">{{ t('signInDemoLabel') }}</p>
+      <form @submit.prevent="submitCode">
+        <label for="access-code">{{ t('accessCodeLabel') }}</label>
+        <input id="access-code" v-model="code" type="password" autocomplete="off" />
+        <p v-if="signInError" class="error" role="alert">{{ signInError }}</p>
+        <button type="submit">{{ t('signInButton') }}</button>
+      </form>
     </section>
   </main>
 </template>

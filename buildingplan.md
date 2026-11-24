@@ -55,7 +55,7 @@ Rules for every subagent brief:
 | sandbox | build `./sandbox` (`mcr.microsoft.com/playwright/python:v1.65.2-noble`, pip `playwright==1.65.2`) | 8001 | GET `/healthz` via python urllib | hardening below |
 | certstream | `0rickyy0/certstream-server-go:v1.10.1` | 8080 | `wget -qO- http://127.0.0.1:8080/example.json` | uses the config baked into the image, so no config file is committed |
 | hunter | build `./hunter` (python 3.12 slim) | none | heartbeat file `/tmp/hunter.heartbeat` newer than 60 s | `watchfiles` wrapping `python -m app.certstream_consumer`; depends on healthy certstream |
-| console | build `./console` (`node:24.22.3-alpine3.24`) | 5173 | `wget -qO- http://127.0.0.1:5173/` | `npm run dev`; `node_modules` in an anonymous volume; gets `VITE_CORE_WRITE_TOKEN=${CORE_WRITE_TOKEN}` |
+| console | build `./console` (`node:24.22.3-alpine3.24`) | 5173 | `wget -qO- http://127.0.0.1:5173/` | `npm run dev`; `node_modules` in an anonymous volume |
 | adguard | `adguard/adguardhome:v0.107.80` | 53, 3000 | none | profile `stretch`; host ports `${ADGUARD_DNS_PORT}` (5335) and `${ADGUARD_UI_PORT}` (3001) |
 
 Mounts: core and worker get `./core:/srv/core`, `./data:/srv/data:ro`, `./eval:/srv/eval:ro`, working dir `/srv/core`. Hunter gets `./hunter:/srv/hunter`, `./data:/srv/data:ro`. Sandbox gets `./sandbox/app:/srv/sandbox/app:ro` and the `captures` volume at `/captures`; the worker mounts `captures` read-only. Python containers run as a non-root user with `PYTHONDONTWRITEBYTECODE=1`.
@@ -74,7 +74,7 @@ Sandbox hardening: `user: pwuser`, `cap_drop: [ALL]`, `security_opt: [no-new-pri
 | `CAPTURE_TIMEOUT_MS` | `15000` | sandbox |
 | `CERTSTREAM_URL` | `ws://certstream:8080/` (lite stream) | hunter |
 | `DATA_DIR` | `/srv/data` | core, worker, hunter |
-| `CORE_WRITE_TOKEN` | empty in `.env.example`; `make up` generates one when it creates `.env` | core, console (as `VITE_CORE_WRITE_TOKEN`) |
+| `CORE_WRITE_TOKEN` | empty in `.env.example`; `make up` generates one when it creates `.env` | core; the console asks for it as the access code at sign-in |
 | `BATCH_URL_BUDGET_MS` | `3000` | core |
 | `BATCH_CUTOFF` | `70` | core |
 | `BIND_ADDR`, `CORE_PORT`, `CONSOLE_PORT` | `127.0.0.1`, `8000`, `5173` | compose |
@@ -108,7 +108,7 @@ Sandbox hardening: `user: pwuser`, `cap_drop: [ALL]`, `security_opt: [no-new-pri
 ### Console contract
 
 - The console calls `/api/...`; Vite proxies `/api` to `http://core:8000` and strips the prefix, so core needs no CORS config.
-- One fetch wrapper adds `Authorization: Bearer` from `VITE_CORE_WRITE_TOKEN` in browser code. The Vite proxy must not inject the token, because that would make port 5173 an authenticated relay for anything that can reach it.
+- One fetch wrapper adds `Authorization: Bearer` with the access code the officer typed at sign-in, kept in sessionStorage. The code is `CORE_WRITE_TOKEN`; nothing secret is built into the bundle. The Vite proxy must not inject the token, because that would make port 5173 an authenticated relay for anything that can reach it.
 
 ### Command contracts (what `scripts/*.sh` call)
 

@@ -67,6 +67,8 @@ function deviceId(): string {
   }
 }
 
+const API_PREFIX = import.meta.env.VITE_SAME_ORIGIN_API === 'true' ? '' : '/api'
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -79,7 +81,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('X-Device-Id', deviceId())
   if (init.body) headers.set('Content-Type', 'application/json')
-  const response = await fetch(`/api${path}`, { ...init, headers })
+  const response = await fetch(`${API_PREFIX}${path}`, { ...init, headers })
   if (!response.ok) {
     let message = `${response.status}`
     try {
@@ -105,5 +107,5 @@ export const radar = () => call<Radar>('/v1/radar')
 export const pasteSms = (text: string) => call<SmsResult>('/v1/sms', { method: 'POST', body: JSON.stringify({ text }) })
 
 export function previewSrc(path: string): string {
-  return path.startsWith('/v1/') ? `/api${path}` : path
+  return path.startsWith('/v1/') ? `${API_PREFIX}${path}` : path
 }

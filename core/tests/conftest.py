@@ -184,6 +184,13 @@ def offline(monkeypatch):
     return registered
 
 
+@pytest.fixture(autouse=True)
+def no_rate_limits(monkeypatch):
+    """The suite calls the public routes many times from one address; the limiter (real Redis) stays out of the
+    way unless a test opts back in with the `live_limits` fixture of test_public_limits."""
+    monkeypatch.setattr(cache, "rate_limited", lambda key, limit, window_s: False)
+
+
 @pytest.fixture
 def enqueued(monkeypatch):
     jobs = []

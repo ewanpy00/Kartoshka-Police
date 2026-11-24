@@ -87,6 +87,15 @@ def rate_limited(key: str, limit: int, window_s: int) -> bool:
         return False
 
 
+def rate_ttl(key: str, window_s: int) -> int:
+    """Seconds left in a counter's window; the whole window when the TTL is unknown or Redis fails."""
+    try:
+        ttl = sync_client().ttl(key)
+    except redis.RedisError:
+        return window_s
+    return ttl if ttl > 0 else window_s
+
+
 def publish(event: dict) -> None:
     """Flat-event wrapper: `type` is the event type and the other fields (except `at`) are its data.
 
