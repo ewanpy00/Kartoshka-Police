@@ -67,7 +67,7 @@ def hours_since(when: datetime | None) -> float | None:
 
 
 def campaign_links(session: Session, entities: list[tuple[str, str]]) -> list[tuple[str, str, Campaign]]:
-    """Which of these (kind, value) nodes already sit on an edge of a campaign with a confirmed scam."""
+    """Which of these (kind, value) nodes already sit on a strong edge of a campaign with a confirmed scam."""
     if not entities:
         return []
     found = []
@@ -76,7 +76,8 @@ def campaign_links(session: Session, entities: list[tuple[str, str]]) -> list[tu
             select(Entity, Campaign)
             .join(Edge, (Edge.dst_id == Entity.id) | (Edge.src_id == Entity.id))
             .join(Campaign, Campaign.id == Edge.campaign_id)
-            .where(Entity.kind == kind, Entity.value == value, Campaign.confirmed_count > 0)
+            .where(Entity.kind == kind, Entity.value == value, Campaign.confirmed_count > 0,
+                   Edge.strength == "strong", Edge.excluded.is_(False))
             .limit(1)
         ).first()
         if row:

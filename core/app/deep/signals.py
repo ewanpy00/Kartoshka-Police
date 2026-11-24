@@ -53,6 +53,8 @@ class Signals:
     brand: dict | None = None
     phones: list[str] = field(default_factory=list)
     payment_hosts: list[str] = field(default_factory=list)
+    payment_endpoints: list[str] = field(default_factory=list)  # host plus path, for the campaign graph
+    whatsapp: list[str] = field(default_factory=list)
     parked: bool = False
     cloaking: dict | None = None
     injection: bool = False
@@ -106,6 +108,33 @@ def cloaking(capture: dict) -> dict | None:
         if shared < 0.2:
             return {"kind": "different_content", "overlap": round(shared, 2), "bot_title": bot.get("title", "")[:120]}
     return None
+
+
+def endpoint(url: str) -> str | None:
+    parts = urlsplit(url)
+    if not parts.hostname:
+        return None
+    return f"{parts.hostname.lower()}{parts.path or '/'}"[:300]
+
+
+def e164(digits: str) -> str | None:
+    digits = re.sub(r"\D", "", digits)
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("05"):
+        digits = "971" + digits[1:]
+    return f"+{digits}" if len(digits) >= 9 else None
+
+
+def whatsapp(capture: dict) -> list[str]:
+    found = []
+    for link in capture.get("links") or []:
+        parts = urlsplit(link)
+        if (parts.hostname or "") in WHATSAPP_HOSTS:
+            number = e164(re.sub(r"\D", "", parts.path) or re.sub(r"\D", "", parts.query))
+            if number and number not in found:
+                found.append(number)
+    return found[:10]
 
 
 def contacts(capture: dict) -> list[str]:
@@ -174,6 +203,10 @@ def analyse(capture: dict, host: str, claimed_brand: dict | None, brands: list[d
     targets = [urlsplit(form.get("action") or "").hostname for form in forms if form.get("method") == "post"]
     targets += capture.get("post_hosts") or []
     result.payment_hosts = sorted({t for t in targets if t and registrable(t) != page_domain})
+    endpoints = [endpoint(form.get("action") or "") for form in forms if form.get("method") == "post"]
+    endpoints += [f"{h}/" for h in capture.get("post_hosts") or []]
+    result.payment_endpoints = sorted({e for e in endpoints if e and registrable(e.split("/")[0]) != page_domain})[:10]
+    result.whatsapp = whatsapp(capture)
     if result.payment_hosts and set(result.asks_for) & set(PAYMENT_DATA):
         result.reasons.append(reason("PAYMENT_ENDPOINT", host=result.payment_hosts[0]))
 

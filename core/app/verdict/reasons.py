@@ -155,7 +155,7 @@ CATALOG: dict[str, Template] = {
 
 KIND_AR = {
     "ip": "عنوان IP", "ns": "خادم أسماء", "domain": "النطاق", "kit_hash": "بنية الصفحة", "favicon_hash": "أيقونة",
-    "phone": "رقم هاتف", "payment": "وجهة دفع", "cert": "شهادة أمان",
+    "phone": "رقم هاتف", "whatsapp": "رقم واتساب", "payment": "وجهة دفع", "cert": "شهادة أمان",
 }
 ASKS_AR = {
     "otp": "رمز التحقق", "card": "رقم البطاقة", "cvv": "رمز أمان البطاقة", "uaepass": "بيانات الهوية الرقمية",

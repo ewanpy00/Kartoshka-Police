@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.deep import infra, job, kit, signals, visual
 from app.evidence import store
 from app.graph import build as graph
-from app.models import Artifact, Check, Domain, Evidence, Watchlist
+from app.models import Artifact, Campaign, Check, Domain, Evidence, Watchlist
 from app.verdict.service import new_check_id
 
 BRANDS = scoring_brands(get_settings().data_dir)
@@ -211,10 +211,86 @@ def test_shared_infrastructure_with_a_confirmed_scam_forms_a_campaign(session):
     assert graph.refresh(session, "unrelated.top") is None
 
 
-def test_no_campaign_without_a_confirmed_scam(session):
+def test_shared_phone_without_a_confirmed_scam_is_a_suspected_campaign(session):
     graph.record(session, "a-new.top", [("phone", "+971500000001")], None)
     graph.record(session, "b-new.top", [("phone", "+971500000001")], None)
-    assert graph.refresh(session, "a-new.top") is None
+    campaign = graph.refresh(session, "a-new.top")
+    assert campaign is not None and campaign.domain_count == 2 and campaign.confirmed_count == 0
+    assert "*new*.top" in campaign.name
+
+
+def test_a_shared_cloudflare_address_links_nothing(session):
+    infra_data = {"a": ["104.16.1.1"], "asn": {"104.16.1.1": {"asn": "13335", "name": "CLOUDFLARENET"}}}
+    for site in ("cf-one.top", "cf-two.top"):
+        nodes = job.graph_nodes(session, None, signals.Signals(), infra_data, None, None)
+        assert ("ip", "104.16.1.1", "weak") in nodes and ("asn", "AS13335 CLOUDFLARENET", "weak") in nodes
+        graph.record(session, site, nodes, None)
+    assert graph.refresh(session, "cf-one.top") is None
+
+
+def test_hub_rule_stops_a_widely_shared_entity_from_linking(session, monkeypatch):
+    from app.graph import cluster
+
+    monkeypatch.setattr(cluster, "hub_degree", lambda: 3)
+    for n in range(4):
+        graph.record(session, f"hub-{n}.top", [("favicon_hash", "f" * 64)], None)
+    assert graph.refresh(session, "hub-0.top") is None
+    monkeypatch.setattr(cluster, "hub_degree", lambda: 50)
+    assert graph.refresh(session, "hub-0.top").domain_count == 4
+
+
+def test_merge_keeps_the_oldest_campaign_and_is_audited(session):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import AuditLog
+
+    graph.record(session, "m-a.top", [("phone", "+971500000011")], None)
+    graph.record(session, "m-b.top", [("phone", "+971500000011")], None)
+    first = graph.refresh(session, "m-a.top")
+    first.first_seen = datetime.now(UTC) - timedelta(days=3)
+    graph.record(session, "m-c.top", [("whatsapp", "+971500000022")], None)
+    graph.record(session, "m-d.top", [("whatsapp", "+971500000022")], None)
+    second = graph.refresh(session, "m-c.top")
+    assert second.id != first.id
+    graph.record(session, "m-c.top", [("phone", "+971500000011")], None)  # the bridge
+    merged = graph.refresh(session, "m-c.top")
+    assert merged.id == first.id and merged.domain_count == 4
+    assert session.get(Campaign, second.id) is None
+    assert session.scalar(select(AuditLog).where(AuditLog.action == "campaign.merge", AuditLog.target == first.id))
+
+
+def test_excluded_edges_and_allowlisted_sites_never_link(session):
+    from sqlalchemy import update
+
+    from app.models import Edge, Entity
+
+    session.add(Domain(domain="partner-shop.top", status="allowlisted", source="seed"))
+    for site in ("x-a.top", "x-b.top", "partner-shop.top"):
+        graph.record(session, site, [("payment", "collector.example/pay")], None)
+    campaign = graph.refresh(session, "x-a.top")
+    assert campaign.domain_count == 2
+    b = session.scalar(select(Entity.id).where(Entity.value == "x-b.top"))
+    session.execute(update(Edge).where(Edge.src_id == b).values(excluded=True))
+    assert graph.refresh(session, "x-a.top") is None
+    assert graph.campaign_of(session, "x-a.top") is None
+
+
+def test_rebuild_recomputes_campaigns(session):
+    from app.graph import cluster
+
+    graph.record(session, "r-a.top", [("kit_hash", "k" * 64)], None)
+    graph.record(session, "r-b.top", [("kit_hash", "k" * 64)], None)
+    campaign = graph.refresh(session, "r-a.top")
+    result = cluster.rebuild(session)
+    assert result["campaigns"] >= 1 and graph.campaign_of(session, "r-b.top") == campaign.id
+
+
+def test_whatsapp_and_payment_endpoints_are_extracted():
+    cap = page(links=["https://wa.me/971501234567", "tel:+97142000000"],
+               forms=[{**CARD_FORM[0], "action": "https://collector.example-pay.ru/submit?x=1"}])
+    found = signals.analyse(cap, "tamm-fines.top", TAMM, BRANDS)
+    assert found.whatsapp == ["+971501234567"]
+    assert found.payment_endpoints == ["collector.example-pay.ru/submit"]
 
 
 @pytest.fixture

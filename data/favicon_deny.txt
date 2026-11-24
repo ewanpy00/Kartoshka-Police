@@ -1,0 +1,3 @@
+# SHA-256 of favicon files that many unrelated sites serve (CMS, hosting and parking defaults).
+# A favicon listed here links nothing in the campaign graph. One hash per line, optional comment after it.
+# Add a hash when the console shows a favicon node joining sites that have nothing else in common.

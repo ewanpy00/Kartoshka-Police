@@ -24,6 +24,7 @@ from app.evidence import store
 from app.fast import intel, rdap
 from app.fast.score import age_reason
 from app.graph import build as graph
+from app.graph import rules as graph_rules
 from app.models import Check, Domain, Verdict, Watchlist
 from app.normalize.url import normalize
 from app.verdict.bands import band, ordered, source, total
@@ -87,18 +88,17 @@ class Finding:
 
 
 def graph_nodes(session: Session, cap: dict | None, found: signals.Signals, infra_data: dict,
-                kit_hash: str | None, kit_sim: int | None) -> list[tuple[str, str]]:
+                kit_hash: str | None, kit_sim: int | None) -> list[tuple[str, str, str]]:
+    """(kind, value, strength) for the campaign graph; the strength rules are in app.graph.rules."""
     nodes: list[tuple[str, str]] = []
     ips = set(infra_data.get("a") or [])
     if cap and cap.get("server_ip"):
         ips.add(cap["server_ip"])
-    for ip in sorted(ips):
-        nodes.append(("ip_shared" if infra.shared_ip(ip, infra_data) else "ip", ip))
+    shared = any(infra.shared_ip(ip, infra_data) for ip in ips)
+    nodes += [("ip", ip) for ip in sorted(ips)]
     for info in (infra_data.get("asn") or {}).values():
         nodes.append(("asn", f"AS{info['asn']} {info.get('name', '')}".strip()))
-    for ns in infra_data.get("ns") or []:
-        provider = intel.lookup_domain(session, signals.registrable(ns))
-        nodes.append(("ns_provider" if provider is not None else "ns", ns))
+    nodes += [("ns", ns.lower().rstrip(".")) for ns in infra_data.get("ns") or []]
     registration = infra_data.get("rdap") or {}
     if registration.get("registrar"):
         nodes.append(("registrar", registration["registrar"]))
@@ -112,9 +112,10 @@ def graph_nodes(session: Session, cap: dict | None, found: signals.Signals, infr
             nodes.append(("kit_sim", f"{kit_sim:016x}"))
         if cap.get("favicon"):
             nodes.append(("favicon_hash", cap["favicon"]["sha256"]))
-    nodes += [("phone", phone) for phone in found.phones]
-    nodes += [("payment", host) for host in found.payment_hosts]
-    return nodes
+    nodes += [("whatsapp", number) for number in found.whatsapp]
+    nodes += [("phone", phone) for phone in found.phones if phone not in found.whatsapp]
+    nodes += [("payment", endpoint) for endpoint in found.payment_endpoints]
+    return [(kind, value, graph_rules.strength(kind, value, shared_infra=shared)) for kind, value in nodes]
 
 
 def sandbox_detail(found: signals.Signals, visual_hit: dict | None, kit_found: list[dict]) -> str:
@@ -326,7 +327,7 @@ def analyse(session: Session, check: Check, settings: Settings) -> list[Check]:
 
     nodes = graph_nodes(session, cap, finding.page, infra_data, kit_hash, kit_sim)
     confirmed = session.get(Domain, site)
-    links = intel.campaign_links(session, [(kind, value) for kind, value in nodes if kind in graph.LINKING])
+    links = intel.campaign_links(session, [(kind, value) for kind, value, strength in nodes if strength == "strong"])
     if links and "CAMPAIGN_LINK" not in fast_codes and not (confirmed and confirmed.status == "confirmed"):
         kind, value, campaign = links[0]
         finding.reasons.append(reason("CAMPAIGN_LINK", kind=kind, kind_ar=KIND_AR.get(kind, kind), value=value, campaign=campaign.id))
