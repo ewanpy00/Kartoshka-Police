@@ -185,6 +185,23 @@ services:
       - adguard_work:/opt/adguardhome/work
     networks: [internal]
 
+  dnssync:
+    # Pulls core's confirmed blocklist into AdGuard Home every minute and sends block counters back.
+    build: ./dns/sync
+    profiles: ["stretch"]
+    environment:
+      CORE_URL: http://core:8000
+      CORE_WRITE_TOKEN: ${CORE_WRITE_TOKEN:-}
+      ADGUARD_URL: http://adguard:3000
+      ADGUARD_USER: ${ADGUARD_USER:-admin}
+      ADGUARD_PASSWORD: ${ADGUARD_PASSWORD:-}
+    networks: [internal]
+    depends_on:
+      core:
+        condition: service_healthy
+      adguard:
+        condition: service_started
+
 networks:
   internal:
   sandbox_net:
