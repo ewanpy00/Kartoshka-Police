@@ -78,6 +78,7 @@ async def run_check(
     budget_ms: int | None = None,
     text: str = "",
     enqueue: bool = True,
+    deep_from_score: bool = False,
     force_deep: bool = False,
     extra_reasons: list[dict] | None = None,
 ) -> Check:
@@ -102,7 +103,8 @@ async def run_check(
         # A police-list hit needs no new sandbox run, but the resident still gets the safe preview and the
         # evidence behind the block. The verdict and reasons stay the list's.
         check.preview, check.evidence_id, check.campaign_id = prior.preview, prior.evidence_id, prior.campaign_id
-    elif enqueue and (force_deep or wants_deep(check, mode, source_name, assessment.decided_by)):
+    elif enqueue and (force_deep or (needs_deep(check.score) and assessment.decided_by not in ("allowlist", "blocklist")
+                                     if deep_from_score else wants_deep(check, mode, source_name, assessment.decided_by))):
         check.deep_status = "queued"
         check.sources = [
             source(entry["id"], "unknown", "running") if entry["id"] in ("sandbox", "ai") else entry

@@ -1,5 +1,6 @@
 """Machine intake, write token required: Hunter candidates, watchlist ticks, DNS Shield block counters."""
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -28,6 +29,9 @@ class FeedItem(BaseModel):
 class FeedBatch(BaseModel):
     entries: list[FeedItem] = Field(max_length=2000)
     check: bool = Field(False, description=f"Also run a check (fast, then deep) on up to {MAX_CHECKS} new entries")
+    check_mode: Literal["deep", "screen"] = Field(
+        "deep", description="`deep`: every checked entry gets a deep analysis. `screen` (high-volume sources such as CT): "
+        "only entries whose fast score is 30 or more do, so the sandbox is not flooded.")
 
 
 @router.post("/intel/feeds", description="Hunter intake. New entries are stored once per (source, url) and announced "
@@ -65,7 +69,8 @@ async def feeds(body: FeedBatch, session: SessionDep, settings: SettingsDep) -> 
     checked = []
     if body.check:
         for item, n, _ in inserted[:MAX_CHECKS]:
-            check = await run_check(session, item.url, "hunter", "deep", settings)
+            check = await run_check(session, item.url, "hunter", "deep" if body.check_mode == "deep" else "fast", settings,
+                                    deep_from_score=body.check_mode == "screen")
             checked.append({"url": item.url, "check_id": check.id, "verdict": check.verdict, "score": check.score})
     return {"received": len(body.entries), "new": len(inserted), "checked": checked}
 

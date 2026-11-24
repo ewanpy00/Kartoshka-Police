@@ -207,3 +207,13 @@ def test_batch_checks_stay_out_of_the_queue(session):
     session.flush()
     assert "q-batch.test" not in {c.site for c in cases.ranked(session, NOW)}
     assert "q-batch.test" in {c.site for c in cases.ranked(session, NOW, source="batch")}
+
+
+def test_screen_mode_queues_deep_only_for_suspicious_entries(client, session, enqueued):
+    entries = [{"source": "ct", "url": "https://uae-pass-verify-login.top/", "brand_id": "uaepass"},
+               {"source": "ct", "url": "https://bakery-recipes-blog.com/"}]
+    body = client.post("/v1/intel/feeds", headers=AUTH, json={"entries": entries, "check": True, "check_mode": "screen"}).json()
+    verdicts = {item["url"]: item for item in body["checked"]}
+    assert verdicts["https://uae-pass-verify-login.top/"]["score"] >= 30
+    assert verdicts["https://bakery-recipes-blog.com/"]["score"] < 30
+    assert len(enqueued) == 1  # only the suspicious one goes to the sandbox

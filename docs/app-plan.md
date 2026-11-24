@@ -93,3 +93,11 @@ Each slice is verified in the running stack and committed on its own.
   - Paste SMS, My reports (timeline) and Scam radar (refreshed every minute; domains defanged and not links).
   - Rate limits use a random `X-Device-Id`.
   Core change: a police-blocklist hit now carries the preview and evidence of the host's last deep analysis (30 days), keeping the list's own verdict and reasons. `make test`: core 159 passed; `npm run build` passes. Checked at phone size (412×915) with Playwright in the running stack, no console errors.
+- 2026-11-24: slice 7 done (Hunter).
+  - `hunter/app/filters.py` has two filters. The name filter catches look-alikes: a brand token anywhere for 5+ letters, whole words only for shorter tokens, one typo (two for 8+ letters), homoglyphs (Cyrillic, 0/1/3/5, rn→m) and IDN. The infrastructure filter takes a risky TLD with two action words, or a short random label with digits.
+  - Sources: the CT consumer (infrastructure-only candidates capped at `HUNTER_INFRA_PER_MINUTE`, default 5), OpenPhish every 30 minutes (URLhaus only with `URLHAUS_AUTH_KEY`, because abuse.ch retired the keyless list), WhoisDS newly registered domains daily, and the watchlist ticker every 5 minutes. All are switchable with `HUNTER_SOURCES`.
+  - `app/submit.py` sends batches to `/v1/intel/feeds`, once per host and source a day, and keeps entries while core is down. CT and NRD use the new `check_mode: screen`, so core sends a candidate to the sandbox only when its fast score is 30 or more; feed URLs go deep.
+  - `python -m app.backtest data/eval/test.csv` reports the share of the UAE-brand phishing names flagged: by name 50/60 (0.83), by either filter 54/60 (0.90). It also flags 3 of 251 benign (1.2%).
+  - Hunter tests: 33 passed; core: 160 passed.
+  - Live: CT runs at about 80,000 certificates per 30 s, and core receives the candidates. NRD 2026-11-23 gave 6 look-alike names; OpenPhish had no UAE-brand URL at the time.
+  - Not built: the search and Maps sweep (needs a SERP API key). The demo's own test look-alike domain has to be registered by the team.
