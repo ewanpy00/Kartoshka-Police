@@ -6,6 +6,7 @@ import CaseCard from '../components/CaseCard.vue'
 import StatStrip from '../components/StatStrip.vue'
 import { band, isHigh } from '../bands'
 import { defang } from '../defang'
+import { demoRunning } from '../demo'
 import { formatAge, t } from '../i18n'
 import { rowTagText } from '../rowTag'
 import { officerName } from '../session'
@@ -148,6 +149,11 @@ onMounted(async () => {
   }
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+// The demo works on the first page of the queue so a case opens at once; the full queue comes back when it stops.
+watch(demoRunning, (running) => {
+  void load()
+  if (!running) void refreshStats()
+})
 </script>
 
 <template>

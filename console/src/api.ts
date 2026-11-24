@@ -32,10 +32,10 @@ async function failure(response: Response): Promise<ApiError> {
 const MAX_PAGES = 20
 
 /** Every page of a cursor-paginated route, rows concatenated, the last page's other fields kept. */
-async function allPages(path: string, key: string): Promise<unknown> {
+async function allPages(path: string, key: string, maxPages = MAX_PAGES): Promise<unknown> {
   let merged: Record<string, unknown> | null = null
   let cursor: string | null = null
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const url: string = cursor === null ? path : `${path}${path.includes('?') ? '&' : '?'}cursor=${encodeURIComponent(cursor)}`
     const response = await apiFetch(url)
     if (!response.ok) throw await failure(response)
@@ -53,14 +53,18 @@ export async function apiJson<T>(path: string): Promise<T> {
   const real = loadJson<T>(path)
   const sample = demoRunning.value ? demoFallback(path) : null
   if (sample === null) return real
-  // During the demo a slow backend must not leave a page on "Loading": after a short wait, show the sample.
-  real.catch(() => undefined)
-  return Promise.race([real, new Promise<T>((resolve) => setTimeout(() => resolve(sample as T), DEMO_WAIT_MS))])
+  // During the demo a slow or failing backend must not leave a page on "Loading" or an error: after a short
+  // wait, or as soon as the real request fails, show the sample.
+  return Promise.race([
+    real.catch(() => sample as T),
+    new Promise<T>((resolve) => setTimeout(() => resolve(sample as T), DEMO_WAIT_MS)),
+  ])
 }
 
 async function loadJson<T>(path: string): Promise<T> {
   const key = pagedKey(path)
-  if (key) return demoFill(path, adaptResponse(path, await allPages(path, key)) as T)
+  // The demo shows the first page only: a long list (hundreds of open cases) would keep a page empty for many seconds.
+  if (key) return demoFill(path, adaptResponse(path, await allPages(path, key, demoRunning.value ? 1 : MAX_PAGES)) as T)
   const response = await apiFetch(path)
   if (!response.ok) throw await failure(response)
   return demoFill(path, adaptResponse(path, await response.json()) as T)

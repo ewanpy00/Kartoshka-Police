@@ -9,6 +9,9 @@
 - After `sent` the domain is re-checked every `TAKEDOWN_RECHECK_MIN` minutes. A check is offline only
   when the phone and the bot profile both find the site gone, so geofencing or cloaking cannot fake a
   takedown. `TAKEDOWN_OFFLINE_CHECKS` offline results in a row, at least one interval apart, close it.
+- A capture whose page facts could not be read says nothing about the page. Unless the other profile read a
+  live page, such a check is no result: it neither counts toward the offline checks nor resets them, and it
+  is written to the request's audit trail.
 - A closed domain stays on the blocklist and on the watchlist for 30 more days; if it comes back the
   request is `reopened`.
 - `overdue` is derived (sent longer than `TAKEDOWN_SLA_H` ago and not closed), not stored.
@@ -49,11 +52,16 @@ class Refused(Exception):
     pass
 
 
+class Unreadable(Exception):
+    """The capture carries no readable page facts, so it cannot say whether the page is live or gone."""
+
+
 @dataclass
 class Probe:
     offline: bool
     reason: str | None = None
     profiles: dict = field(default_factory=dict)
+    readable: bool = True  # False: a profile could not read the page, so this probe is no result
 
 
 def latest_evidence(session: Session, domain: str) -> tuple[Check, Evidence] | None:
@@ -205,7 +213,13 @@ def rdap_state(domain: str) -> str | None:
 
 
 def page_state(capture: dict, host: str) -> str | None:
-    """Why this capture shows no phishing page any more, or None when the page is still live."""
+    """Why this capture shows no phishing page any more, or None when the page is still live.
+
+    Raises `Unreadable` when the page facts are missing: an unread page has no forms to find, and that must
+    never be taken for a removed form or any other offline reason.
+    """
+    if capture.get("facts_available") is not True:
+        raise Unreadable
     if capture.get("status") in GONE_STATUS:
         return "http_gone"
     text = (capture.get("text") or "").lower()
@@ -232,20 +246,31 @@ def capture(url: str, profile: str, settings: Settings) -> tuple[dict | None, st
 
 
 def probe(domain: str, url: str | None, settings: Settings) -> Probe | None:
-    """None when the check could not run (sandbox down); otherwise both profiles' results."""
+    """None when the check could not run (sandbox down); otherwise both profiles' results.
+
+    A profile that could not read the page proves nothing. If the other profile read a live page the site is
+    live, and the probe says so. Otherwise the probe is returned with `readable` false: it is neither offline
+    nor live, and `recheck` treats it as no result.
+    """
     url = url or f"https://{domain}/"
     host = (httpx.URL(url).host or domain).lower()
     gone = dns_state(host) or rdap_state(domain)
     if gone:
         return Probe(True, gone, {"phone": gone, "bot": gone})
-    results = {}
+    results, unread = {}, set()
     for profile in ("phone", "bot"):
         cap, failure = capture(url, profile, settings)
         if cap is None and failure is None:
             return None
-        results[profile] = failure if cap is None else page_state(cap, host)
+        try:
+            results[profile] = failure if cap is None else page_state(cap, host)
+        except Unreadable:
+            unread.add(profile)
+    profiles = {p: "unreadable" if p in unread else results[p] or "live" for p in ("phone", "bot")}
+    if unread:
+        return Probe(False, None, profiles, readable="live" in profiles.values())
     offline = all(results.values())
-    return Probe(offline, results["phone"] if offline else None, {k: v or "live" for k, v in results.items()})
+    return Probe(offline, results["phone"] if offline else None, profiles)
 
 
 def poll_failed(service: str, domain: str, error: Exception) -> None:
@@ -351,6 +376,13 @@ def recheck(session: Session, domain: str, settings: Settings | None = None, now
     result = prober(domain, url, settings)
     if result is None:
         return {"domain": domain, "requests": len(requests), "result": "sandbox unavailable"}
+    if not result.readable:
+        for request in requests:
+            audit.record(session, "takedown_recheck", "takedown.check_unreadable", "takedown", request.id,
+                         {"status": request.status},
+                         {"status": request.status, "checks_offline": request.checks_offline, "profiles": result.profiles})
+        session.flush()
+        return {"domain": domain, "requests": len(requests), "result": "page unreadable", "profiles": result.profiles}
     events = []
     for request in requests:
         event = apply(session, request, result, now, settings)

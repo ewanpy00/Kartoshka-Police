@@ -117,6 +117,21 @@ def run(session, domain, offline, at, reason="nxdomain"):
                            prober=lambda d, u, s: tracker.Probe(offline, reason if offline else None, {}))
 
 
+LIVE_PAGE = {"status": 200, "text": "Pay your fine", "forms": [{"method": "post", "fields": [{"type": "password"}]}],
+             "facts_available": True}
+GONE_PAGE = {"status": 404, "text": "Not found", "forms": [], "facts_available": True}
+NO_FORM_PAGE = {"status": 200, "text": "Welcome to our bakery. " * 10, "forms": [], "facts_available": True}
+UNREADABLE_PAGE = {"status": 200, "text": "", "forms": [], "facts_available": False}
+
+
+def sandbox(monkeypatch, pages: dict) -> dict:
+    """The name resolves and the sandbox answers each profile with the capture in `pages`."""
+    monkeypatch.setattr(tracker, "dns_state", lambda host: None)
+    monkeypatch.setattr(tracker, "rdap_state", lambda domain: None)
+    monkeypatch.setattr(tracker, "capture", lambda url, profile, settings: (pages[profile], None))
+    return pages
+
+
 def test_state_machine(session):
     request = make_sent(session)
     assert request.status == "sent" and session.get(Watchlist, "st.top").reason == "TAKEDOWN"
@@ -145,12 +160,10 @@ def test_a_live_result_resets_a_pending_request(session):
 def test_offline_needs_both_profiles(monkeypatch):
     monkeypatch.setattr(tracker, "dns_state", lambda host: None)
     monkeypatch.setattr(tracker, "rdap_state", lambda domain: None)
-    live_page = {"status": 200, "text": "Pay your fine", "forms": [{"method": "post", "fields": [{"type": "password"}]}]}
-    gone_page = {"status": 404, "text": "Not found", "forms": []}
-    pages = {"phone": gone_page, "bot": live_page}
+    pages = {"phone": GONE_PAGE, "bot": LIVE_PAGE}
     monkeypatch.setattr(tracker, "capture", lambda url, profile, settings: (pages[profile], None))
     assert not tracker.probe("x.top", None, SETTINGS).offline  # geofenced: gone for the phone only
-    pages["bot"] = gone_page
+    pages["bot"] = GONE_PAGE
     result = tracker.probe("x.top", None, SETTINGS)
     assert result.offline and result.reason == "http_gone"
     monkeypatch.setattr(tracker, "capture", lambda url, profile, settings: (None, None))
@@ -158,10 +171,65 @@ def test_offline_needs_both_profiles(monkeypatch):
 
 
 def test_page_state_reasons():
-    assert tracker.page_state({"status": 410}, "x.top") == "http_gone"
-    assert tracker.page_state({"status": 200, "text": "Warning: Suspected Phishing site ahead"}, "x.top") == "cf_interstitial"
-    assert tracker.page_state({"status": 200, "text": "This domain is for sale", "forms": []}, "x.top") == "parked"
-    assert tracker.page_state({"status": 200, "text": "Welcome to our bakery. " * 10, "forms": []}, "x.top") == "form_removed"
+    def read(**facts):
+        return tracker.page_state({"facts_available": True, **facts}, "x.top")
+
+    assert read(status=410) == "http_gone"
+    assert read(status=200, text="Warning: Suspected Phishing site ahead") == "cf_interstitial"
+    assert read(status=200, text="This domain is for sale", forms=[]) == "parked"
+    assert read(status=200, text="Welcome to our bakery. " * 10, forms=[]) == "form_removed"
+
+
+@pytest.mark.parametrize("capture", [
+    {"status": 200, "text": "", "forms": []},  # the key is missing
+    {"status": 200, "text": "", "forms": [], "facts_available": False},
+    {"status": 404, "text": "", "forms": [], "facts_available": False},  # not even a gone status is trusted
+])
+def test_an_unreadable_capture_is_no_result(monkeypatch, capture):
+    with pytest.raises(tracker.Unreadable):
+        tracker.page_state(capture, "x.top")
+    sandbox(monkeypatch, {"phone": capture, "bot": NO_FORM_PAGE})
+    result = tracker.probe("x.top", None, SETTINGS)
+    assert not result.readable and not result.offline and result.reason is None
+    assert result.profiles == {"phone": "unreadable", "bot": "form_removed"}
+
+
+def test_two_unreadable_checks_neither_close_nor_reset_a_request(session, monkeypatch):
+    request = make_sent(session, "ur.top")
+    run(session, "ur.top", True, NOW - timedelta(hours=2))
+    first_offline = request.offline_at
+    sandbox(monkeypatch, {"phone": UNREADABLE_PAGE, "bot": UNREADABLE_PAGE})
+    for at in (NOW - timedelta(minutes=55), NOW):  # each a full interval after the offline check
+        result = tracker.recheck(session, "ur.top", SETTINGS, now=at)
+        assert result["result"] == "page unreadable" and "events" not in result
+    assert request.status == "offline_pending" and request.checks_offline == 1 and request.offline_at == first_offline
+    assert request.offline_reason == "nxdomain"
+    rows = session.scalars(select(AuditLog.after).where(
+        AuditLog.target == request.id, AuditLog.action == "takedown.check_unreadable")).all()
+    assert len(rows) == 2 and all(row["status"] == "offline_pending" and row["checks_offline"] == 1 for row in rows)
+    assert rows[0]["profiles"] == {"phone": "unreadable", "bot": "unreadable"}
+
+
+def test_a_live_profile_beside_an_unreadable_one_is_a_live_result(session, monkeypatch):
+    """Hiding the page from one profile must not keep a request pending or closed while the other sees it live."""
+    request = make_sent(session, "lu.top")
+    run(session, "lu.top", True, NOW - timedelta(hours=2))
+    run(session, "lu.top", True, NOW - timedelta(minutes=55))
+    assert request.status == "closed"
+    sandbox(monkeypatch, {"phone": UNREADABLE_PAGE, "bot": LIVE_PAGE})
+    result = tracker.recheck(session, "lu.top", SETTINGS, now=NOW)
+    assert result["profiles"] == {"phone": "unreadable", "bot": "live"} and not result["offline"]
+    assert request.status == "reopened" and request.checks_offline == 0
+
+
+def test_a_readable_page_that_lost_its_form_still_reads_form_removed(session, monkeypatch):
+    request = make_sent(session, "fr.top")
+    pages = sandbox(monkeypatch, {"phone": LIVE_PAGE, "bot": LIVE_PAGE})
+    tracker.recheck(session, "fr.top", SETTINGS, now=NOW - timedelta(hours=2))
+    assert request.status == "sent" and request.checks_offline == 0
+    pages.update(phone=NO_FORM_PAGE, bot=NO_FORM_PAGE)
+    tracker.recheck(session, "fr.top", SETTINGS, now=NOW - timedelta(hours=1))
+    assert request.status == "offline_pending" and request.offline_reason == "form_removed"
 
 
 def test_watchlist_routes_open_takedowns_to_the_takedown_job(session, offline_contacts, enqueued):

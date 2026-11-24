@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { demoRunning, findTarget, startDemo, stopDemo, type DemoStep } from './demo'
 import { officer, signOut } from './session'
+import type { Stats } from './types'
 
 function button(id: string, onClick: () => void): HTMLButtonElement {
   const el = document.createElement('button')
@@ -78,17 +79,36 @@ describe('demo sample data', () => {
 
   it('leaves data alone when the demo is not running', async () => {
     const { demoFill } = await import('./demoData')
-    const empty = { packs: [] }
+    const empty = { packs: [], requests: [] }
     expect(demoFill('/v1/admin/takedowns', empty)).toBe(empty)
   })
 
   it('fills only empty lists while the demo runs, and real data wins', async () => {
     const { demoFill } = await import('./demoData')
     demoRunning.value = true
-    expect((demoFill('/v1/admin/takedowns', { packs: [] }) as { packs: unknown[] }).packs.length).toBeGreaterThan(0)
+    const takedowns = demoFill('/v1/admin/takedowns', { packs: [], requests: [] }) as { packs: unknown[]; requests: unknown[] }
+    expect(takedowns.packs.length).toBeGreaterThan(0)
+    expect(takedowns.requests.length).toBeGreaterThan(0)
     expect((demoFill('/v1/admin/audit?limit=200', { entries: [] }) as { entries: unknown[] }).entries.length).toBeGreaterThan(0)
     const real = { entries: [{ id: 1 }] }
     expect(demoFill('/v1/admin/audit?limit=200', real)).toBe(real)
+    // A takedown's own audit rows are never replaced by samples.
+    expect(demoFill('/v1/admin/audit?target=req_1&limit=50', { entries: [] })).toEqual({ entries: [] })
+  })
+
+  it('keeps real stats that have something to show and fills the rest', async () => {
+    const { demoFallback, demoFill } = await import('./demoData')
+    demoRunning.value = true
+    const sample = demoFallback('/v1/admin/stats?range=7d') as Stats
+    const real: Stats = {
+      impact: { ...sample.impact, totals: { ...sample.impact.totals, confirmed: 5 } },
+      quality: { ...sample.quality, reviews: 0 },
+    }
+    const filled = demoFill('/v1/admin/stats?range=7d', real)
+    expect(filled.impact).toBe(real.impact)
+    expect(filled.quality.reviews).toBeGreaterThan(0)
+    const empty: Stats = { impact: { ...real.impact, totals: { ...real.impact.totals, confirmed: 0 }, lead_domains: [] }, quality: sample.quality }
+    expect(demoFill('/v1/admin/stats?range=7d', empty).impact).not.toBe(empty.impact)
   })
 })
 
@@ -98,5 +118,9 @@ describe('demo fallback', () => {
     expect(demoFallback('/v1/admin/evidence/verify')).toMatchObject({ intact: true })
     expect(demoFallback('/v1/admin/helplines')).toHaveProperty('numbers')
     expect(demoFallback('/v1/admin/cases/example.com')).toBeNull()
+    expect(demoFallback('/v1/admin/cases/tamm-pay.xyz')).toHaveProperty('lead_time')
+    expect(demoFallback('/v1/admin/takedowns')).toMatchObject({ packs: expect.any(Array), requests: expect.any(Array) })
+    expect(demoFallback('/v1/admin/takedowns/stats')).toHaveProperty('by_status')
+    expect((demoFallback('/v1/admin/stats?range=24h') as Stats).impact.series.length).toBeGreaterThan(0)
   })
 })
