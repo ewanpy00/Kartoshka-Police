@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends libgomp1 fonts-dejavu-core fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 1000 core

@@ -122,7 +122,6 @@ services:
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       CORE_URL: http://core:8000
-      HUNTER_SUBMIT_PER_MIN: "6"
     volumes:
       - ./hunter:/srv/hunter
       - ./data:/srv/data:ro
@@ -147,6 +146,7 @@ services:
       - "127.0.0.1:${CONSOLE_PORT:-5173}:5173"
     volumes:
       - ./console:/app
+      - ./design:/design:ro
       - /app/node_modules
     networks: [internal]
     healthcheck:
@@ -166,6 +166,7 @@ services:
       - "${BIND_ADDR:-127.0.0.1}:${RESIDENT_PORT:-5174}:5174"
     volumes:
       - ./resident:/app
+      - ./design:/design:ro
       - /app/node_modules
     networks: [internal]
     healthcheck:
