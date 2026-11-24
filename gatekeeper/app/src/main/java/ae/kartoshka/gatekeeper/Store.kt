@@ -31,6 +31,9 @@ class Store(context: Context) {
 
     val blockedCount: Int get() = prefs.getInt("blocked_count", 0)
 
+    /** How many police-confirmed domains the local list holds. */
+    val listedCount: Int get() = prefs.getInt("listed_count", 0)
+
     fun countBlock() = prefs.edit().putInt("blocked_count", blockedCount + 1).apply()
 
     /** True when the host or one of its parents is on the confirmed list (a Bloom filter hit). */
@@ -43,6 +46,7 @@ class Store(context: Context) {
         domains -= removed.toSet()
         listFile.writeText(domains.sorted().joinToString("\n"))
         bloom = Bloom.of(domains)
+        prefs.edit().putInt("listed_count", domains.size).apply()
         if (latest != null) since = latest
         syncedAt = System.currentTimeMillis()
     }

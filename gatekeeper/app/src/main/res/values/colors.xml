@@ -1,11 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The officer console's palette on main (console/src/style.css), light theme. values-night has the dark one. -->
 <resources>
-    <color name="accent">#1F4E8C</color>
-    <color name="text">#1C2430</color>
-    <color name="muted">#5F6B7A</color>
+    <color name="page">#F5F6F8</color>
     <color name="surface">#FFFFFF</color>
-    <color name="block">#B42318</color>
-    <color name="block_soft">#FDE8E6</color>
-    <color name="warn">#A35F00</color>
-    <color name="warn_soft">#FDF0DC</color>
+    <color name="raised">#F8F9FB</color>
+    <color name="hairline">#E4E7EC</color>
+    <color name="selected">#EEF1F6</color>
+    <color name="ink">#101727</color>
+    <color name="muted">#5B6475</color>
+    <color name="primary">#151925</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="gold">#8A6100</color>
+    <color name="risk">#B32416</color>
+    <color name="risk_bg">#FDECEA</color>
+    <color name="amber">#B4530A</color>
+    <color name="amber_bg">#FDF1E3</color>
+    <color name="ok">#18794E</color>
+    <color name="ok_bg">#E6F4EC</color>
+    <color name="on_ok">#FFFFFF</color>
+    <color name="banner_bg">#FFFAEC</color>
+    <color name="banner_text">#7A5A00</color>
+    <!-- Header band: ink in light, deep navy in dark; the shield and accents on it are always gold. -->
+    <color name="hero">#151925</color>
+    <color name="hero_2">#232A3B</color>
+    <color name="on_hero">#FFFFFF</color>
+    <color name="on_hero_muted">#B9C0CC</color>
+    <color name="hero_gold">#D7B14E</color>
+    <!-- Block and warn page headers (white text on both themes). -->
+    <color name="block_hero">#B32416</color>
+    <color name="warn_hero">#B4530A</color>
+    <color name="white_15">#26FFFFFF</color>
+    <color name="white_80">#CCFFFFFF</color>
 </resources>

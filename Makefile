@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs retrain apk
+.PHONY: help up up-stretch down logs ps migrate seed reset test eval refs retrain apk android
 
 help: ## Show this help
 	@awk -F ':.*## ' '/^[a-z-]+:.*## /{printf "  make %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -42,3 +42,6 @@ retrain: ## Retrain the URL model with officer decisions added as labels (A7)
 
 apk: ## Build the Gatekeeper debug APK in Docker (make apk host=<laptop IP> for Wi-Fi)
 	./scripts/apk.sh $(host)
+
+android: ## Build Gatekeeper natively and run it on the Android emulator (needs Android Studio's SDK)
+	./scripts/android.sh run

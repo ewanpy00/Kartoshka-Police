@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Invisible until the check has to wait (section 3: "Checking link…" up to 3 s). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -8,31 +9,70 @@
         android:id="@+id/checking"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/surface"
+        android:background="@drawable/intro_bg"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="32dp"
         android:visibility="invisible">
 
-        <ProgressBar
-            android:layout_width="48dp"
-            android:layout_height="48dp" />
+        <FrameLayout
+            android:layout_width="160dp"
+            android:layout_height="160dp">
+
+            <View
+                android:id="@+id/checking_ring"
+                android:layout_width="100dp"
+                android:layout_height="100dp"
+                android:layout_gravity="center"
+                android:background="@drawable/ring" />
+
+            <ImageView
+                android:id="@+id/checking_shield"
+                android:layout_width="88dp"
+                android:layout_height="88dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_shield" />
+        </FrameLayout>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:text="@string/checking"
-            android:textColor="@color/text"
-            android:textSize="20sp" />
+            android:textColor="@color/on_hero"
+            android:textSize="22sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/checking_host"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/pill"
+            android:backgroundTint="@color/white_15"
             android:fontFamily="monospace"
-            android:textColor="@color/muted"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="6dp"
+            android:textColor="@color/on_hero"
             android:textDirection="ltr" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:layout_width="160dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:indeterminate="true"
+            app:indicatorColor="@color/hero_gold"
+            app:trackColor="@color/white_15"
+            app:trackCornerRadius="2dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:text="@string/checking_hint"
+            android:textColor="@color/on_hero_muted"
+            android:textSize="13sp" />
     </LinearLayout>
 </FrameLayout>

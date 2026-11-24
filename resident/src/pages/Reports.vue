@@ -52,7 +52,7 @@ onMounted(load)
 .timeline { list-style: none; padding: 0; margin: 0.5rem 0 0; }
 .timeline li { position: relative; padding-inline-start: 1.6rem; padding-bottom: 0.6rem; display: grid; color: var(--muted); }
 .timeline li::before { content: ''; position: absolute; inset-inline-start: 0.2rem; top: 0.35rem; width: 0.7rem; height: 0.7rem; border-radius: 50%;
-  border: 2px solid #c2c8d0; background: var(--surface); }
+  border: 2px solid var(--dot); background: var(--surface); }
 .timeline li.done { color: var(--text); }
 .timeline li.done::before { background: var(--accent); border-color: var(--accent); }
 </style>

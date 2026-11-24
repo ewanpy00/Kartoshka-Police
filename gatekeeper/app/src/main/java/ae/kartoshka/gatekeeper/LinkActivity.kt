@@ -60,6 +60,8 @@ class LinkActivity : AppCompatActivity() {
         var action = Decision.decide(url, local, listed, first, app.catalog, text)
         if (action == Action.Checking) {
             findViewById<View>(R.id.checking).visibility = View.VISIBLE
+            Motion.pulse(findViewById(R.id.checking_ring))
+            Motion.popIn(findViewById(R.id.checking_shield))
             val checkId = (first as? Remote.Answer)?.verdict?.checkId
             val second = withContext(Dispatchers.IO) {
                 if (checkId != null) Remote.Answer(runCatching { app.core.get(checkId, 2600) }.getOrElse { return@withContext Remote.Timeout })

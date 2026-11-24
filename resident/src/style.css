@@ -1,11 +1,25 @@
 :root {
-  --bg: #f3f4f6; --surface: #fff; --line: #e2e5ea; --text: #1c2430; --muted: #5f6b7a; --accent: #1f4e8c;
-  --allow: #1b7f4b; --allow-soft: #e3f4ea; --warn: #a35f00; --warn-soft: #fdf0dc; --block: #b42318; --block-soft: #fde8e6;
-  --grey-soft: #eef0f3;
+  /* Palette of the officer console on main (console/src/style.css): ink and gold, light and dark. */
+  color-scheme: light;
+  --bg: #f5f6f8; --surface: #ffffff; --line: #e4e7ec; --text: #101727; --muted: #5b6475;
+  --accent: #151925; --on-accent: #ffffff; --gold: #8a6100; --header: #151925; --on-header: #ffffff; --header-gold: #d7b14e;
+  --allow: #18794e; --allow-soft: #e6f4ec; --on-allow: #ffffff; --warn: #b4530a; --warn-soft: #fdf1e3;
+  --block: #b32416; --block-soft: #fdecea; --grey-soft: #eef1f6; --dot: #c2c8d0;
   font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Arabic', 'Geeza Pro', sans-serif;
   font-size: 16px; line-height: 1.5; color: var(--text); background: var(--bg);
   -webkit-text-size-adjust: 100%;
 }
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0b1320; --surface: #111a2b; --line: #1e2a40; --text: #e8edf5; --muted: #93a0b5;
+    --accent: #d7b14e; --on-accent: #151925; --gold: #d7b14e; --header: #111a2b; --on-header: #e8edf5;
+    --allow: #5fd19a; --allow-soft: #11271f; --on-allow: #0b1320; --warn: #f0b35a; --warn-soft: #2a2010;
+    --block: #ff9483; --block-soft: #2a1518; --grey-soft: #16233a; --dot: #2c3a52;
+  }
+}
+/* Inside the Gatekeeper app the native shell has the header and the tabs. */
+:root.embedded main { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); padding-top: 1.25rem; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); }
 main { max-width: 34rem; margin: 0 auto; padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom)); }
@@ -22,8 +36,8 @@ button, .button {
   text-decoration: none; cursor: pointer;
 }
 button:disabled { opacity: 0.55; }
-.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.safe { background: var(--allow); border-color: var(--allow); color: #fff; width: 100%; }
+.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.safe { background: var(--allow); border-color: var(--allow); color: var(--on-allow); width: 100%; }
 .full { width: 100%; }
 input, textarea { width: 100%; font: inherit; padding: 0.7rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); }
 textarea { min-height: 8rem; }

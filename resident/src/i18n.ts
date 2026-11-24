@@ -9,6 +9,8 @@ function initial(): Lang {
   } catch {
     /* ignore */
   }
+  // Inside the Gatekeeper app the screens follow the phone's language; elsewhere Arabic comes first.
+  if (navigator.userAgent.includes('KartoshkaGatekeeper')) return navigator.language.toLowerCase().startsWith('ar') ? 'ar' : 'en'
   return 'ar'
 }
 export const lang = ref<Lang>(initial())

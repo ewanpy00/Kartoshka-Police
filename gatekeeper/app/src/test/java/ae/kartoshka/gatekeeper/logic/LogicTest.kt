@@ -46,6 +46,13 @@ class LogicTest {
         assertTrue(action!!.url.startsWith("https://www.tamm.abudhabi/"))
     }
 
+    @Test fun brandsAreFoundByIdOrDisplayName() {
+        assertEquals("tamm", catalog.brand("TAMM")?.id)
+        assertEquals("uaepass", catalog.brand("uaepass")?.id)
+        assertNull(catalog.brand("Facebook"))
+        assertNotNull(catalog.safeAction("TAMM", "https://x/pay-fines"))
+    }
+
     @Test fun shortTokensMatchWholeWordsOnly() {
         assertEquals("rta", lexical.score("https://rta-fines.com/").brandId)
         assertNull(lexical.score("https://portal.example.com/").brandId)

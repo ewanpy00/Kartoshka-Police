@@ -48,7 +48,7 @@ class DeepWatchWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val pending = PendingIntent.getActivity(context, checkId.hashCode(), open, PendingIntent.FLAG_IMMUTABLE)
         val host = Links.host(url)?.let(Links::defang) ?: ""
         val notification = NotificationCompat.Builder(context, GatekeeperApp.CHANNEL_ALERTS)
-            .setSmallIcon(R.drawable.ic_shield)
+            .setSmallIcon(R.drawable.ic_shield_check)
             .setContentTitle(context.getString(R.string.notify_blocked_title))
             .setContentText(context.getString(R.string.notify_blocked_text, host))
             .setContentIntent(pending)

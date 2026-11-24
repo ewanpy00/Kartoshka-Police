@@ -57,7 +57,7 @@ li { display: flex; align-items: center; gap: 0.6rem; background: var(--surface)
 @keyframes in { from { opacity: 0; transform: translateY(-4px); } }
 .name { flex: 1; }
 .state { font-size: 0.8rem; color: var(--muted); }
-.dot { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: #c2c8d0; }
+.dot { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--dot); }
 .hit .dot { background: var(--block); } .hit .state { color: var(--block); font-weight: 700; }
 .clean .dot { background: var(--allow); } .clean .state { color: var(--allow); }
 .running .dot, .checking .dot { background: var(--accent); animation: pulse 1s infinite; }

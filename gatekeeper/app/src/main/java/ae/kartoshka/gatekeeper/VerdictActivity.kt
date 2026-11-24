@@ -5,12 +5,15 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.Button
+import android.content.res.ColorStateList
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.divider.MaterialDivider
 import ae.kartoshka.gatekeeper.logic.Links
 import ae.kartoshka.gatekeeper.logic.Page
 import ae.kartoshka.gatekeeper.logic.Reason
@@ -35,44 +38,57 @@ class VerdictActivity : AppCompatActivity() {
         val page = intent.getStringExtra(EXTRA_PAGE)?.let(::decode) ?: return finish()
         setContentView(R.layout.activity_verdict)
 
-        findViewById<View>(R.id.verdict_root).setBackgroundResource(if (blocked) R.color.block_soft else R.color.warn_soft)
+        val heroColor = getColor(if (blocked) R.color.block_hero else R.color.warn_hero)
+        window.statusBarColor = heroColor
+        findViewById<View>(R.id.verdict_hero).setBackgroundColor(heroColor)
+        val icon = findViewById<ImageView>(R.id.verdict_icon)
+        icon.setImageResource(if (blocked) R.drawable.ic_block else R.drawable.ic_warning)
         findViewById<TextView>(R.id.title_ar).text = getString(if (blocked) R.string.block_title_ar else R.string.warn_title_ar)
         findViewById<TextView>(R.id.title_en).text = getString(if (blocked) R.string.block_title_en else R.string.warn_title_en)
         findViewById<TextView>(R.id.domain).text = Links.host(page.url)?.let { Links.defang(Links.unicodeHost(it)) } ?: ""
         app.catalog.brand(page.brandId)?.let { brand ->
-            findViewById<TextView>(R.id.brand).apply {
-                visibility = View.VISIBLE
-                text = getString(R.string.imitates, brand.nameAr, brand.nameEn)
-            }
+            findViewById<View>(R.id.brand_card).visibility = View.VISIBLE
+            findViewById<TextView>(R.id.brand).text = getString(R.string.imitates, brand.nameAr, brand.nameEn)
         }
+
         val list = findViewById<LinearLayout>(R.id.reasons)
-        page.reasons.take(6).forEach { reason ->
+        val reasonTint = ColorStateList.valueOf(getColor(if (blocked) R.color.risk else R.color.amber))
+        page.reasons.take(6).forEachIndexed { i, reason ->
+            if (i > 0) list.addView(MaterialDivider(this).apply { dividerColor = getColor(R.color.hairline) })
             val row = LayoutInflater.from(this).inflate(R.layout.item_reason, list, false)
+            row.findViewById<ImageView>(R.id.reason_icon).imageTintList = reasonTint
             row.findViewById<TextView>(R.id.reason_ar).text = reason.ar
             row.findViewById<TextView>(R.id.reason_en).text = reason.en
             list.addView(row)
         }
-        if (!page.fromCore) findViewById<TextView>(R.id.offline_note).visibility = View.VISIBLE
+        if (!page.fromCore) findViewById<View>(R.id.offline_note).visibility = View.VISIBLE
 
-        findViewById<Button>(R.id.safe_action).apply {
+        findViewById<MaterialButton>(R.id.safe_action).apply {
             val action = page.safeAction
             if (action == null) visibility = View.GONE else {
                 text = "${action.labelAr}\n${action.labelEn}"
                 setOnClickListener { Browsers.open(this@VerdictActivity, action.url); finish() }
             }
         }
-        findViewById<Button>(R.id.go_back).setOnClickListener { finish() }
-        findViewById<Button>(R.id.open_anyway).apply {
+        findViewById<View>(R.id.close).setOnClickListener { finish() }
+        findViewById<View>(R.id.go_back).setOnClickListener { finish() }
+        findViewById<View>(R.id.open_anyway).apply {
             visibility = if (blocked) View.GONE else View.VISIBLE
             setOnClickListener { Browsers.open(this@VerdictActivity, page.url); finish() }
         }
-        findViewById<Button>(R.id.report).setOnClickListener { report(page.url, it as Button) }
-        findViewById<Button>(R.id.details).setOnClickListener {
+        findViewById<MaterialButton>(R.id.report).setOnClickListener { report(page.url, it as MaterialButton) }
+        findViewById<View>(R.id.details).setOnClickListener {
             startActivity(Intent(this, ResidentActivity::class.java).putExtra(ResidentActivity.EXTRA_PATH, ResidentActivity.checkPath(page.url)))
+        }
+
+        if (savedInstanceState == null) {
+            Motion.popIn(icon, from = 0.3f)
+            if (blocked) Motion.shake(icon, delayMs = 420)
+            Motion.stagger(listOf(findViewById(R.id.verdict_body), findViewById(R.id.verdict_actions)), startMs = 150, stepMs = 90)
         }
     }
 
-    private fun report(url: String, button: Button) {
+    private fun report(url: String, button: MaterialButton) {
         button.isEnabled = false
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { app.core.report(url) } }
