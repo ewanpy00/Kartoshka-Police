@@ -80,26 +80,45 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="panel">
-    <h1>{{ t('takedowns') }}</h1>
-    <p class="notice">{{ t('takedownNotice') }}</p>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
+  <div class="page-head">
+    <h1>{{ t('navTakedowns') }}</h1>
+  </div>
+  <p class="notice">{{ t('takedownNotice') }}</p>
+  <p v-if="error" class="error" role="alert">{{ error }}</p>
 
-    <h2>{{ t('pickConfirmed') }}</h2>
-    <p v-if="!confirmed.length" class="muted">{{ t('noConfirmed') }}</p>
-    <ul v-else class="plain">
-      <li v-for="domain in confirmed" :key="domain">
-        <label class="check">
-          <input type="checkbox" :checked="picked.has(domain)" @change="toggle(domain, ($event.target as HTMLInputElement).checked)" />
-          <span class="mono">{{ defang(domain) }}</span>
-        </label>
-      </li>
-    </ul>
-    <div class="actions">
-      <button :disabled="!picked.size" @click="build">{{ t('buildPacks') }}</button>
+  <div class="card">
+    <div class="card-section">
+      <h2 class="section-title">{{ t('pickConfirmed') }}</h2>
+    </div>
+    <p v-if="!confirmed.length" class="empty">{{ t('noConfirmed') }}</p>
+    <table v-else class="table">
+      <thead>
+        <tr>
+          <th class="sel"></th>
+          <th>{{ t('domain') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="domain in confirmed" :key="domain">
+          <td class="sel">
+            <input
+              type="checkbox"
+              :id="`pick-${domain}`"
+              :checked="picked.has(domain)"
+              @change="toggle(domain, ($event.target as HTMLInputElement).checked)"
+            />
+          </td>
+          <td>
+            <label :for="`pick-${domain}`" class="mono">{{ defang(domain) }}</label>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="card-section">
+      <button class="btn primary" :disabled="!picked.size" @click="build">{{ t('buildPacks') }}</button>
     </div>
 
-    <div v-if="refused.length" class="error" role="alert">
+    <div v-if="refused.length" class="card-section error" role="alert">
       <strong>{{ t('refused') }}</strong>
       <ul>
         <li v-for="item in refused" :key="item.domain">
@@ -107,33 +126,55 @@ onMounted(load)
         </li>
       </ul>
     </div>
-    <div v-if="built?.without_recipient.length" class="notice">
+    <div v-if="built?.without_recipient.length" class="card-section notice">
       {{ t('withoutRecipient') }}: <span class="mono">{{ built.without_recipient.map(defang).join(', ') }}</span>
     </div>
-  </section>
+  </div>
 
-  <section class="panel">
-    <h2>{{ t('takedowns') }}</h2>
-    <p v-if="!packs.length" class="muted">{{ t('noPacks') }}</p>
-    <article v-for="pack in packs" :key="pack.id" class="pack">
+  <div class="card packs">
+    <div class="card-section">
+      <h2 class="section-title">{{ t('navTakedowns') }}</h2>
+    </div>
+    <p v-if="!packs.length" class="empty">{{ t('noPacks') }}</p>
+    <div v-for="pack in packs" :key="pack.id" class="card-section pack-item">
       <p>
         <strong>{{ pack.recipient_kind }}</strong>
-        · {{ t('generatedAt') }}: {{ formatTime(pack.generated_at) }}
+        <span class="muted"> · {{ t('generatedAt') }}: {{ formatTime(pack.generated_at) }}</span>
       </p>
       <p>
         {{ t('recipient') }}: <span class="mono">{{ pack.recipient }}</span>
-        <button class="secondary small" @click="copy(pack)">{{ copiedId === pack.id ? t('copied') : t('copy') }}</button>
+        <button class="btn ghost" @click="copy(pack)">{{ copiedId === pack.id ? t('copied') : t('copy') }}</button>
       </p>
       <p class="mono">{{ pack.domains.map(defang).join(', ') }}</p>
-      <p class="mono muted">{{ t('packHash') }}: {{ pack.sha256 }}</p>
-      <p v-if="pack.sent_at">{{ t('sentBy', { who: pack.sent_by ?? '', when: formatTime(pack.sent_at) }) }}</p>
-      <p v-else class="muted">{{ t('notSent') }}</p>
-      <div class="actions">
-        <button class="secondary" @click="save(pack)">
-          {{ t('downloadPack') }}
-        </button>
-        <button v-if="!pack.sent_at" @click="markSent(pack.id)">{{ t('markSent') }}</button>
+      <div class="hash">{{ t('packHash') }}: {{ pack.sha256 }}</div>
+      <p v-if="pack.sent_at">
+        <span class="status-chip confirmed">{{ t('sentBy', { who: pack.sent_by ?? '', when: formatTime(pack.sent_at) }) }}</span>
+      </p>
+      <p v-else>
+        <span class="status-chip rejected">{{ t('notSent') }}</span>
+      </p>
+      <div class="row-actions">
+        <button class="btn" @click="save(pack)">{{ t('downloadPack') }}</button>
+        <button v-if="!pack.sent_at" class="btn" @click="markSent(pack.id)">{{ t('markSent') }}</button>
       </div>
-    </article>
-  </section>
+    </div>
+  </div>
 </template>
+
+<style scoped>
+.card {
+  margin-block-end: 16px;
+}
+.sel {
+  inline-size: 40px;
+}
+.pack-item p {
+  margin-block: 0 8px;
+}
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-block-start: 8px;
+}
+</style>

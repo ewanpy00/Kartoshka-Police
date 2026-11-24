@@ -28,16 +28,18 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="panel">
-    <h1>{{ t('helplines') }}</h1>
+  <div class="page-head">
+    <h1>{{ t('navHelplines') }}</h1>
     <div class="actions">
-      <button class="secondary" @click="save">{{ t('downloadCsv') }}</button>
-      <span class="muted">{{ t('csvNote') }}</span>
+      <button class="btn" @click="save">{{ t('downloadCsv') }}</button>
     </div>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-else-if="!loaded" class="muted">{{ t('loading') }}</p>
-    <p v-else-if="!numbers.length" class="muted">{{ t('helplinesEmpty') }}</p>
-    <table v-else>
+  </div>
+  <p class="muted note">{{ t('csvNote') }}</p>
+  <p v-if="error" class="error" role="alert">{{ error }}</p>
+  <div class="card">
+    <p v-if="!loaded && !error" class="empty">{{ t('loading') }}</p>
+    <p v-else-if="loaded && !numbers.length && !error" class="empty">{{ t('helplinesEmpty') }}</p>
+    <table v-else-if="numbers.length" class="table">
       <thead>
         <tr>
           <th>{{ t('phone') }}</th>
@@ -50,14 +52,27 @@ onMounted(async () => {
       </thead>
       <tbody>
         <tr v-for="row in numbers" :key="`${row.phone}:${row.domain}`">
-          <td class="mono">{{ row.phone }}</td>
+          <td class="mono" dir="ltr">{{ row.phone }}</td>
           <td>{{ row.brand ?? '' }}</td>
           <td>{{ row.source }}</td>
           <td class="mono">{{ defang(row.domain) }}</td>
           <td>{{ formatTime(row.first_seen) }}</td>
-          <td>{{ row.confirmed ? t('numberConfirmed') : t('numberAwaiting') }}</td>
+          <td>
+            <span class="status-chip" :class="row.confirmed ? 'confirmed' : 'suspected'">{{
+              row.confirmed ? t('numberConfirmed') : t('numberAwaiting')
+            }}</span>
+          </td>
         </tr>
       </tbody>
     </table>
-  </section>
+  </div>
 </template>
+
+<style scoped>
+.note {
+  margin-block: 0 12px;
+}
+.error {
+  margin-block: 0 12px;
+}
+</style>
