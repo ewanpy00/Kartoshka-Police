@@ -9,11 +9,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.admin.cases import collect
 from app.brands import load_brands
 from app.config import Settings, get_settings
 from app.csvsafe import cell
 from app.db import get_session
-from app.models import Check, Domain, Evidence
+from app.models import Domain
 
 router = APIRouter()
 
@@ -53,13 +54,13 @@ def listed_numbers(session: Session, settings: Settings) -> list[Number]:
         session.scalars(select(Domain.domain).where(Domain.status == "confirmed", Domain.confirmed_by == "officer"))
     )
     found: dict[tuple[str, str, str], Number] = {}
-    rows = session.execute(
-        select(Evidence, Check.domain).join(Check, Check.id == Evidence.check_id).order_by(Evidence.seq)
-    )
-    for evidence, domain in rows:
+    for case in collect(session):
+        evidence, domain = case.evidence, case.domain
+        if evidence is None or case.check.verdict not in ("warn", "block"):
+            continue
         scam = evidence.payload.get("scam") or {}
         brand = brands.get((scam.get("brand") or "").lower())
-        if brand is None or domain is None or is_official_host(domain, brand["official_domains"]):
+        if brand is None or is_official_host(domain, brand["official_domains"]):
             continue
         official = {e164(p) for p in brand.get("official_phones", [])}
         for raw in [*scam.get("phones", []), *scam.get("whatsapp", [])]:
