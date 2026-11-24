@@ -534,7 +534,8 @@ button.danger {
 }
 
 @media all {
-  :root[data-theme='dark'] button.danger {
+  /* Filled legacy danger buttons only; the outlined .btn.danger keeps its risk-coloured text. */
+  :root[data-theme='dark'] button.danger:not(.btn) {
     color: #1a0b0a;
   }
 }
