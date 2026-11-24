@@ -1,6 +1,6 @@
 # Kartoshka-Police DevOps skeleton: plan
 
-Status: approved on 2026-11-24. Build in progress on branch `devops/skeleton`. Progress notes go at the bottom of this file.
+Status: built and verified on 2026-11-24, on branch `devops/skeleton` (not pushed). Progress notes are at the bottom of this file.
 
 ## Context
 
@@ -223,4 +223,5 @@ The final report covers what works, what is stubbed, what could not be verified,
 - 2026-11-24: approved with `BATCH_CONCURRENCY`, loopback-only console, `navigation_blocked` and the guard fallback rule. Branch `devops/skeleton` created.
 - 2026-11-24: packages F, A, B, C, D and E built and committed. Fix rounds committed for core host parsing (backslash, trailing dot, UTS-46), the hunter's message validation, the sandbox guard (iframes, workers, fail closed) and the AdGuard port binding.
 - 2026-11-24: first integration pass in the working directory. `make up` brought all eight default services up healthy. Verification steps 2 to 6, 8 and 9 passed there; step 6 produced the published-port finding now in decision 2.
-- Still to do: independent review and its fixes, console favicon, then the full verification list from a clean clone (including `make test`, `make up-stretch`, `make reset` and hot reload with real edits).
+- 2026-11-24: independent review returned five findings (popup redirect bypass, allowlist subdomain matching, stale sandbox tests, scripts failing before the first `make up`, stale console dependencies). All five fixed and committed.
+- 2026-11-24: full verification list run from a clean clone of the branch; every step passed. Test counts: core 27, sandbox 36, hunter 20, console build clean. Images were already cached, so cold build time was not measured. `make up` then run again in the working directory.
