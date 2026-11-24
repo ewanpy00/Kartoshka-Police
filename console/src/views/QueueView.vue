@@ -7,6 +7,7 @@ import StatStrip from '../components/StatStrip.vue'
 import { band, isHigh } from '../bands'
 import { defang } from '../defang'
 import { demoRunning } from '../demo'
+import { isDemoOnly } from '../demoData'
 import { formatAge, t } from '../i18n'
 import { rowTagText } from '../rowTag'
 import { officerName } from '../session'
@@ -150,9 +151,16 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 // The demo works on the first page of the queue so a case opens at once; the full queue comes back when it stops.
+// Sample cases go the moment it stops, even while the real queue is still loading.
 watch(demoRunning, (running) => {
+  if (!running) {
+    open.value = []
+    auto.value = []
+    loaded.value = false
+    if (selected.value && isDemoOnly(selected.value)) void router.replace('/queue')
+    void refreshStats()
+  }
   void load()
-  if (!running) void refreshStats()
 })
 </script>
 

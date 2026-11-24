@@ -1,6 +1,6 @@
 import { adaptRequest, adaptResponse, pagedKey } from './adapt'
 import { demoRunning } from './demo'
-import { DEMO_WAIT_MS, demoFallback, demoFill } from './demoData'
+import { DEMO_WAIT_MS, demoBlob, demoFallback, demoFill } from './demoData'
 
 export class ApiError extends Error {
   constructor(
@@ -32,10 +32,13 @@ async function failure(response: Response): Promise<ApiError> {
 const MAX_PAGES = 20
 
 /** Every page of a cursor-paginated route, rows concatenated, the last page's other fields kept. */
-async function allPages(path: string, key: string, maxPages = MAX_PAGES): Promise<unknown> {
+async function allPages(path: string, key: string): Promise<unknown> {
   let merged: Record<string, unknown> | null = null
   let cursor: string | null = null
-  for (let page = 0; page < maxPages; page++) {
+  for (let page = 0; page < MAX_PAGES; page++) {
+    // The demo shows the first page only: a long list (hundreds of open cases) would keep a page empty for many
+    // seconds, and a load already running when the demo starts stops here so it does not hold the connections.
+    if (page > 0 && demoRunning.value) break
     const url: string = cursor === null ? path : `${path}${path.includes('?') ? '&' : '?'}cursor=${encodeURIComponent(cursor)}`
     const response = await apiFetch(url)
     if (!response.ok) throw await failure(response)
@@ -63,8 +66,7 @@ export async function apiJson<T>(path: string): Promise<T> {
 
 async function loadJson<T>(path: string): Promise<T> {
   const key = pagedKey(path)
-  // The demo shows the first page only: a long list (hundreds of open cases) would keep a page empty for many seconds.
-  if (key) return demoFill(path, adaptResponse(path, await allPages(path, key, demoRunning.value ? 1 : MAX_PAGES)) as T)
+  if (key) return demoFill(path, adaptResponse(path, await allPages(path, key)) as T)
   const response = await apiFetch(path)
   if (!response.ok) throw await failure(response)
   return demoFill(path, adaptResponse(path, await response.json()) as T)
@@ -81,6 +83,8 @@ export async function postJson<T>(path: string, body: object): Promise<T> {
 }
 
 export async function fetchBlob(path: string): Promise<Blob> {
+  const sample = demoBlob(path)
+  if (sample) return sample
   const response = await apiFetch(path)
   if (!response.ok) throw await failure(response)
   return response.blob()

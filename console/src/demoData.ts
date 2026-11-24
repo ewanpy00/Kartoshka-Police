@@ -4,7 +4,20 @@
 // empty), nothing here is ever sent to core, and everything disappears when the demo stops, because the pages
 // that can show samples load real data again. All recipients, phone numbers and domains are made up.
 import { demoRunning } from './demo'
-import type { AuditEntry, CaseDetail, CaseSummary, Helpline, Pack, Stats, TakedownRequest, TakedownStats, Verify } from './types'
+import type {
+  AuditEntry,
+  CampaignDetail,
+  CampaignHeader,
+  CaseDetail,
+  CaseSummary,
+  Graph,
+  Helpline,
+  Pack,
+  Stats,
+  TakedownRequest,
+  TakedownStats,
+  Verify,
+} from './types'
 
 function ago(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString()
@@ -227,15 +240,156 @@ function sampleStats(range: string): Stats {
   }
 }
 
-/** Just enough of a case for the Impact page's lead-time table: these domains exist only in the demo. */
-function sampleLeadCase(domain: string): Pick<CaseDetail, 'lead_time'> | null {
+/** Open cases for the queue while the real queue is slow: they exist only in the demo. */
+const SAMPLE_CASES = [
+  { domain: 'tamm-pay.xyz', brand: 'TAMM', score: 94, sources: ['gatekeeper', 'hunter'], reports: 3, hits: 41, minutes: 18 },
+  { domain: 'uaepass-verify.top', brand: 'UAE PASS', score: 91, sources: ['hunter'], reports: 1, hits: 12, minutes: 32 },
+  { domain: 'adcb-secure.co', brand: 'ADCB', score: 86, sources: ['user_report'], reports: 2, hits: 7, minutes: 47 },
+  { domain: 'rta-fines-uae.online', brand: 'RTA', score: 78, sources: ['hunter'], reports: 0, hits: 3, minutes: 65 },
+] as const
+
+/** A domain or campaign that exists only in the demo, so a page can leave it as soon as the demo stops. */
+export function isDemoOnly(id: string): boolean {
+  return id === SAMPLE_CAMPAIGN_ID || SAMPLE_CASES.some((c) => c.domain === id)
+}
+
+function sampleQueue(): CaseSummary[] {
+  return SAMPLE_CASES.map((c, i) => ({
+    domain: c.domain,
+    state: 'open',
+    score: c.score,
+    verdict: 'block',
+    brand: c.brand,
+    sources: [...c.sources],
+    reports: c.reports,
+    hits: c.hits,
+    first_seen: ago(c.minutes),
+    last_seen: ago(2 + i),
+    evidence_id: `demo_ev_${i + 1}`,
+    campaign_id: null,
+  }))
+}
+
+/** A whole case for a sample domain: the case card while the real queue is slow, and Impact's lead time. */
+function sampleCase(domain: string): CaseDetail | null {
+  const index = SAMPLE_CASES.findIndex((c) => c.domain === domain)
+  if (index < 0) return null
+  const c = SAMPLE_CASES[index]
   const lead = LEAD_SAMPLES.find((d) => d.domain === domain)
-  if (!lead) return null
+  const brand = c.brand
   return {
-    lead_time: {
-      gsb: { state: lead.gsb, at_least_hours: lead.hours },
-      vt: { state: lead.vt, at_least_hours: lead.hours + 4 },
+    ...sampleQueue()[index],
+    url: `https://${domain}/pay`,
+    final_url: `https://${domain}/pay/card`,
+    title: `${brand} | Pay your traffic fine`,
+    summary: {
+      en: `A new site copying the ${brand} payment page. It asks for the card number, CVV and the one-time code.`,
+      ar: `موقع جديد ينسخ صفحة الدفع الخاصة بـ ${brand}. يطلب رقم البطاقة ورمز التحقق والرمز المؤقت.`,
     },
+    reasons: [
+      { code: 'brand_lookalike', weight: 30, en: `The name imitates ${brand}`, ar: `الاسم يقلّد ${brand}`, source: 'url' },
+      { code: 'card_form', weight: 25, en: 'The page asks for card number, CVV and OTP', ar: 'الصفحة تطلب رقم البطاقة ورمز التحقق والرمز المؤقت', source: 'page' },
+      { code: 'new_domain', weight: 20, en: 'Registered 2 days ago', ar: 'سُجّل قبل يومين', source: 'whois' },
+      { code: 'visual_match', weight: 12, en: `The page looks like the real ${brand} site`, ar: `الصفحة تشبه موقع ${brand} الحقيقي`, source: 'screenshot' },
+      { code: 'risky_tld', weight: 7, en: 'A domain ending often used for scams', ar: 'امتداد نطاق يُستخدم كثيراً في الاحتيال', source: 'url' },
+    ],
+    infrastructure: {
+      registrar: 'Registrar Example Ltd.',
+      registered_at: ago(2 * 24 * 60),
+      name_servers: ['ns1.hosting.example', 'ns2.hosting.example'],
+      ip: '203.0.113.24',
+      ip_owner: 'Hosting Example',
+    },
+    location: { hosted_in: 'NL', registered_through: 'Registrar Example Ltd.', network_owner: 'Hosting Example', behind_proxy: false },
+    lead_time: lead
+      ? { gsb: { state: lead.gsb, at_least_hours: lead.hours }, vt: { state: lead.vt, at_least_hours: lead.hours + 4 } }
+      : null,
+    asks_for: ['card', 'cvv', 'otp'],
+    checks: [],
+    report_notes: [],
+    reviews: [],
+    has_screenshot: true,
+  }
+}
+
+/** The demo cases' screenshot: a plain sketch of a fake payment page, with no real logo. */
+export const SAMPLE_SHOT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" font-family="Arial, sans-serif">
+<rect width="960" height="600" fill="#f4f5f7"/>
+<rect width="960" height="44" fill="#e2e5ea"/><circle cx="24" cy="22" r="6" fill="#c9ced6"/><circle cx="44" cy="22" r="6" fill="#c9ced6"/><circle cx="64" cy="22" r="6" fill="#c9ced6"/>
+<rect x="96" y="10" width="520" height="24" rx="12" fill="#fff"/><text x="112" y="27" font-size="13" fill="#555">https://tamm-pay.xyz/pay</text>
+<rect y="44" width="960" height="64" fill="#1d3b5a"/><text x="40" y="84" font-size="22" fill="#fff" font-weight="bold">Government Services</text>
+<text x="40" y="160" font-size="28" fill="#1d2733" font-weight="bold">Pay your traffic fine</text>
+<text x="40" y="192" font-size="15" fill="#5b6573">Fine AED 500 · Pay within 24 hours to avoid a penalty</text>
+<rect x="40" y="220" width="560" height="320" rx="10" fill="#fff" stroke="#d8dce2"/>
+<text x="64" y="260" font-size="14" fill="#333">Card number</text><rect x="64" y="270" width="512" height="40" rx="6" fill="#f8f9fb" stroke="#c9ced6"/>
+<text x="64" y="340" font-size="14" fill="#333">Expiry</text><rect x="64" y="350" width="240" height="40" rx="6" fill="#f8f9fb" stroke="#c9ced6"/>
+<text x="336" y="340" font-size="14" fill="#333">CVV</text><rect x="336" y="350" width="240" height="40" rx="6" fill="#f8f9fb" stroke="#c9ced6"/>
+<text x="64" y="420" font-size="14" fill="#333">One-time code (OTP)</text><rect x="64" y="430" width="512" height="40" rx="6" fill="#f8f9fb" stroke="#c9ced6"/>
+<rect x="64" y="486" width="512" height="40" rx="6" fill="#2f7d4f"/><text x="320" y="512" font-size="16" fill="#fff" text-anchor="middle" font-weight="bold">Pay now</text>
+<rect x="640" y="220" width="280" height="140" rx="10" fill="#fff" stroke="#d8dce2"/><text x="660" y="256" font-size="15" fill="#1d2733" font-weight="bold">Fine details</text>
+<text x="660" y="288" font-size="13" fill="#5b6573">Speeding · Sheikh Zayed Rd</text><text x="660" y="314" font-size="13" fill="#5b6573">Amount: AED 500</text>
+</svg>`
+
+/** The demo screenshot for a sample case's evidence; null for anything else. */
+export function demoBlob(path: string): Blob | null {
+  if (!demoRunning.value || !/^\/v1\/admin\/evidence\/demo_ev_\d+\/screenshot\.png$/.test(path)) return null
+  return new Blob([SAMPLE_SHOT_SVG], { type: 'image/svg+xml' })
+}
+
+const SAMPLE_CAMPAIGN_ID = 'demo_cmp_1'
+
+function sampleCampaignHeader(): CampaignHeader {
+  return {
+    id: SAMPLE_CAMPAIGN_ID,
+    name: 'Fake fine payments · since 22 Nov 2026',
+    brand: 'TAMM',
+    status: 'campaign',
+    domains: { total: SAMPLE_CASES.length, confirmed: 1 },
+    first_seen: ago(3 * 24 * 60),
+    last_activity_at: ago(18),
+    active: true,
+  }
+}
+
+function sampleCampaign(): CampaignDetail {
+  const { domains: _count, ...header } = sampleCampaignHeader()
+  return {
+    ...header,
+    domains: SAMPLE_CASES.map((c, i) => ({
+      domain: c.domain,
+      state: i === 0 ? 'confirmed' : 'open',
+      score: c.score,
+      evidence_id: `demo_ev_${i + 1}`,
+      excluded: null,
+    })),
+    shared: [
+      { kind: 'ns', value: 'ns1.hosting.example', strength: 'strong', domain_count: 4 },
+      { kind: 'ip', value: '203.0.113.24', strength: 'strong', domain_count: 3 },
+      { kind: 'registrar', value: 'Registrar Example Ltd.', strength: 'weak', domain_count: 4 },
+    ],
+    locations: [{ hosted_in: 'NL', registered_through: 'Registrar Example Ltd.', network_owner: 'Hosting Example', behind_proxy: false, domains: 4 }],
+  }
+}
+
+function sampleGraph(): Graph {
+  const nodes: Graph['nodes'] = [
+    ...SAMPLE_CASES.map((c) => ({ data: { id: `d:${c.domain}`, label: c.domain, kind: 'domain' } })),
+    { data: { id: 'ns:ns1.hosting.example', label: 'ns1.hosting.example', kind: 'ns' } },
+    { data: { id: 'ip:203.0.113.24', label: '203.0.113.24', kind: 'ip' } },
+    { data: { id: 'phone:+971 4 555 0142', label: '+971 4 555 0142', kind: 'phone' } },
+  ]
+  const edge = (source: string, target: string, strength: 'strong' | 'weak' = 'strong') => ({
+    data: { id: `${source}>${target}`, source, target, strength },
+  })
+  const d = SAMPLE_CASES.map((c) => `d:${c.domain}`)
+  return {
+    nodes,
+    edges: [
+      ...d.map((id) => edge(id, 'ns:ns1.hosting.example')),
+      ...d.slice(0, 3).map((id) => edge(id, 'ip:203.0.113.24')),
+      edge(d[0], 'phone:+971 4 555 0142'),
+      edge(d[3], 'phone:+971 4 555 0142', 'weak'),
+    ],
   }
 }
 
@@ -250,7 +404,12 @@ export function demoFallback(path: string): unknown {
   if (p === '/v1/admin/takedowns') return { packs: samplePacks(), requests: sampleRequests() }
   if (p === '/v1/admin/takedowns/stats') return sampleTakedownStats()
   if (p === '/v1/admin/stats') return sampleStats(new URLSearchParams(path.split('?')[1] ?? '').get('range') ?? '24h')
-  if (p.startsWith('/v1/admin/cases/')) return sampleLeadCase(decodeURIComponent(p.slice('/v1/admin/cases/'.length)))
+  if (p.startsWith('/v1/admin/cases/')) return sampleCase(decodeURIComponent(p.slice('/v1/admin/cases/'.length)))
+  if (path === '/v1/admin/queue?state=open') return { cases: sampleQueue() }
+  if (p === '/v1/admin/campaigns') return { campaigns: [sampleCampaignHeader()] }
+  if (p === `/v1/admin/campaigns/${SAMPLE_CAMPAIGN_ID}`) return sampleCampaign()
+  if (p === `/v1/admin/campaigns/${SAMPLE_CAMPAIGN_ID}/graph`) return sampleGraph()
+  if (path === '/v1/admin/queue?state=auto_confirmed') return { cases: [] }
   if (p === '/v1/admin/audit' && !path.includes('target=')) return { entries: sampleAudit() }
   if (p === '/v1/admin/helplines') return { numbers: sampleHelplines() }
   if (p === '/v1/admin/evidence/verify') return SAMPLE_VERIFY

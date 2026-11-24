@@ -117,7 +117,15 @@ async function save(pack: Pack) {
 onMounted(load)
 // Sample packs shown during the demo go away as soon as it stops.
 watch(demoRunning, (running) => {
-  if (!running) void load()
+  if (running) return
+  packs.value = []
+  requests.value = []
+  stats.value = null
+  confirmed.value = []
+  openId.value = ''
+  queueLoaded.value = false
+  packsLoaded.value = false
+  void load()
 })
 </script>
 

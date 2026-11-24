@@ -8,6 +8,8 @@ import LocationLines from '../components/LocationLines.vue'
 import ReasonConfirm from '../components/ReasonConfirm.vue'
 import { band, isHigh } from '../bands'
 import { defang } from '../defang'
+import { demoRunning } from '../demo'
+import { isDemoOnly } from '../demoData'
 import { t } from '../i18n'
 import { officerName } from '../session'
 import type { CampaignDetail, CampaignHeader, ExcludeResult, Graph, MergeResult, Pivot } from '../types'
@@ -29,6 +31,11 @@ const entity = ref<{ kind: string; value: string } | null>(null)
 const pivot = ref<Pivot | null>(null)
 
 const base = computed(() => `/v1/admin/campaigns/${encodeURIComponent(props.id)}`)
+
+// The sample campaign exists only in the demo: leave it when the demo stops.
+watch(demoRunning, (running) => {
+  if (!running && isDemoOnly(props.id)) void router.replace('/campaigns')
+})
 const confirmedShown = computed(() => {
   const refused = new Set(result.value?.skipped.map((skip) => skip.domain))
   return (result.value?.confirmed ?? []).filter((domain) => !refused.has(domain))

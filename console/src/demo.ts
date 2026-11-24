@@ -22,60 +22,37 @@ export interface DemoStep {
   effect?: 'feed'
 }
 
+// The main story only, in about 35 seconds: a case, its campaign, the takedown, the live Hunter, the impact and
+// the evidence chain. Controls that write are only pointed at.
 export const DEMO_STEPS: readonly DemoStep[] = [
-  // Review: queue and case card
-  { target: '.sidenav a[href="/queue"]', action: 'click', caption: 'demoQueue' },
-  { target: '.stat-strip', action: 'point', caption: 'demoStats' },
-  { target: '.chips .chip:nth-child(2)', action: 'click', caption: 'demoHighRisk' },
-  { target: '.q-row', action: 'click', caption: 'demoOpenCase' },
+  { target: '.sidenav a[href="/queue"]', action: 'click', caption: 'demoQueue', hold: 900 },
+  { target: '.chips .chip:nth-child(2)', action: 'click', caption: 'demoHighRisk', hold: 700 },
+  { target: '.q-row', action: 'click', caption: 'demoOpenCase', hold: 700 },
   { target: '.case-card .case-head-score', action: 'point', caption: 'demoScore' },
   { target: '.case-card .reason-list', action: 'point', caption: 'demoReasons', hold: 1600 },
   { target: '.case-card .shot', action: 'point', caption: 'demoShot' },
-  { target: '.case-card .action-row .btn.primary', action: 'point', caption: 'demoConfirm', hold: 1600 },
-  { target: '.chips .chip:nth-child(1)', action: 'click', caption: 'demoAllCases', hold: 600 },
-  // Review: campaigns (merge, exclude and pivot write or take long, so they are only pointed at)
-  { target: '.sidenav a[href="/campaigns"]', action: 'click', caption: 'demoCampaigns' },
-  { target: '.content table a.link', action: 'click', caption: 'demoCampaign' },
-  { target: '.content .card-section:has(> .merge-field)', action: 'point', caption: 'demoCampActions', hold: 1600 },
-  { target: '.content .card-section:has(> .merge-field) + .card-section', action: 'point', caption: 'demoCampPivot', hold: 1600 },
-  { target: '.content .graph', action: 'point', caption: 'demoGraph', hold: 1600 },
-  // Review: takedowns and helplines
-  { target: '.sidenav a[href="/takedowns"]', action: 'click', caption: 'demoTakedowns' },
-  { target: '.content .stat-strip', action: 'point', caption: 'demoTdStats', hold: 1400 },
-  { target: '.content .table:has(.status-chip)', action: 'point', caption: 'demoTdRequests', hold: 1600 },
-  { target: '.content .packs .pack-item', action: 'point', caption: 'demoTakedowns', hold: 1400 },
-  { target: '.sidenav a[href="/helplines"]', action: 'click', caption: 'demoHelplines' },
-  // Detection: Hunter feed and watchlist
-  { target: '.sidenav a[href="/feed"]', action: 'click', caption: 'demoFeed' },
-  { target: '.content .card .table thead', action: 'point', caption: 'demoFeedLive', hold: 3200, effect: 'feed' },
-  { target: '.content .queue-layout > div:first-child .card', action: 'point', caption: 'demoWatchlist', hold: 1600 },
-  // Insights: impact and model quality
-  { target: '.sidenav a[href="/impact"]', action: 'click', caption: 'demoImpact' },
-  { target: '.content .stat-strip', action: 'point', caption: 'demoImpactTotals', hold: 1600 },
-  { target: '.content .series-chart', action: 'point', caption: 'demoImpactChart', hold: 1400 },
-  { target: '.content .page-head .seg button:nth-child(2)', action: 'click', caption: 'demoImpactRange', hold: 1200 },
-  { target: '.content > .card ~ .card ~ .card .table', action: 'point', caption: 'demoImpactLead', hold: 1800 },
-  { target: '.sidenav a[href="/quality"]', action: 'click', caption: 'demoQuality' },
-  { target: '.content .table', action: 'point', caption: 'demoQualityBands', hold: 1400 },
-  { target: '.content > .card ~ .card .table', action: 'point', caption: 'demoQualityDisagree', hold: 1600 },
-  { target: '.content > .card ~ .card ~ .card', action: 'point', caption: 'demoQualityModel', hold: 1600 },
-  // System: evidence chain, audit log and health
-  { target: '.sidenav a[href="/chain"]', action: 'click', caption: 'demoChain' },
-  { target: '.content .page-head .btn.primary', action: 'click', caption: 'demoChainCheck' },
-  { target: '.content .status-chip', action: 'point', caption: 'demoChainResult' },
-  { target: '.content .chain-records', action: 'point', caption: 'demoChainRecords', hold: 1600 },
-  { target: '.sidenav a[href="/audit"]', action: 'click', caption: 'demoAudit' },
-  { target: '.content table', action: 'point', caption: 'demoAudit', hold: 1400 },
-  { target: '.topbar .health-strip', action: 'click', caption: 'demoHealthStrip', hold: 1400 },
-  { target: '.content .status-line', action: 'point', caption: 'demoHealth', hold: 1400 },
-  { target: '.content > .card ~ .card .table', action: 'point', caption: 'demoHealthHunter', hold: 1400 },
-  { target: '.sidenav a[href="/queue"]', action: 'click', caption: 'demoDone', hold: 1400 },
+  { target: '.case-card .action-row .btn.primary', action: 'point', caption: 'demoConfirm', hold: 1500 },
+  { target: '.sidenav a[href="/campaigns"]', action: 'click', caption: 'demoCampaigns', hold: 700 },
+  { target: '.content table a.link', action: 'click', caption: 'demoCampaign', hold: 600 },
+  { target: '.content .graph', action: 'point', caption: 'demoGraph', hold: 1500 },
+  { target: '.sidenav a[href="/takedowns"]', action: 'click', caption: 'demoTakedowns', hold: 700 },
+  { target: '.content .table:has(.status-chip)', action: 'point', caption: 'demoTdRequests', hold: 1400 },
+  { target: '.sidenav a[href="/feed"]', action: 'click', caption: 'demoFeed', hold: 600 },
+  // The feed card is there even before the real feed answers, so the sample rows can stream in at once.
+  { target: '.content .queue-layout > .card', action: 'point', caption: 'demoFeedLive', hold: 2600, effect: 'feed' },
+  { target: '.sidenav a[href="/impact"]', action: 'click', caption: 'demoImpact', hold: 700 },
+  { target: '.content .stat-strip', action: 'point', caption: 'demoImpactTotals', hold: 1500 },
+  { target: '.sidenav a[href="/chain"]', action: 'click', caption: 'demoChain', hold: 600 },
+  { target: '.content .page-head .btn.primary', action: 'click', caption: 'demoChainCheck', hold: 600 },
+  { target: '.content .status-chip', action: 'point', caption: 'demoChainResult', hold: 1200 },
+  { target: '.sidenav a[href="/queue"]', action: 'click', caption: 'demoDone', hold: 1200 },
 ]
 
 const MOVE_MS = 320
 const CLICK_MS = 160
 const HOLD_MS = 1000
-const FIND_MS = 1500
+// Long enough for a page to load its data on a busy backend; a step only waits this long when its element is missing.
+const FIND_MS = 4000
 
 export const demoRunning = ref(false)
 export const demoCaption = ref<Key | null>(null)

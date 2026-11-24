@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { apiJson, errorText } from '../api'
+import { demoRunning } from '../demo'
 import { formatTime, t } from '../i18n'
 import type { CampaignHeader } from '../types'
 
@@ -8,13 +9,22 @@ const campaigns = ref<CampaignHeader[]>([])
 const error = ref('')
 const loaded = ref(false)
 
-onMounted(async () => {
+async function load() {
   try {
     campaigns.value = (await apiJson<{ campaigns: CampaignHeader[] }>('/v1/admin/campaigns')).campaigns
   } catch (e) {
     error.value = t('failed', { error: errorText(e) })
   }
   loaded.value = true
+}
+
+onMounted(load)
+// A sample campaign shown during the demo goes as soon as it stops.
+watch(demoRunning, (running) => {
+  if (running) return
+  campaigns.value = []
+  loaded.value = false
+  void load()
 })
 </script>
 

@@ -112,13 +112,28 @@ describe('demo sample data', () => {
   })
 })
 
+describe('demo screenshot', () => {
+  afterEach(() => {
+    demoRunning.value = false
+  })
+
+  it('serves the sample screenshot only for sample evidence while the demo runs', async () => {
+    const { demoBlob } = await import('./demoData')
+    expect(demoBlob('/v1/admin/evidence/demo_ev_1/screenshot.png')).toBeNull()
+    demoRunning.value = true
+    expect(demoBlob('/v1/admin/evidence/demo_ev_1/screenshot.png')?.type).toBe('image/svg+xml')
+    expect(demoBlob('/v1/admin/evidence/ev_real/screenshot.png')).toBeNull()
+  })
+})
+
 describe('demo fallback', () => {
   it('has a sample for slow pages and none for the rest', async () => {
     const { demoFallback } = await import('./demoData')
     expect(demoFallback('/v1/admin/evidence/verify')).toMatchObject({ intact: true })
     expect(demoFallback('/v1/admin/helplines')).toHaveProperty('numbers')
     expect(demoFallback('/v1/admin/cases/example.com')).toBeNull()
-    expect(demoFallback('/v1/admin/cases/tamm-pay.xyz')).toHaveProperty('lead_time')
+    expect(demoFallback('/v1/admin/cases/tamm-pay.xyz')).toMatchObject({ domain: 'tamm-pay.xyz', has_screenshot: true })
+    expect((demoFallback('/v1/admin/queue?state=open') as { cases: unknown[] }).cases.length).toBeGreaterThan(0)
     expect(demoFallback('/v1/admin/takedowns')).toMatchObject({ packs: expect.any(Array), requests: expect.any(Array) })
     expect(demoFallback('/v1/admin/takedowns/stats')).toHaveProperty('by_status')
     expect((demoFallback('/v1/admin/stats?range=24h') as Stats).impact.series.length).toBeGreaterThan(0)
