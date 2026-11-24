@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // What the phone shows at a point of the tour. On the presentation stage the opening and closing titles are
 // drawn around the phone; with `solo` (the phone-only video and the app's tour mode) they are drawn inside it,
-// as an app splash and an end card.
+// as an app splash and an end card. `light` draws every screen in the light theme (the APK's tour default).
 import SceneCheck from './SceneCheck.vue'
 import SceneLang from './SceneLang.vue'
 import SceneRadar from './SceneRadar.vue'
@@ -9,13 +9,13 @@ import SceneReport from './SceneReport.vue'
 import SceneSms from './SceneSms.vue'
 import { span, type SceneId } from './timeline'
 
-const props = defineProps<{ id: SceneId; local: number; ar: boolean; solo?: boolean }>()
+const props = defineProps<{ id: SceneId; local: number; ar: boolean; solo?: boolean; light?: boolean }>()
 const T = (en: string, ar: string) => (props.ar ? ar : en)
 const PILLS: [string, string][] = [['Block', 'احجب'], ['Check', 'افحص'], ['Report', 'أبلغ'], ['Track', 'تابع'], ['Radar', 'الرادار']]
 </script>
 
 <template>
-  <div class="ph" :dir="ar ? 'rtl' : 'ltr'">
+  <div class="ph" :class="{ light }" :dir="ar ? 'rtl' : 'ltr'">
     <div :key="id" class="fade">
       <!-- Splash (solo only) -->
       <div v-if="id === 'intro' && solo" class="splash">
@@ -39,7 +39,7 @@ const PILLS: [string, string][] = [['Block', 'احجب'], ['Check', 'افحص'],
           <i v-for="([en, a], i) in PILLS" :key="en" :style="{ opacity: span(local, 200 + i * 90, 300), transform: `translateY(${(1 - span(local, 200 + i * 90, 300)) * 10}px)` }">{{ T(en, a) }}</i>
         </span>
       </div>
-      <SceneLang v-else :at="id === 'outro' ? 2800 : local" :ar="ar" />
+      <SceneLang v-else :at="id === 'outro' ? 2800 : local" :ar="ar" :light="light" />
     </div>
   </div>
 </template>
@@ -56,4 +56,8 @@ const PILLS: [string, string][] = [['Block', 'احجب'], ['Check', 'افحص'],
 .sub { color: #b9c0cc; font-size: 15px; }
 .pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 300px; margin-top: 18px; }
 .pills i { font-style: normal; padding: 5px 14px; border-radius: 999px; border: 1px solid rgb(215 177 78 / 0.5); color: #d7b14e; font-weight: 700; font-size: 14px; }
+.ph.light .splash { color: var(--text); background: radial-gradient(70% 50% at 50% 42%, #ffffff, #eef1f6 70%); }
+.ph.light .sub { color: var(--muted); }
+.ph.light .logo { background: rgb(215 177 78 / 0.16); box-shadow: 0 0 60px -6px rgb(215 177 78 / 0.45); }
+.ph.light .pills i { color: #8a6a16; border-color: rgb(138 106 22 / 0.45); }
 </style>

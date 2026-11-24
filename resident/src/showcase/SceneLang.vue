@@ -1,25 +1,26 @@
 <script setup lang="ts">
 // Scene 5: Home in the other language (Arabic, right to left, when the show runs in English) in the light
-// theme; then the theme switch flips it to dark with a circular reveal from the switch.
+// theme; then the theme switch flips it to dark with a circular reveal from the switch. In a light tour it
+// runs the other way (dark first, then light), so the tour ends in the theme it was played in.
 import { computed } from 'vue'
 import PhoneHome from './PhoneHome.vue'
 import { span } from './timeline'
 
-const props = defineProps<{ at: number; ar: boolean }>()
+const props = defineProps<{ at: number; ar: boolean; light?: boolean }>()
 const other = computed(() => !props.ar)
-const DARK = 1350
-const reveal = computed(() => span(props.at, DARK, 750))
+const FLIP = 1350
+const reveal = computed(() => span(props.at, FLIP, 750))
 </script>
 
 <template>
   <div class="scene" :style="{ opacity: span(at, 0, 300) }">
-    <div class="ph light" :dir="other ? 'rtl' : 'ltr'"><PhoneHome :ar="other" /></div>
-    <div v-if="at >= DARK" class="ph" :dir="other ? 'rtl' : 'ltr'" :style="{ clipPath: `circle(${reveal * 150}% at 50% 84%)` }">
+    <div class="ph" :class="{ light: !light }" :dir="other ? 'rtl' : 'ltr'"><PhoneHome :ar="other" /></div>
+    <div v-if="at >= FLIP" class="ph" :class="{ light }" :dir="other ? 'rtl' : 'ltr'" :style="{ clipPath: `circle(${reveal * 150}% at 50% 84%)` }">
       <PhoneHome :ar="other" />
     </div>
     <div class="switches" :style="{ opacity: span(at, 200, 300), transform: `translateY(${(1 - span(at, 200, 350)) * 16}px)` }">
       <span class="seg"><i :class="{ on: !other }">EN</i><i :class="{ on: other }">عربي</i></span>
-      <span class="seg"><i :class="{ on: at < DARK }">☀</i><i :class="{ on: at >= DARK }">☾</i></span>
+      <span class="seg"><i :class="{ on: (at < FLIP) !== !!light }">☀</i><i :class="{ on: (at >= FLIP) !== !!light }">☾</i></span>
     </div>
   </div>
 </template>

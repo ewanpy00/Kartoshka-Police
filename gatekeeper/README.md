@@ -81,9 +81,9 @@ The block page shows **Check your real fines in TAMM** (`https://www.tamm.abudha
 
 ## Product tour (screen recording)
 
-`TourActivity` plays the 24 s product tour from the web `/showcase` (sample data, no network) full screen, with the system bars hidden and the screen kept on. Tap pauses; back exits.
+`TourActivity` plays the 24 s product tour from the web `/showcase` (sample data, no network) full screen, with the system bars hidden and the screen kept on. It is drawn in the light theme; `--es theme dark` (or `make record-tour theme=dark`) plays the dark one. Tap pauses; back exits.
 
 - Open it with a long press on the app icon (Product tour), a long press on the Home header, or `adb shell am start -n ae.kartoshka.gatekeeper/.TourActivity --es lang ar`.
 - The tour is built into the APK by `make tour`; `make android` and `make android-demo` do this when `resident/node_modules` exists. Without it (for example `make apk` in Docker) the screen opens `/showcase?phone` on the resident server instead.
-- `make record-tour lang=en` records it with `adb screenrecord`: the tour waits on its first frame, the recording starts, a tap starts the tour, and it plays once and holds the end card. On a phone you can also use the built-in screen recorder.
+- `make record-tour lang=en` (add `theme=dark` for the dark tour) records it with `adb screenrecord`: the tour waits on its first frame, the recording starts, a tap starts the tour, and it plays once and holds the end card. On a phone you can also use the built-in screen recorder.
 

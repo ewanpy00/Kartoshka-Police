@@ -102,6 +102,11 @@ const REASONS: [string, string][] = [
 .checking li.hit { color: #fff; }
 .checking li.hit .dot { background: #ff9483; box-shadow: 0 0 8px #ff9483; }
 .ms { margin-top: 6px; font-variant-numeric: tabular-nums; }
+.ph.light .checking { background: var(--bg); color: var(--text); }
+.ph.light .checking ul { color: var(--muted); }
+.ph.light .checking .dot { background: var(--dot); }
+.ph.light .checking li.hit { color: var(--text); }
+.ph.light .checking li.hit .dot { background: var(--block); box-shadow: 0 0 8px var(--block); }
 
 .block { position: absolute; inset: 0; background: var(--bg); z-index: 11; }
 .block > .status { position: absolute; inset-inline: 0; top: 0; color: #fff; z-index: 1; }

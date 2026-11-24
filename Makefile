@@ -52,5 +52,5 @@ android-demo: ## Same, with sample data in every tab (resident pages answer from
 tour: ## Build the offline product tour into the Gatekeeper APK (make android does this too)
 	cd resident && npx vite build -c vite.tour.config.ts
 
-record-tour: ## Record the 24 s product tour from the emulator or a USB phone: make record-tour lang=ar
-	./scripts/android.sh tour $(or $(lang),en)
+record-tour: ## Record the 24 s product tour (light theme) from the emulator or a USB phone: make record-tour lang=ar theme=dark
+	./scripts/android.sh tour $(or $(lang),en) $(or $(theme),light)

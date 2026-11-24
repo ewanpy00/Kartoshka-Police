@@ -3,7 +3,8 @@
 // animation in about 24 s, styled after the console's /live wall (ink and gold, dark stage). Nothing here
 // calls the API; the screens are drawn from fixed sample data and the page says so.
 // ?phone shows only the phone screen, full window, for a screen recording on a phone (the Gatekeeper tour
-// mode opens this) or a vertical video export.
+// mode opens this) or a vertical video export. ?light draws the phone screens in the light theme (the APK's
+// tour passes it unless it is asked for dark).
 // Keys: Space pause, ← → previous/next scene, R restart, L language, F full screen.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { lang, tr } from '../i18n'
@@ -17,6 +18,7 @@ const props = defineProps<{ phone?: boolean }>()
 const query = new URLSearchParams(location.search + '&' + location.hash.slice(1))
 
 const { t, playing, scene, local, seek, jump, toggle, restart } = useTimeline()
+const light = query.has('light') || query.get('theme') === 'light'
 const ar = computed(() => lang.value === 'ar')
 // ?once plays the tour a single time and holds the end card (for a screen recording), instead of looping.
 if (query.has('once')) watch(t, (now, before) => { if (now < before && playing.value) { seek(TOTAL - 1); playing.value = false } })
@@ -118,9 +120,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="solo" class="solo" :class="{ capture }" @click="toggle">
+  <div v-if="solo" class="solo" :class="{ capture, light }" @click="toggle">
     <div class="solo-screen" :style="{ width: `${soloBox.width}px`, height: `${soloBox.height}px`, transform: `scale(${soloBox.scale})` }">
-      <PhoneScreen :id="scene.id" :local="local" :ar="ar" solo />
+      <PhoneScreen :id="scene.id" :local="local" :ar="ar" :light="light" solo />
     </div>
   </div>
   <div v-else class="show" :class="{ capture }">
@@ -140,7 +142,7 @@ onBeforeUnmount(() => {
       <div class="phone-slot" :style="{ width: `${399 * scale}px`, height: `${814 * scale}px` }">
         <div class="phone" :style="phoneStyle">
           <div class="screen">
-            <PhoneScreen :id="scene.id" :local="local" :ar="ar" />
+            <PhoneScreen :id="scene.id" :local="local" :ar="ar" :light="light" />
             <span class="notch" />
           </div>
         </div>
@@ -255,6 +257,7 @@ onBeforeUnmount(() => {
 .keys { margin: 0; text-align: center; color: var(--muted); font-size: 0.78rem; }
 
 .solo { position: fixed; inset: 0; overflow: hidden; background: #0b1320; cursor: pointer; }
+.solo.light { background: #f5f6f8; }
 .solo-screen { position: absolute; top: 0; left: 0; transform-origin: top left; overflow: hidden; }
 .solo.capture :deep(*), .show.capture :deep(*), .show.capture * { transition: none !important; animation: none !important; }
 .show.capture .chapters li.now .body { display: block; }
