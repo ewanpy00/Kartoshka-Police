@@ -118,12 +118,12 @@ onBeforeUnmount(() => {
         </thead>
         <tbody>
           <tr v-for="row in rows" :key="row.key">
-            <td>{{ formatTime(row.at) }}</td>
-            <td>{{ t(`event.${row.type}`) }}</td>
-            <td class="mono">{{ row.domain ? defang(row.domain) : t('unknown') }}</td>
-            <td>{{ row.brand ?? '' }}</td>
-            <td>{{ row.verdict ?? '' }}</td>
-            <td>
+            <td :data-label="t('time')">{{ formatTime(row.at) }}</td>
+            <td :data-label="t('event')">{{ t(`event.${row.type}`) }}</td>
+            <td :data-label="t('domain')" class="mono">{{ row.domain ? defang(row.domain) : t('unknown') }}</td>
+            <td :data-label="t('brand')">{{ row.brand ?? '' }}</td>
+            <td :data-label="t('verdict')">{{ row.verdict ?? '' }}</td>
+            <td :data-label="t('score')">
               <span v-if="row.score !== null" :class="['q-score', row.score >= 70 ? 'high' : row.score >= 30 ? 'mid' : 'low']">{{ row.score }}</span>
             </td>
           </tr>

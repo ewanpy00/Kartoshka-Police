@@ -38,16 +38,16 @@ onMounted(async () => {
       </thead>
       <tbody>
         <tr v-for="campaign in campaigns" :key="campaign.id">
-          <td><RouterLink class="link" :to="`/campaigns/${campaign.id}`">{{ campaign.name }}</RouterLink></td>
-          <td>{{ campaign.brand ?? '' }}</td>
-          <td>
+          <td :data-label="t('campaign')"><RouterLink class="link" :to="`/campaigns/${campaign.id}`">{{ campaign.name }}</RouterLink></td>
+          <td :data-label="t('brand')">{{ campaign.brand ?? '' }}</td>
+          <td :data-label="t('state')">
             <span class="status-chip" :class="campaign.status === 'campaign' ? 'confirmed' : 'suspected'">{{
               campaign.status === 'campaign' ? t('campaignConfirmed') : t('campaignSuspected')
             }}</span>
           </td>
-          <td>{{ t('confirmedOf', { confirmed: campaign.domains.confirmed, total: campaign.domains.total }) }}</td>
-          <td>{{ formatTime(campaign.first_seen) }}</td>
-          <td>{{ formatTime(campaign.last_activity_at) }}</td>
+          <td :data-label="t('campaignDomains')">{{ t('confirmedOf', { confirmed: campaign.domains.confirmed, total: campaign.domains.total }) }}</td>
+          <td :data-label="t('firstSeen')">{{ formatTime(campaign.first_seen) }}</td>
+          <td :data-label="t('lastActivity')">{{ formatTime(campaign.last_activity_at) }}</td>
           <td>{{ campaign.active ? t('active') : t('inactive') }}</td>
         </tr>
       </tbody>

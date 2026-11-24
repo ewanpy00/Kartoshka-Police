@@ -52,12 +52,12 @@ onMounted(async () => {
       </thead>
       <tbody>
         <tr v-for="row in numbers" :key="`${row.phone}:${row.domain}`">
-          <td class="mono" dir="ltr">{{ row.phone }}</td>
-          <td>{{ row.brand ?? '' }}</td>
-          <td>{{ row.source }}</td>
-          <td class="mono">{{ defang(row.domain) }}</td>
-          <td>{{ formatTime(row.first_seen) }}</td>
-          <td>
+          <td :data-label="t('phone')" class="mono" dir="ltr">{{ row.phone }}</td>
+          <td :data-label="t('brand')">{{ row.brand ?? '' }}</td>
+          <td :data-label="t('source')">{{ row.source }}</td>
+          <td :data-label="t('seenOn')" class="mono">{{ defang(row.domain) }}</td>
+          <td :data-label="t('firstSeen')">{{ formatTime(row.first_seen) }}</td>
+          <td :data-label="t('state')">
             <span class="status-chip" :class="row.confirmed ? 'confirmed' : 'suspected'">{{
               row.confirmed ? t('numberConfirmed') : t('numberAwaiting')
             }}</span>

@@ -2,8 +2,8 @@
 CLASS INDEX (shared primitives; all use logical properties so RTL flips for free)
 Layout
   .page-head        page heading row: h1 on the start side, optional .actions on the end side
-  .content          main column of the shell (padding 24px)
-  .queue-layout     grid: queue column minmax(320px,440px) + case card 1fr; one column under 1000px
+  .content          main column of the shell (padding 24px, 16px under 700px)
+  .queue-layout     grid: queue column minmax(320px,440px) + case card 1fr; one column under 1200px
   .card             surface with hairline border, radius 10
   .card-section     padding block inside a .card; hairline between consecutive sections
   .section-title    13px semibold heading inside a card
@@ -88,7 +88,8 @@ Legacy (still supported): .banner .topbar .topbar-end .panel .split .filters .ca
   --banner: var(--c-banner-bg);
 
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Naskh Arabic', 'Noto Sans Arabic', sans-serif;
+  --sans: system-ui, -apple-system, 'Segoe UI', 'Noto Naskh Arabic', 'Noto Sans Arabic', sans-serif;
+  font-family: var(--sans);
   font-size: var(--fs-14);
   color: var(--c-ink);
   background: var(--c-page);
@@ -259,6 +260,11 @@ body {
   min-block-size: calc(100vh - 64px - 30px);
 }
 
+.topbar,
+.shell > * {
+  min-inline-size: 0;
+}
+
 .sidenav {
   position: sticky;
   inset-block-start: 0;
@@ -325,26 +331,31 @@ body {
     padding-inline: var(--space-4);
   }
 
-  .brand {
-    display: none;
-  }
-
-  .user-name {
-    display: none;
-  }
-
   .shell {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+    min-block-size: 0;
   }
 
   .sidenav {
-    position: static;
+    position: relative;
     flex-direction: row;
     min-block-size: 0;
     overflow-x: auto;
     padding: var(--space-2) var(--space-3);
+    scrollbar-width: none;
     border-inline-end: 0;
     border-block-end: 1px solid var(--c-hairline);
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  }
+
+  .sidenav:dir(rtl) {
+    mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+  }
+
+  .sidenav::-webkit-scrollbar {
+    display: none;
   }
 
   .sidenav a {
@@ -354,6 +365,34 @@ body {
 
   .content {
     padding: var(--space-4);
+  }
+}
+
+@media (max-width: 700px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    block-size: auto;
+    padding-block: var(--space-2);
+  }
+
+  .brand-block {
+    flex: 1 1 100%;
+  }
+
+  .topbar-end {
+    flex-wrap: wrap;
+    flex: 1 1 100%;
+    gap: var(--space-2) var(--space-3);
+    margin-inline-start: 0;
+  }
+
+  .user {
+    min-inline-size: 0;
+  }
+
+  .topbar-end button.secondary {
+    margin-inline-start: auto;
   }
 }
 
@@ -585,7 +624,11 @@ button:disabled {
   align-items: start;
 }
 
-@media (max-width: 1000px) {
+.queue-layout > * {
+  min-inline-size: 0;
+}
+
+@media (max-width: 1200px) {
   .queue-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -625,10 +668,16 @@ button:disabled {
   display: flex;
   gap: var(--space-2);
   align-items: center;
+  margin-block-end: var(--space-3);
   padding-inline: var(--space-3);
   background: var(--c-surface);
   border: 1px solid var(--c-hairline);
   border-radius: var(--radius-1);
+}
+
+.search:focus-within {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 25%, transparent);
 }
 
 .search svg {
@@ -644,9 +693,26 @@ button:disabled {
 .search input {
   flex: 1;
   min-inline-size: 0;
+  padding-block: 9px;
   padding-inline: 0;
+  appearance: none;
   background: transparent;
   border: 0;
+  outline: 0;
+}
+
+.search input:focus-visible {
+  outline: 0;
+}
+
+.search input::placeholder {
+  color: var(--c-muted);
+  opacity: 1;
+}
+
+.search input::-webkit-search-cancel-button,
+.search input::-webkit-search-decoration {
+  appearance: none;
 }
 
 .chips {
@@ -915,6 +981,71 @@ table,
   border-collapse: collapse;
 }
 
+.card:has(> .table) {
+  overflow-x: auto;
+}
+
+.table td.mono,
+.table td:has(> .mono) {
+  min-inline-size: 12ch;
+}
+
+@media (max-width: 700px) {
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    inline-size: 100%;
+  }
+
+  .table thead {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .table tr {
+    padding: var(--space-3) var(--space-4);
+    border-block-end: 1px solid var(--c-hairline);
+  }
+
+  .table td {
+    display: grid;
+    grid-template-columns: minmax(96px, 36%) minmax(0, 1fr);
+    gap: var(--space-3);
+    min-inline-size: 0;
+    padding: var(--space-1) 0;
+    overflow-wrap: anywhere;
+    border: 0;
+  }
+
+  .table td:not([data-label]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label);
+    font-family: var(--sans);
+    font-size: var(--fs-12);
+    font-weight: 400;
+    color: var(--c-muted);
+  }
+
+  .table td:empty {
+    display: none;
+  }
+
+  .table td.mono,
+  .table td:has(> .mono) {
+    min-inline-size: 0;
+  }
+}
+
 th,
 td {
   padding: 8px var(--space-3);
@@ -1064,4 +1195,45 @@ dl {
 .stat.bad {
   font-weight: 600;
   color: var(--c-risk);
+}
+
+/* ---------- small screens ---------- */
+
+@media (max-width: 700px) {
+  .card-section {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-size: var(--fs-16);
+  }
+
+  .btn,
+  .chip,
+  .q-row {
+    min-block-size: 40px;
+  }
+
+  .chip {
+    justify-content: center;
+  }
+
+  .page-head {
+    flex-wrap: wrap;
+  }
+
+  .page-head .actions {
+    flex-wrap: wrap;
+  }
+
+  .stat-strip {
+    gap: var(--space-2) var(--space-4);
+  }
+
+  .seg button {
+    min-block-size: 36px;
+  }
 }

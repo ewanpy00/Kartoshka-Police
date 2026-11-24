@@ -445,4 +445,80 @@ watch(
 .hash .btn {
   margin-inline-start: 8px;
 }
+.case-head-main,
+.reason-text,
+.section-head > * {
+  min-inline-size: 0;
+}
+.case-head-main {
+  flex: 1;
+}
+.section-head {
+  flex-wrap: wrap;
+}
+.case-head-score p {
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .case-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .case-head-main > p {
+    margin: 0;
+  }
+  .case-head-score {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+    text-align: start;
+  }
+  .case-head-score .status-chip {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+  .reason-list li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2px 10px;
+  }
+  .reason-source {
+    grid-column: 2;
+  }
+  .action-row .btn {
+    flex: 1 1 auto;
+  }
+  .action-row select {
+    flex: 1 1 10rem;
+    min-inline-size: 0;
+    min-block-size: 40px;
+  }
+  .action-row .link {
+    padding-block: 10px;
+  }
+  .hash {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
+  }
+  .hash .mono {
+    flex: 1 1 100%;
+    min-inline-size: 0;
+  }
+  .hash .btn {
+    margin-inline: auto 0;
+  }
+}
+@media (max-width: 480px) {
+  .kv {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .kv dd {
+    margin-block-end: 8px;
+  }
+}
 </style>

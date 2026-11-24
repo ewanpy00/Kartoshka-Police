@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { nextTick, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { locale, setLocale, t } from './i18n'
 import { officer, officerName, signIn, signOut } from './session'
@@ -10,7 +10,18 @@ const { awaiting } = useStats()
 
 onMounted(() => {
   if (officer.value) void refreshStats()
+  void nextTick(() => {
+    document.querySelector('.sidenav a.router-link-active')?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
+  })
 })
+watch(
+  () => route.fullPath,
+  () => {
+    void nextTick(() => {
+      document.querySelector('.sidenav a.router-link-active')?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
+    })
+  },
+)
 watch(officer, (value) => {
   if (value) void refreshStats()
 })

@@ -88,13 +88,13 @@ onMounted(load)
                   @change="toggle(row.domain, ($event.target as HTMLInputElement).checked)"
                 />
               </td>
-              <td class="mono">{{ defang(row.domain) }}</td>
-              <td>{{ row.state }}</td>
-              <td>
+              <td :data-label="t('domain')" class="mono">{{ defang(row.domain) }}</td>
+              <td :data-label="t('state')">{{ row.state }}</td>
+              <td :data-label="t('score')">
                 <span v-if="row.score !== null" class="q-score" :class="row.score >= 70 ? 'high' : row.score >= 30 ? 'mid' : 'low'">{{ row.score }}</span>
                 <template v-else>—</template>
               </td>
-              <td>
+              <td :data-label="t('reasons')">
                 <span v-if="row.excluded" class="muted">{{ t('excluded', { why: row.excluded }) }}</span>
               </td>
             </tr>

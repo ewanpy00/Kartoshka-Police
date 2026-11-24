@@ -57,11 +57,11 @@ onMounted(async () => {
       </thead>
       <tbody>
         <tr v-for="e in entries" :key="e.id">
-          <td>{{ formatTime(e.created_at) }}</td>
-          <td>{{ e.actor }}</td>
-          <td>{{ actionLabel(e.action) }}</td>
-          <td class="mono">{{ defang(e.target) }}</td>
-          <td>{{ e.reason ?? '' }}</td>
+          <td :data-label="t('colTime')">{{ formatTime(e.created_at) }}</td>
+          <td :data-label="t('colActor')">{{ e.actor }}</td>
+          <td :data-label="t('colAction')">{{ actionLabel(e.action) }}</td>
+          <td :data-label="t('colTarget')" class="mono">{{ defang(e.target) }}</td>
+          <td :data-label="t('colReason')">{{ e.reason ?? '' }}</td>
         </tr>
       </tbody>
     </table>

@@ -108,7 +108,7 @@ onMounted(load)
               @change="toggle(domain, ($event.target as HTMLInputElement).checked)"
             />
           </td>
-          <td>
+          <td :data-label="t('domain')">
             <label :for="`pick-${domain}`" class="mono">{{ defang(domain) }}</label>
           </td>
         </tr>
