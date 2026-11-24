@@ -15,7 +15,8 @@ from sqlalchemy import select
 from app import cache, radar, reports
 from app.ai import provider, text_classifier
 from app.api.check import shape
-from app.deps import SessionDep, SettingsDep, client_key
+from app.auth import address_limit
+from app.deps import HOUR, SessionDep, SettingsDep, limit
 from app.fast import sms
 from app.models import Artifact, Report
 from app.schemas import ReportRequest, ReportResponse, Verdict, require_http_url
@@ -23,19 +24,15 @@ from app.verdict.reasons import reason
 from app.verdict.service import run_check
 
 router = APIRouter()
-HOUR = 3600
+MINUTE = 60
 RADAR_KEY = "kp:radar"
 RADAR_TTL_S = 60
-
-
-def limit(request: Request, name: str, per_hour: int) -> None:
-    if cache.rate_limited(f"kp:rate:{name}:{client_key(request)}", per_hour, HOUR):
-        raise HTTPException(429, f"Too many {name} requests; try again later", headers={"Retry-After": "600"})
 
 
 @router.post("/report", response_model=ReportResponse, status_code=202,
              description="Report a link. Returns a report id and a secret token; keep the token on the device.")
 async def report(body: ReportRequest, request: Request, session: SessionDep, settings: SettingsDep) -> ReportResponse:
+    address_limit(request, settings, "report", settings.report_ip_rate_per_hour, HOUR)
     limit(request, "report", settings.report_rate_per_hour)
     check = await run_check(session, body.url, "user_report", "deep", settings)
     row, token = reports.create(session, check, body.note, body.push_token)
@@ -44,7 +41,9 @@ async def report(body: ReportRequest, request: Request, session: SessionDep, set
 
 
 @router.get("/reports/{report_id}", description="Report timeline. Send the report token in `X-Report-Token`.")
-def report_status(report_id: str, session: SessionDep, x_report_token: Annotated[str, Header()] = "") -> dict:
+def report_status(report_id: str, request: Request, session: SessionDep, settings: SettingsDep,
+                  x_report_token: Annotated[str, Header()] = "") -> dict:
+    address_limit(request, settings, "read", settings.read_rate_per_min, MINUTE)
     row = session.get(Report, report_id)
     if not reports.authorised(row, x_report_token):
         raise HTTPException(404, "Unknown report")
@@ -61,6 +60,7 @@ class PreviewRequest(BaseModel):
 @router.post("/preview", response_model=Verdict,
              description="Queue a safe preview (a sandbox screenshot) for a link. Poll `GET /v1/check/{id}?view=resident`.")
 async def preview(body: PreviewRequest, request: Request, session: SessionDep, settings: SettingsDep):
+    address_limit(request, settings, "preview", settings.preview_ip_rate_per_hour, HOUR)
     limit(request, "preview", settings.preview_rate_per_hour)
     check = await run_check(session, body.url, "preview", "deep", settings)
     return shape(check, resident=True)
@@ -69,6 +69,7 @@ async def preview(body: PreviewRequest, request: Request, session: SessionDep, s
 @router.get("/preview/{evidence_id}.png", response_class=FileResponse,
             description="The phone screenshot behind a link: an image only, nothing on it is clickable.")
 def preview_image(evidence_id: str, request: Request, session: SessionDep, settings: SettingsDep) -> FileResponse:
+    address_limit(request, settings, "read", settings.read_rate_per_min, MINUTE)
     limit(request, "preview_image", 120)
     artifact = session.scalar(select(Artifact).where(Artifact.evidence_id == evidence_id, Artifact.kind == "screenshot"))
     root = Path(settings.captures_dir).resolve()
@@ -82,7 +83,8 @@ def preview_image(evidence_id: str, request: Request, session: SessionDep, setti
 
 
 @router.get("/radar", description="What is active now in the UAE, grouped by brand. Aggregates only; cached for a minute.")
-async def scam_radar(session: SessionDep, settings: SettingsDep) -> dict:
+async def scam_radar(request: Request, session: SessionDep, settings: SettingsDep) -> dict:
+    address_limit(request, settings, "read", settings.read_rate_per_min, MINUTE)
     cached = await cache.get_json(RADAR_KEY)
     if cached is not None:
         return cached
@@ -97,6 +99,7 @@ class SmsRequest(BaseModel):
 
 @router.post("/sms", description="Paste an SMS: every link in it is checked (up to five), and the text is read for scam stories.")
 async def paste_sms(body: SmsRequest, request: Request, session: SessionDep, settings: SettingsDep) -> dict:
+    address_limit(request, settings, "sms", settings.sms_ip_rate_per_hour, HOUR)
     limit(request, "sms", 60)
     reading = sms.classify(body.text)
     extra = []

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import cache, queue
+from app import budget, cache, queue
 from app.brands import display_name
 from app.config import Settings
 from app.fast.score import Assessment, assess, cache_key
@@ -105,7 +105,7 @@ async def run_check(
         check.preview, check.evidence_id, check.campaign_id = prior.preview, prior.evidence_id, prior.campaign_id
     elif enqueue and (force_deep or (needs_deep(check.score) and assessment.decided_by not in ("allowlist", "blocklist")
                                      if deep_from_score else wants_deep(check, mode, source_name, assessment.decided_by))):
-        check.deep_status = "queued"
+        check.deep_status, fast_sources = "queued", check.sources
         check.sources = [
             source(entry["id"], "unknown", "running") if entry["id"] in ("sandbox", "ai") else entry
             for entry in check.sources
@@ -123,8 +123,14 @@ async def run_check(
         ttl = 30 if assessment.timed_out else settings.verdict_cache_ttl_s
         await cache.set_json(cache_key(assessment.n.final), assessment.cacheable(), ttl)
     if check.deep_status == "queued":
-        if queue.claim_deep(check.host or "") or force_deep:
+        claimed = queue.claim_deep(check.host or "")
+        if (claimed or force_deep) and budget.reserve("deep", settings.deep_daily_checks):
             queue.enqueue_deep_check(check.id)
+        elif claimed or force_deep:
+            if claimed:
+                queue.release_deep(check.host or "")
+            check.deep_status, check.sources = None, fast_sources
+            session.commit()
         else:
             check.deep_status = "joined"
             session.commit()

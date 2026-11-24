@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import audit, cache, queue
+from app import audit, budget, cache, queue
 from app import review as decisions
 from app.admin import queue as cases
 from app.admin import stats as kpi
@@ -211,5 +211,6 @@ def health(session: SessionDep, settings: SettingsDep) -> dict:
     out["models"] = models
     out["evidence"] = {"records": session.scalar(select(func.count()).select_from(Evidence))}
     out["blocklist_version"] = cache.blocklist_version()
+    out["budget"] = budget.status(settings)
     out["ai"] = "configured" if settings.ai_provider and settings.anthropic_api_key else "not configured"
     return out

@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -11,6 +12,23 @@ class Settings(BaseSettings):
     data_dir: str = "/srv/data"
     captures_dir: str = "/captures"
     core_write_token: str = ""
+    static_dir: str = ""  # a folder holding `resident/` and `console/` builds; empty means core serves no static files
+    trust_proxy: bool = False  # read the client address from X-Real-IP (set only behind a proxy that overwrites it)
+
+    # Daily spend caps (UTC day). Unset means no cap.
+    ai_daily_calls: int | None = None
+    deep_daily_checks: int | None = None
+    batch_max_urls: int = 5000  # can be lowered; the request schema still rejects more than 5000
+
+    # Per-address limits on the public routes; a request with the write token skips them.
+    check_rate_per_min: int = 120
+    read_rate_per_min: int = 300
+    blocklist_rate_per_min: int = 60
+    report_ip_rate_per_hour: int = 60
+    preview_ip_rate_per_hour: int = 30
+    sms_ip_rate_per_hour: int = 120
+    batch_rate_per_hour: int = 20
+    auth_fail_per_10min: int = 10
 
     batch_url_budget_ms: int = 3000
     batch_cutoff: int = 40
@@ -39,6 +57,19 @@ class Settings(BaseSettings):
     ai_timeout_s: float = 60.0
     ai_effort: str = "low"  # output_config.effort for page understanding: low | medium | high
     ai_sms_timeout_s: float = 20.0  # the resident waits for the SMS answer; the rules reading is the fallback
+
+    @field_validator("ai_daily_calls", "deep_daily_checks", mode="before")
+    @classmethod
+    def empty_is_unset(cls, value):
+        return None if value == "" else value
+
+    @field_validator("database_url")
+    @classmethod
+    def psycopg_scheme(cls, value: str) -> str:
+        for plain in ("postgres://", "postgresql://"):
+            if value.startswith(plain):
+                return "postgresql+psycopg://" + value.removeprefix(plain)
+        return value
 
     @property
     def ai_enabled(self) -> bool:

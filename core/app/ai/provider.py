@@ -14,7 +14,7 @@ from functools import lru_cache
 
 import anthropic
 
-from app import cache
+from app import budget, cache
 from app.config import get_settings
 
 log = logging.getLogger(__name__)
@@ -51,6 +51,8 @@ def structured(task: str, system: str, content: list[dict], schema: dict, max_to
     cached = cache.get_json_sync(key)
     if cached is not None:
         return {**cached, "_cached": True}
+    if not budget.reserve("ai", settings.ai_daily_calls):
+        raise AIUnavailable("daily AI limit reached")
     caller = client() if timeout_s is None else client().with_options(timeout=timeout_s)
     try:
         response = caller.beta.messages.create(
