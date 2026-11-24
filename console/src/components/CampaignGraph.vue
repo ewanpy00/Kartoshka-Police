@@ -15,7 +15,21 @@ function applyWeak() {
   cy?.edges('[strength = "weak"]').style('display', showWeak.value ? 'element' : 'none')
 }
 
+function token(name: string, fallback: string): string {
+  try {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+  } catch {
+    return fallback
+  }
+}
+
 onMounted(() => {
+  const ink = token('--c-ink', '#1f2933')
+  const muted = token('--c-muted', '#52606d')
+  const hairline = token('--c-hairline', '#9aa5b1')
+  const risk = token('--c-risk', '#b42318')
+  token('--c-accent', '#2563eb')
+  const surface = token('--c-surface', '#ffffff')
   cy = cytoscape({
     container: container.value,
     elements: [
@@ -27,10 +41,10 @@ onMounted(() => {
       })),
     ],
     style: [
-      { selector: 'node', style: { label: 'data(label)', 'font-size': 10, 'background-color': '#52606d', color: '#1f2933' } },
-      { selector: 'node[kind = "domain"]', style: { 'background-color': '#b42318' } },
-      { selector: 'edge', style: { width: 2, 'line-color': '#52606d', 'line-style': 'solid' } },
-      { selector: 'edge[strength = "weak"]', style: { 'line-style': 'dashed', 'line-color': '#9aa5b1', display: 'none' } },
+      { selector: 'node', style: { label: 'data(label)', 'font-size': 10, 'background-color': muted, color: ink, 'text-background-color': surface, 'text-background-opacity': 0.7 } },
+      { selector: 'node[kind = "domain"]', style: { 'background-color': risk } },
+      { selector: 'edge', style: { width: 2, 'line-color': muted, 'line-style': 'solid' } },
+      { selector: 'edge[strength = "weak"]', style: { 'line-style': 'dashed', 'line-color': hairline, display: 'none' } },
     ],
     layout: { name: 'cose' },
   })
