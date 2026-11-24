@@ -108,3 +108,10 @@ Each slice is verified in the running stack and committed on its own.
   - Android layer: LinkActivity (VIEW and SEND), VerdictActivity (Arabic-first warn and block pages), ResidentActivity (WebView of the resident screens, other origins sent to the real browser, native reports merged into `kp.reports`), MainActivity (default-browser role, Private DNS, choice of browser), SyncWorker and DeepWatchWorker.
   - `gatekeeper/logic-test` compiles the logic on a JVM; `make test` runs its 9 unit tests in the gradle:8.11.1-jdk17 image, and they pass.
   - A scratch run of `CoreClient` against the live core gave the expected results: `sso-auth.com` block (listed), `tamm-fines-pay.top` block with "Check your real fines in TAMM", `google.com` forward, and a 1 ms budget gives Timeout.
+- 2026-11-24: slice 10 done.
+  - `make test` passes every suite: core 160, sandbox 38, hunter 33, dns 3, gatekeeper 9, and both web builds. One core test assumed the watchlist fits on one page; it now follows the cursor, since live Hunter data made the list longer than a page.
+  - `make eval` at cutoff 40, fast path, no GSB or VirusTotal keys:
+    - Development set: precision 0.996, recall 0.753, FPR 0.004, with every UAE brand row caught (60/60).
+    - Hold-out set: precision 0.982, recall 0.717, FPR 0.027.
+    - Most misses are QR-code and shortener links from PhishTank.
+  - The README now covers every layer, the test and eval results, and a demo checklist.

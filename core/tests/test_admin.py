@@ -165,8 +165,12 @@ def test_watch_and_recheck(client, session, enqueued):
     make_check(session, "watch-me.test", 55)
     body = client.post("/v1/admin/cases/watch-me.test/watch", headers=AUTH, json={"reviewer": "Officer B"}).json()
     assert body["display"] == "watch-me[.]test"
-    listed = client.get("/v1/admin/watchlist", headers=AUTH).json()
-    assert "watch-me.test" in [entry["domain"] for entry in listed["entries"]]
+    domains, cursor = [], 0
+    while cursor is not None:  # the live database may hold more than one page of watched sites
+        listed = client.get("/v1/admin/watchlist", headers=AUTH, params={"cursor": cursor}).json()
+        domains += [entry["domain"] for entry in listed["entries"]]
+        cursor = listed["next_cursor"]
+    assert "watch-me.test" in domains
     response = client.post("/v1/admin/cases/watch-me.test/recheck", headers=AUTH, json={})
     assert response.status_code == 200 and response.json()["check_id"] in enqueued
 
